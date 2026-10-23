@@ -39,8 +39,14 @@ export async function apiRequest<T = any>(
   const data = await res.json().catch(() => null);
 
   if (!res.ok) {
-    const errMsg =
-      data?.error?.message || `Request failed with status ${res.status}`;
+    let errMsg = data?.error?.message;
+    if (!errMsg) {
+      if (res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) {
+        errMsg = `Backend API server unreachable (${res.status}). Please verify RoadAlert backend is running on port 4000 (npm run dev:backend).`;
+      } else {
+        errMsg = `Request failed with status ${res.status}`;
+      }
+    }
     const err = new Error(errMsg) as any;
     err.status = res.status;
     err.code = data?.error?.code;

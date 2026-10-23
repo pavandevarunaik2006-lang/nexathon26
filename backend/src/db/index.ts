@@ -31,10 +31,12 @@ class DatabaseManager {
         connectionString: databaseUrl,
       });
     } else {
-      const dataDir = path.resolve(
-        process.cwd(),
-        process.env.PGLITE_DATA_DIR || './data/pglite'
-      );
+      const defaultBackendDataDir = path.resolve(__dirname, '../../data/pglite');
+      const dataDir = process.env.PGLITE_DATA_DIR
+        ? path.resolve(process.cwd(), process.env.PGLITE_DATA_DIR)
+        : (fs.existsSync(defaultBackendDataDir)
+            ? defaultBackendDataDir
+            : path.resolve(process.cwd(), './data/pglite'));
       fs.mkdirSync(path.dirname(dataDir), { recursive: true });
       this.cleanupStaleLocks(dataDir);
       try {

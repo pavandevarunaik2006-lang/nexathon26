@@ -9,41 +9,106 @@ import {
   AlertTriangle,
   Play,
   Compass,
+  Copy,
+  Check,
+  Eye,
+  EyeOff,
+  User,
+  Key,
+  Building2,
+  Sparkles,
+  LogIn,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { RoadAlertLogo, DemoDataBadge } from '../components/Badges';
 import { useAuth, getDefaultHomeForRole } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
-const DEMO_ACCOUNTS = [
+export interface DemoAccount {
+  role: 'PASSENGER' | 'EMPLOYEE' | 'EMPLOYER' | 'TRAFFIC_AUTHORITY' | 'ADMIN';
+  label: string;
+  name: string;
+  email: string;
+  password: string;
+  desc: string;
+  scope: string;
+  badgeClass: string;
+}
+
+export const DEMO_ACCOUNTS: DemoAccount[] = [
   {
     role: 'PASSENGER',
     label: 'Passenger / Commuter',
+    name: 'Karthik Shetty',
     email: 'passenger@roadalert.in',
+    password: 'RoadAlert@2026',
     desc: 'Report incidents, plan NH-66 routes, corroborate or dispute reports.',
+    scope: 'Public commuter portal, incident reporting & route avoidance',
+    badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   },
   {
     role: 'EMPLOYEE',
     label: 'Consented Employee',
+    name: 'Ananya Rao',
     email: 'employee@roadalert.in',
+    password: 'RoadAlert@2026',
     desc: 'Start/stop explicit commute sessions, inspect delay evidence & privacy controls.',
+    scope: 'Karavali Tech Park employee with explicit start/stop GPS consent',
+    badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
   },
   {
     role: 'EMPLOYER',
     label: 'Employer Ops Manager',
+    name: 'Vikram Pai',
     email: 'employer@roadalert.in',
+    password: 'RoadAlert@2026',
     desc: 'View organization-isolated commute delays, configure policies, export CSV.',
+    scope: 'Karavali Tech Operations with employee delay proof & policy management',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
   },
   {
     role: 'TRAFFIC_AUTHORITY',
     label: 'Traffic Authority Control',
+    name: 'ACP Praveen Nayak',
     email: 'authority@roadalert.in',
+    password: 'RoadAlert@2026',
     desc: 'Investigate incidents, confirm road closures, view hotspots & problem reports.',
+    scope: 'Mangaluru Traffic Control corridor oversight & problem escalation',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
   },
   {
     role: 'ADMIN',
     label: 'System Administrator',
+    name: 'Siddharth Alva',
     email: 'admin@roadalert.in',
+    password: 'RoadAlert@2026',
     desc: 'Manage users, organizations, complaints, audit logs & scoring weights.',
+    scope: 'Full system administration, tenant security & engine weighting',
+    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+  },
+];
+
+export const SECONDARY_DEMO_ACCOUNTS: DemoAccount[] = [
+  {
+    role: 'EMPLOYEE',
+    label: 'Surathkal Commuter Employee',
+    name: 'Rohan Kamath',
+    email: 'rohan.employee@roadalert.in',
+    password: 'RoadAlert@2026',
+    desc: 'Secondary commuter employee testing multi-reporter cluster corroboration.',
+    scope: 'Surathkal corridor commuter (Karavali Tech Park)',
+    badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  },
+  {
+    role: 'EMPLOYER',
+    label: 'Udupi FinCorp HR Admin',
+    name: 'Meera Shenoy',
+    email: 'other.employer@roadalert.in',
+    password: 'RoadAlert@2026',
+    desc: 'Secondary employer proving strict organization data isolation.',
+    scope: 'Udupi FinCorp HR — zero access to Karavali Tech employee delays',
+    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
   },
 ];
 
@@ -52,6 +117,25 @@ export function LandingPage() {
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [quickLoading, setQuickLoading] = useState<string | null>(null);
+
+  const copyText = (text: string, label: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+    } else {
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    showToast({
+      type: 'info',
+      title: 'Copied to clipboard',
+      message: `${label}: ${text}`,
+    });
+  };
 
   const handleQuickDemoLogin = async (email: string, label: string) => {
     setQuickLoading(email);
@@ -171,40 +255,79 @@ export function LandingPage() {
           <div className="lg:col-span-5 neu-card rounded-2xl p-6 shadow-elevated space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-slate-900">
-                  Instant Evaluation Role Launcher
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-600" /> Instant Evaluation Role Launcher
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  One-click sign-in to inspect all 5 roles with seeded Mangaluru–Udupi data
+                  1-Click sign-in to inspect all 5 roles with seeded Mangaluru–Udupi data
                 </p>
               </div>
               <DemoDataBadge />
             </div>
 
-            <div className="space-y-2.5">
-              {DEMO_ACCOUNTS.map((acc) => (
+            {/* Quick credentials hint banner */}
+            <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200/80 text-[11px] text-blue-900 flex items-center justify-between">
+              <span className="font-medium">All demo roles password:</span>
+              <div className="flex items-center gap-1.5 font-mono font-semibold bg-white px-2 py-0.5 rounded border border-blue-200">
+                <span>RoadAlert@2026</span>
                 <button
-                  key={acc.role}
-                  disabled={Boolean(quickLoading)}
-                  onClick={() => handleQuickDemoLogin(acc.email, acc.label)}
-                  className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200 hover:border-blue-300 transition-all flex items-center justify-between gap-3 group"
+                  type="button"
+                  title="Copy demo password"
+                  onClick={(e) => copyText('RoadAlert@2026', 'Password', e)}
+                  className="text-blue-600 hover:text-blue-800 p-0.5"
                 >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-900 group-hover:text-blue-600">
-                        {acc.label}
-                      </span>
-                      <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-blue-600">
-                        {acc.role}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 mt-0.5">{acc.desc}</p>
-                  </div>
-                  <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold shadow-xs">
-                    <Play className="w-3 h-3" />
-                    {quickLoading === acc.email ? 'Opening...' : 'Enter'}
-                  </span>
+                  <Copy className="w-3 h-3" />
                 </button>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+              {DEMO_ACCOUNTS.map((acc) => (
+                <div
+                  key={acc.role}
+                  className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50/40 border border-slate-200 hover:border-blue-300 transition-all space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-slate-900">
+                          {acc.label}
+                        </span>
+                        <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded border ${acc.badgeClass}`}>
+                          {acc.role}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-medium mt-0.5">{acc.name}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={Boolean(quickLoading)}
+                      onClick={() => handleQuickDemoLogin(acc.email, acc.label)}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50"
+                    >
+                      <Play className="w-3 h-3" />
+                      {quickLoading === acc.email ? 'Opening...' : 'Enter'}
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-600 leading-relaxed">{acc.desc}</p>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px] text-slate-500">
+                    <div className="flex items-center gap-1 truncate max-w-[240px]">
+                      <span className="font-mono text-slate-700 font-medium truncate">{acc.email}</span>
+                      <button
+                        type="button"
+                        title="Copy email address"
+                        onClick={(e) => copyText(acc.email, 'Email', e)}
+                        className="text-slate-400 hover:text-blue-600 p-0.5"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <span className="text-[10px] text-slate-400">Pass: RoadAlert@2026</span>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -263,8 +386,59 @@ export function LoginPage() {
 
   const [email, setEmail] = useState('passenger@roadalert.in');
   const [password, setPassword] = useState('RoadAlert@2026');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [quickLoading, setQuickLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showSecondary, setShowSecondary] = useState(false);
+
+  const copyText = (text: string, label: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text);
+    } else {
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+    }
+    showToast({
+      type: 'info',
+      title: 'Copied to clipboard',
+      message: `${label}: ${text}`,
+    });
+  };
+
+  const handleFillCredentials = (demoEmail: string, demoPassword = 'RoadAlert@2026', label?: string) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setError(null);
+    showToast({
+      type: 'info',
+      title: 'Credentials selected',
+      message: label ? `Filled ${label} (${demoEmail})` : `Filled ${demoEmail}`,
+    });
+  };
+
+  const handleDirectDemoLogin = async (demoEmail: string, roleLabel: string) => {
+    setQuickLoading(demoEmail);
+    setError(null);
+    try {
+      const user = await login(demoEmail, 'RoadAlert@2026');
+      showToast({
+        type: 'success',
+        title: `Signed in as ${roleLabel}`,
+        message: `Welcome back, ${user.name}! Redirecting to your ${user.role} workspace.`,
+      });
+      navigate(getDefaultHomeForRole(user.role));
+    } catch (err: any) {
+      setError(err.message || 'Demo login failed');
+    } finally {
+      setQuickLoading(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,102 +460,291 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f3f5f8] text-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md space-y-2 text-center">
-        <div className="flex justify-center">
-          <Link to="/">
-            <RoadAlertLogo variant="light" />
-          </Link>
+    <div className="min-h-screen bg-[#f3f5f8] text-slate-900 flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto w-full space-y-6">
+        {/* Top Header */}
+        <div className="text-center space-y-1.5">
+          <div className="flex justify-center">
+            <Link to="/">
+              <RoadAlertLogo variant="light" />
+            </Link>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 pt-1">
+            Sign in to RoadAlert Control Center
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-600 max-w-xl mx-auto">
+            Mangaluru–Udupi Coastal Karnataka Incident Intelligence &amp; Consent Commute Verification
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 pt-2">Sign in to RoadAlert Control Center</h1>
-        <p className="text-xs text-slate-500">
-          Mangaluru–Udupi Coastal Karnataka Incident &amp; Commute Intelligence
-        </p>
-      </div>
 
-      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="neu-card rounded-2xl py-6 px-6 shadow-elevated space-y-6">
-          {error && (
-            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                Email Address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="enterprise-input py-2.5 text-sm"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700">Password</label>
-                <Link to="/forgot-password" className="text-xs font-medium text-blue-600 hover:underline">
-                  Forgot password?
-                </Link>
+        {/* 2-Column Responsive Layout */}
+        <div className="grid lg:grid-cols-12 gap-6 items-start">
+          {/* Left Column: Sign-in Form */}
+          <div className="lg:col-span-5 neu-card rounded-2xl py-6 px-6 shadow-elevated space-y-5 bg-white">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Account Credentials</h2>
+                <p className="text-xs text-slate-500">Sign in with email and password</p>
               </div>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="enterprise-input py-2.5 text-sm"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="btn-primary w-full py-2.5 text-sm"
-            >
-              {submitting ? 'Authenticating...' : 'Sign In'}
-            </button>
-          </form>
-
-          {/* Development Demo Account Selector */}
-          <div className="pt-4 border-t border-slate-200 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-700">
-                Quick-Fill Seeded Demo Roles (Password: RoadAlert@2026)
+              <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+                JWT Auth
               </span>
-              <DemoDataBadge />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {DEMO_ACCOUNTS.map((acc) => (
-                <button
-                  key={acc.role}
-                  type="button"
-                  onClick={() => {
-                    setEmail(acc.email);
-                    setPassword('RoadAlert@2026');
-                  }}
-                  className={`text-left px-3 py-2 rounded-lg border text-xs transition-all ${
-                    email === acc.email
-                      ? 'bg-blue-50 border-blue-400 text-blue-900'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  <div className="font-bold">{acc.role}</div>
-                  <div className="text-[11px] text-slate-500 truncate">{acc.email}</div>
-                </button>
-              ))}
+
+            {error && (
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs space-y-1.5">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Authentication Notice</span>
+                </div>
+                <p className="leading-relaxed">{error}</p>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleFillCredentials('passenger@roadalert.in', 'RoadAlert@2026', 'Passenger')}
+                    className="text-xs font-semibold text-red-800 underline hover:no-underline"
+                  >
+                    Reset form with Passenger Demo Credentials
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. passenger@roadalert.in"
+                  className="enterprise-input py-2.5 text-sm w-full"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Password</label>
+                  <Link to="/forgot-password" className="text-xs font-medium text-blue-600 hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    className="enterprise-input py-2.5 text-sm w-full pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting || Boolean(quickLoading)}
+                className="btn-primary w-full py-2.5 text-sm flex items-center justify-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                {submitting ? 'Authenticating...' : 'Sign In to Workspace'}
+              </button>
+            </form>
+
+            <div className="pt-2 text-center text-xs text-slate-500 border-t border-slate-100">
+              New commuter or employee?{' '}
+              <Link to="/register" className="text-blue-600 font-semibold hover:underline">
+                Create an account
+              </Link>
             </div>
           </div>
 
-          <p className="text-center text-xs text-slate-500">
-            New commuter or employee?{' '}
-            <Link to="/register" className="text-blue-600 font-semibold hover:underline">
-              Create an account
-            </Link>
-          </p>
+          {/* Right Column: Seeded Demo Evaluation Role Credentials */}
+          <div className="lg:col-span-7 neu-card rounded-2xl py-6 px-6 shadow-elevated space-y-4 bg-white">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-blue-600" /> Demo Login Credentials for All 5 Roles
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Seeded coastal Karnataka evaluation accounts. Click to sign in directly or copy credentials.
+                </p>
+              </div>
+              <DemoDataBadge />
+            </div>
+
+            {/* Master Credentials Highlight Banner */}
+            <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 text-xs flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-slate-800">
+                <Key className="w-4 h-4 text-blue-600" />
+                <span className="font-semibold">Default Password for all 5 roles:</span>
+                <span className="font-mono font-bold bg-white px-2 py-0.5 rounded border border-blue-200 text-blue-900">
+                  RoadAlert@2026
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={(e) => copyText('RoadAlert@2026', 'Password', e)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white hover:bg-slate-50 text-blue-700 font-semibold text-xs border border-blue-200 shadow-2xs transition-colors"
+              >
+                <Copy className="w-3 h-3" /> Copy Password
+              </button>
+            </div>
+
+            {/* 5 Main Role Cards */}
+            <div className="space-y-2.5">
+              {DEMO_ACCOUNTS.map((acc) => {
+                const isSelected = email === acc.email;
+                return (
+                  <div
+                    key={acc.role}
+                    className={`p-3.5 rounded-xl border transition-all ${
+                      isSelected
+                        ? 'bg-blue-50/60 border-blue-300 ring-1 ring-blue-300'
+                        : 'bg-slate-50 hover:bg-slate-100/70 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-slate-900">{acc.label}</span>
+                          <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded border ${acc.badgeClass}`}>
+                            {acc.role}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 font-medium">{acc.name}</p>
+                        <p className="text-[11px] text-slate-500 leading-tight">{acc.desc}</p>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
+                        <button
+                          type="button"
+                          onClick={() => handleFillCredentials(acc.email, acc.password, acc.label)}
+                          className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 text-xs font-medium border border-slate-200 shadow-2xs transition-colors"
+                          title="Fill credentials into login form"
+                        >
+                          Fill Form
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(quickLoading) || submitting}
+                          onClick={() => handleDirectDemoLogin(acc.email, acc.label)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition-colors disabled:opacity-50"
+                        >
+                          <Play className="w-3 h-3" />
+                          {quickLoading === acc.email ? 'Signing in...' : '1-Click Sign In'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Email and Password Credentials Pill */}
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                      <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded border border-slate-200 text-slate-700">
+                        <span className="text-slate-400">Email:</span>
+                        <span className="font-mono font-semibold text-slate-900">{acc.email}</span>
+                        <button
+                          type="button"
+                          title="Copy email address"
+                          onClick={(e) => copyText(acc.email, 'Email', e)}
+                          className="text-slate-400 hover:text-blue-600 ml-1"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded border border-slate-200 text-slate-700">
+                        <span className="text-slate-400">Password:</span>
+                        <span className="font-mono font-semibold text-slate-900">RoadAlert@2026</span>
+                        <button
+                          type="button"
+                          title="Copy password"
+                          onClick={(e) => copyText('RoadAlert@2026', 'Password', e)}
+                          className="text-slate-400 hover:text-blue-600 ml-1"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Expandable Multi-Organization Isolation Test Accounts */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowSecondary(!showSecondary)}
+                className="w-full flex items-center justify-between p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs font-medium text-slate-700 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Multi-Organization Isolation Test Accounts (Surathkal &amp; Udupi FinCorp)</span>
+                </div>
+                {showSecondary ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              </button>
+
+              {showSecondary && (
+                <div className="mt-2 space-y-2 p-3 rounded-xl bg-slate-50/70 border border-slate-200 text-xs">
+                  {SECONDARY_DEMO_ACCOUNTS.map((acc) => (
+                    <div
+                      key={acc.email}
+                      className="p-2.5 rounded-lg bg-white border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                    >
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900">{acc.label}</span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${acc.badgeClass}`}>
+                            {acc.role}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{acc.desc}</p>
+                        <div className="font-mono text-[11px] text-blue-700 mt-1 flex items-center gap-1">
+                          <span>{acc.email}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => copyText(acc.email, 'Email', e)}
+                            className="text-slate-400 hover:text-blue-600"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleFillCredentials(acc.email, acc.password, acc.label)}
+                          className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium"
+                        >
+                          Fill
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(quickLoading)}
+                          onClick={() => handleDirectDemoLogin(acc.email, acc.label)}
+                          className="px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+                        >
+                          Sign In
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
