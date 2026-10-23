@@ -15,6 +15,7 @@ import { employerRouter } from './routes/employer.js';
 import { authorityRouter } from './routes/authority.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { adminRouter } from './routes/admin.js';
+import { emergencyIntelligenceRouter } from './routes/emergencyIntelligence.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { openApiSpec } from './swagger.js';
 
@@ -98,6 +99,7 @@ export function createApp() {
   app.use('/api/v1/authority', authorityRouter);
   app.use('/api/v1/notifications', notificationsRouter);
   app.use('/api/v1/admin', adminRouter);
+  app.use('/api/v1', emergencyIntelligenceRouter);
 
   // Centralized error handler
   app.use(errorHandler);

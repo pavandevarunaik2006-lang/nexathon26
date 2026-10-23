@@ -19,6 +19,7 @@ build/
 backend/data/
 backend/uploads/
 .pglite-data/
+apps/
 
 # Logs & OS files
 npm-debug.log*

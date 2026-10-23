@@ -1,5 +1,6 @@
 import {
   classifyIncidentVerificationState,
+  LIFELINE_HOSPITALS,
   type ExplicitRouteState,
   type IncidentVerificationState,
 } from '@roadalert/shared';
@@ -493,7 +494,49 @@ export async function calculateRoutesWithIncidents(
   if (allRoutesClosedWarning) {
     routeState = 'NO_VIABLE_ROUTE_FOUND';
     decisionReason = `NO_VIABLE_ROUTE_FOUND: All ${finalRoutes.length} evaluated corridors between ${originName} and ${destName} intersect confirmed road obstructions. No fake detour is drawn through blocked segments.`;
-    holdingPointSuggestion = {
+    const stagingBays = [
+      {
+        label: 'Baikampady Industrial Gate Staging Bay',
+        lat: 12.9522,
+        lng: 74.8105,
+        guidance: 'Hold at designated industrial staging apron with wide-radius vehicle turnaround. Await Traffic Authority contraflow escort.',
+      },
+      {
+        label: 'Surathkal NITK Toll Plaza Staging Bay',
+        lat: 13.0108,
+        lng: 74.7943,
+        guidance: 'Hold at toll plaza emergency lay-by. High-clearance staging for emergency services and priority transit.',
+      },
+      {
+        label: 'Mulki River Crossing Staging Bay',
+        lat: 13.0908,
+        lng: 74.7864,
+        guidance: 'Hold before river crossing at Mulki commercial bay. Do not attempt bridge transit during waterlogging or structure blockage.',
+      },
+      {
+        label: 'Pumpwell Transport Terminal Staging Apron',
+        lat: 12.8669,
+        lng: 74.8692,
+        guidance: 'Stage at Pumpwell southern terminal apron. Direct connector access to Father Muller & Wenlock Hospitals.',
+      },
+      {
+        label: 'Udupi Karavali Bypass Staging Bay',
+        lat: 13.3409,
+        lng: 74.7351,
+        guidance: 'Hold at Karavali bypass rest bay. Await traffic police diversion instructions for Manipal / coastal highway access.',
+      },
+    ];
+    let closestBay = stagingBays[0];
+    let minBayDist = Infinity;
+    for (const bay of stagingBays) {
+      const d = haversineDistanceKm(originCoords.lat, originCoords.lng, bay.lat, bay.lng);
+      if (d < minBayDist) {
+        minBayDist = d;
+        closestBay = bay;
+      }
+    }
+    holdingPointSuggestion = closestBay;
+    const _dummyOld = {
       label: `Designated Safe Holding Point near ${originName}`,
       lat: originCoords.lat,
       lng: originCoords.lng,

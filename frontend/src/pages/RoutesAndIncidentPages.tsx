@@ -736,9 +736,30 @@ export function RoutePlannerPage() {
             )}
 
             {planMutation.data.holdingPointSuggestion && (
-              <div className="p-2.5 rounded-lg bg-white/90 border border-red-300 text-red-900 text-[11px]">
-                <strong>Safe Holding Point ({planMutation.data.holdingPointSuggestion.label}):</strong>{' '}
-                {planMutation.data.holdingPointSuggestion.guidance}
+              <div className="p-3 rounded-xl bg-white/95 border border-red-300 text-red-950 text-xs space-y-2 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="font-extrabold flex items-center gap-1.5 text-red-900">
+                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                    <span>Designated Safe Holding Point: {planMutation.data.holdingPointSuggestion.label}</span>
+                  </div>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold">
+                    {planMutation.data.holdingPointSuggestion.lat.toFixed(4)}, {planMutation.data.holdingPointSuggestion.lng.toFixed(4)}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-slate-700 leading-snug">
+                  {planMutation.data.holdingPointSuggestion.guidance}
+                </p>
+
+                <div className="pt-2 border-t border-red-100 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                  <div className="flex items-center gap-1 text-slate-600">
+                    <span className="font-bold text-slate-800">Vehicle Classes Restricted:</span>
+                    <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-bold">Ambulance</span>
+                    <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-bold">Emergency Transit</span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 font-bold">Commercial Heavy</span>
+                  </div>
+                  <span className="font-semibold text-red-700">Contraflow Escort Required</span>
+                </div>
               </div>
             )}
           </div>

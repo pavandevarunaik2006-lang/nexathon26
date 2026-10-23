@@ -172,3 +172,66 @@ export interface PaginatedResponse<T> {
     totalPages: number;
   };
 }
+
+/**
+ * Feature 3: Multi-Evidence Incident Trust Layer Types
+ */
+export type IncidentTrustState =
+  | 'UNVERIFIED'
+  | 'LIKELY'
+  | 'CONFIRMED'
+  | 'EXPIRED'
+  | 'RESOLVED';
+
+export interface IncidentTrustEvaluation {
+  trustState: IncidentTrustState;
+  confidenceScore: number;
+  routingPolicy:
+    | 'NORMAL_PASSABLE'
+    | 'CAUTION_SLOWDOWN'
+    | 'CONFIRMED_CLOSURE_AVOID'
+    | 'RESTORED';
+  routingPolicyLabel: string;
+  explanation: string;
+  evidenceSignals: {
+    distinctUserCount: number;
+    gpsSlowdownConfirmed: boolean;
+    mediaEvidenceCount: number;
+    authorityConfirmed: boolean;
+    disputeCount: number;
+    reportAgeMinutes: number;
+  };
+  auditLog: {
+    action: string;
+    actorRole: string;
+    reason: string;
+    timestampIso: string;
+  }[];
+}
+
+/**
+ * Feature 2: Decision-Critical Verification Queue Item
+ */
+export interface CriticalVerificationItem {
+  id: string;
+  incidentId: string;
+  title: string;
+  category: IncidentCategory;
+  severity: IncidentSeverity;
+  roadName: string;
+  latitude: number;
+  longitude: number;
+  reportedAt: string;
+  confidenceScore: number;
+  trustState: IncidentTrustState;
+  priorityScore: number; // 0-100 explainable ranking score
+  priorityBand: 'URGENT_EMERGENCY_IMPACT' | 'HIGH_CORRIDOR_RISK' | 'MEDIUM' | 'ROUTINE';
+  priorityReasons: string[];
+  lifelineThreat: boolean;
+  threatenedHospitals: string[];
+  suggestedAction:
+    | 'CONFIRM_ROAD_CLOSURE'
+    | 'VERIFY_PASSABLE'
+    | 'DISPUTE_REPORT'
+    | 'REQUEST_MORE_EVIDENCE';
+}

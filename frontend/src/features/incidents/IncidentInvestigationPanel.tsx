@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   Navigation,
   CheckCircle2,
+  AlertTriangle,
   Camera,
   Lock,
 } from 'lucide-react';
@@ -46,11 +47,17 @@ export function IncidentInvestigationPanel({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const prefersReducedMotion = useReducedMotion();
-  const [activeTab, setActiveTab] = useState<'overview' | 'evidence' | 'nearby'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'trust' | 'evidence' | 'nearby'>('overview');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['incident-detail', incidentId],
     queryFn: () => apiRequest<any>(`/incidents/${incidentId}`),
+    enabled: Boolean(incidentId),
+  });
+
+  const { data: trustData } = useQuery<{ success: boolean; data: any }>({
+    queryKey: ['incident-trust-eval', incidentId],
+    queryFn: () => apiRequest<any>(`/incidents/${incidentId}/trust-evaluation`),
     enabled: Boolean(incidentId),
   });
 
@@ -225,7 +232,8 @@ export function IncidentInvestigationPanel({
           <div className="flex items-center gap-1 glass-inset p-1 rounded-xl border border-white/60">
             {(
               [
-                { id: 'overview', label: 'Verification' },
+                { id: 'overview', label: 'Score' },
+                { id: 'trust', label: 'Trust & Policy' },
                 { id: 'evidence', label: `Evidence (${evidences?.length || 0})` },
                 { id: 'nearby', label: `Nearby (${nearbyIncidents?.length || 0})` },
               ] as const
@@ -382,6 +390,85 @@ export function IncidentInvestigationPanel({
                     </div>
                   </div>
                 )}
+              </motion.div>
+            )}
+
+            {activeTab === 'trust' && (
+              <motion.div
+                key="tab-trust"
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, y: -3 }}
+                transition={{ duration: 0.16, ease: ENTERPRISE_EASE }}
+                className="space-y-3"
+              >
+                <div className="p-3 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-900">
+                      Multi-Evidence Trust State
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-600 text-white shadow-xs">
+                      {trustData?.data?.trustEvaluation?.trustState || incident.trustState || 'UNVERIFIED'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-white/90 border border-blue-200 text-xs">
+                    <div className="text-[10px] uppercase font-bold text-slate-500">Operational Routing Policy</div>
+                    <div className="font-extrabold text-blue-900 mt-0.5 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                      <span>{trustData?.data?.trustEvaluation?.routingPolicyLabel || 'Caution Advisory Only'}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 mt-1 leading-snug">
+                      {trustData?.data?.trustEvaluation?.explanation || 'Unverified citizen submission. Road remains passable with caution halo.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/90 text-amber-900 text-[11px] space-y-1">
+                  <div className="font-bold flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Strict Road Closure Policy:</span>
+                  </div>
+                  <p className="text-amber-800 leading-snug">
+                    Unverified reports <strong>NEVER</strong> close roads or force automated detours. Only confirmed multi-signal consensus or traffic police authorizations enforce physical carriage blockages.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Evidence Signals Matrix
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                      <div className="text-[10px] text-slate-500 font-semibold">Commuters</div>
+                      <div className="font-bold text-slate-900 mt-0.5">
+                        {trustData?.data?.trustEvaluation?.evidenceSignals?.distinctUserCount ?? 1} Distinct
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                      <div className="text-[10px] text-slate-500 font-semibold">GPS Telemetry</div>
+                      <div className="font-bold text-slate-900 mt-0.5">
+                        {trustData?.data?.trustEvaluation?.evidenceSignals?.gpsSlowdownConfirmed ? '✅ Corroborated' : '⏳ Awaiting Drop'}
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                      <div className="text-[10px] text-slate-500 font-semibold">Scene Media</div>
+                      <div className="font-bold text-slate-900 mt-0.5">
+                        {trustData?.data?.trustEvaluation?.evidenceSignals?.mediaEvidenceCount ?? 0} Files
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                      <div className="text-[10px] text-slate-500 font-semibold">Authority Desk</div>
+                      <div className="font-bold text-slate-900 mt-0.5">
+                        {trustData?.data?.trustEvaluation?.evidenceSignals?.authorityConfirmed ? '✅ Confirmed' : '⏳ Pending'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </motion.div>
             )}
 

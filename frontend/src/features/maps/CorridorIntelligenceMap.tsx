@@ -31,6 +31,8 @@ import {
   CheckCircle2,
   AlertTriangle,
   ShieldCheck,
+  HeartPulse,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   REGIONAL_DESTINATIONS,
@@ -42,6 +44,9 @@ import {
   type SimulatedVehicle,
   type VehicleCategoryGroup,
   type CorridorTrafficSegment,
+  LIFELINE_HOSPITALS,
+  type LifelineHospital,
+  type CorridorFragilityRank,
 } from '@roadalert/shared';
 import { useToast } from '../../context/ToastContext';
 import { SimulatedVehicleLayer } from '../vehicles/SimulatedVehicleLayer';
@@ -50,6 +55,10 @@ import {
   DraftIncidentMapMarker,
   MapIncidentReportOverlay,
 } from '../incidents/MapIncidentReportOverlay';
+import { HospitalLifelineDrawer } from '../lifeline/HospitalLifelineDrawer';
+import { CorridorFragilityModal } from '../fragility/CorridorFragilityModal';
+import { DecisionCriticalQueueModal } from '../verification/DecisionCriticalQueueModal';
+import { apiRequest } from '../../lib/api';
 
 // Coastal NH-66 Backbone Polyline (Thokkottu -> Pumpwell -> Nanthoor -> KPT -> Kuloor -> Baikampady -> Surathkal -> Mulki -> Padubidri -> Kaup -> Udupi -> Manipal)
 const NH66_CORRIDOR_POLYLINE: [number, number][] = [
@@ -235,6 +244,47 @@ function buildClusterDivIcon(
   });
 }
 
+function buildHospitalDivIcon(hospital: LifelineHospital): L.DivIcon {
+  return L.divIcon({
+    className: 'custom-lifeline-hospital-marker',
+    html: `
+      <div style="
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 9px;
+        background: rgba(255, 255, 255, 0.96);
+        border: 1.5px solid #e11d48;
+        border-radius: 9999px;
+        box-shadow: 0 4px 12px rgba(225, 29, 72, 0.22);
+        cursor: pointer;
+        white-space: nowrap;
+        transform: translate(-50%, -50%);
+      ">
+        <span style="
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: #e11d48;
+          color: white;
+          font-weight: 900;
+          font-size: 11px;
+          line-height: 14px;
+          text-align: center;
+          display: inline-block;
+        ">+</span>
+        <span style="
+          font-size: 11px;
+          font-weight: 700;
+          color: #0f172a;
+        ">${hospital.shortName}</span>
+      </div>
+    `,
+    iconSize: [120, 26],
+    iconAnchor: [60, 13],
+  });
+}
+
 function MapViewportController({
   focusCoords,
   onZoomChange,
@@ -386,6 +436,12 @@ export function CorridorIntelligenceMap({
   const [showLandmarks, setShowLandmarks] = useState(true);
   const [showIncidents, setShowIncidents] = useState(true);
   const [showVehicles, setShowVehicles] = useState(true);
+  const [showLifelines, setShowLifelines] = useState(true);
+  const [showFragilityHeatmap, setShowFragilityHeatmap] = useState(false);
+  const [selectedHospital, setSelectedHospital] = useState<LifelineHospital | null>(null);
+  const [isFragilityModalOpen, setIsFragilityModalOpen] = useState(false);
+  const [isCriticalQueueOpen, setIsCriticalQueueOpen] = useState(false);
+  const [fragilityData, setFragilityData] = useState<CorridorFragilityRank[]>([]);
   const [simulationSpeed, setSimulationSpeed] = useState<number>(1);
   const [enableClustering, setEnableClustering] = useState(true);
   const [showScenarioBar, setShowScenarioBar] = useState(false);
@@ -416,6 +472,18 @@ export function CorridorIntelligenceMap({
   } | null>(null);
 
   const effectiveFocus = focusCoords || internalFocus;
+
+  useEffect(() => {
+    if (showFragilityHeatmap && fragilityData.length === 0) {
+      apiRequest<any>('/corridor/fragility')
+        .then((res) => {
+          if (res?.data?.segments) {
+            setFragilityData(res.data.segments);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [showFragilityHeatmap, fragilityData.length]);
 
   // Merge newly reported / demo scenario incidents with backend incidents
   const mergedIncidents = useMemo(() => {
@@ -975,6 +1043,53 @@ export function CorridorIntelligenceMap({
             <span>Traffic Flow</span>
           </button>
 
+          {/* Toggle Lifeline Hospitals */}
+          <button
+            type="button"
+            data-testid="toggle-lifelines-btn"
+            onClick={() => setShowLifelines((v) => !v)}
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+              showLifelines
+                ? 'bg-rose-600 text-white border-rose-500 shadow-rose-500/30'
+                : 'text-slate-700 hover:bg-white/70'
+            }`}
+            title="Toggle 6 Regional Lifeline Trauma Hospitals and reachability assessment"
+          >
+            <HeartPulse className="w-3.5 h-3.5" />
+            <span>Lifelines</span>
+          </button>
+
+          {/* Toggle Corridor Fragility Heatmap */}
+          <button
+            type="button"
+            data-testid="toggle-fragility-btn"
+            onClick={() => {
+              setShowFragilityHeatmap((v) => !v);
+              setIsFragilityModalOpen(true);
+            }}
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+              showFragilityHeatmap
+                ? 'bg-amber-600 text-white border-amber-500 shadow-amber-500/30'
+                : 'text-slate-700 hover:bg-white/70'
+            }`}
+            title="Analyze corridor fragility & systemic chokepoint vulnerabilities"
+          >
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span>Fragility Index</span>
+          </button>
+
+          {/* Open Decision-Critical Verification Queue */}
+          <button
+            type="button"
+            data-testid="open-critical-queue-btn"
+            onClick={() => setIsCriticalQueueOpen(true)}
+            className="px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm text-slate-800 hover:bg-white/80 transition-all active:scale-[0.97] focus-visible:outline-none"
+            title="Open Decision-Critical Verification Queue"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+            <span>Critical Queue</span>
+          </button>
+
           {/* Toggle Demo & Verification Scenarios Bar */}
           <button
             type="button"
@@ -1432,6 +1547,80 @@ export function CorridorIntelligenceMap({
             </CircleMarker>
           ))}
 
+        {/* Lifeline Trauma Hospital Markers */}
+        {showLifelines &&
+          LIFELINE_HOSPITALS.map((hosp) => (
+            <Marker
+              key={hosp.id}
+              position={[hosp.lat, hosp.lng]}
+              icon={buildHospitalDivIcon(hosp)}
+              eventHandlers={{
+                click: () => {
+                  setSelectedHospital(hosp);
+                },
+              }}
+            >
+              <Tooltip direction="top" offset={[0, -12]} opacity={0.96}>
+                <div className="text-xs p-1">
+                  <div className="font-bold text-rose-700">{hosp.name}</div>
+                  <div className="text-[11px] text-slate-600">Level {hosp.traumaLevel} Trauma • {hosp.emergencyBeds} Beds</div>
+                  <div className="text-[10px] text-blue-600 font-semibold mt-0.5">Click for Reachability Assessment</div>
+                </div>
+              </Tooltip>
+            </Marker>
+          ))}
+
+        {/* Corridor Fragility Heatmap Layer */}
+        {showFragilityHeatmap &&
+          fragilityData.map((seg) => {
+            const isCatastrophic = seg.impactClassification === 'CATASTROPHIC_SEVERANCE';
+            const isHigh = seg.impactClassification === 'HIGH_VULNERABILITY';
+            const color = isCatastrophic
+              ? '#dc2626'
+              : isHigh
+              ? '#ea580c'
+              : seg.impactClassification === 'MODERATE_DETOUR'
+              ? '#eab308'
+              : '#16a34a';
+
+            return (
+              <Polyline
+                key={seg.edgeId}
+                positions={seg.geometry}
+                pathOptions={{
+                  color,
+                  weight: isCatastrophic ? 7 : 5,
+                  opacity: 0.88,
+                  dashArray: isCatastrophic ? '6, 6' : undefined,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+                eventHandlers={{
+                  click: () => {
+                    setIsFragilityModalOpen(true);
+                  },
+                }}
+              >
+                <Tooltip sticky direction="top" opacity={0.96}>
+                  <div className="text-xs p-1 space-y-0.5">
+                    <div className="font-bold text-slate-900">{seg.roadName}</div>
+                    <div className="text-[11px] font-semibold" style={{ color }}>
+                      Fragility Score: {seg.fragilityScore}/100 ({seg.impactClassification.replace(/_/g, ' ')})
+                    </div>
+                    <div className="text-[10px] text-slate-600">
+                      Detour Impact: +{seg.averageDetourMinutes} min
+                    </div>
+                    {seg.isolatedOriginsCount > 0 && (
+                      <div className="text-[10px] text-red-600 font-bold">
+                        ⚠️ Isolates {seg.isolatedOriginsCount} population zone(s)
+                      </div>
+                    )}
+                  </div>
+                </Tooltip>
+              </Polyline>
+            );
+          })}
+
         {/* Clustered Incident Markers */}
         {corridorDrawComplete &&
           clusters.map((cluster, idx) => (
@@ -1578,6 +1767,37 @@ export function CorridorIntelligenceMap({
           ))}
         </div>
       </div>
+      {/* Lifeline Reachability Drawer */}
+      <HospitalLifelineDrawer
+        hospital={selectedHospital}
+        onClose={() => setSelectedHospital(null)}
+        onSelectOrigin={(coords) => setInternalFocus(coords)}
+      />
+
+      {/* Corridor Fragility Analysis Modal */}
+      <CorridorFragilityModal
+        isOpen={isFragilityModalOpen}
+        onClose={() => setIsFragilityModalOpen(false)}
+        onSelectSegment={(seg) => {
+          if (seg.geometry && seg.geometry.length > 0) {
+            setInternalFocus(seg.geometry[0]);
+          }
+        }}
+      />
+
+      {/* Decision-Critical Verification Queue Modal */}
+      <DecisionCriticalQueueModal
+        isOpen={isCriticalQueueOpen}
+        onClose={() => setIsCriticalQueueOpen(false)}
+        onSelectIncident={(incId) => {
+          setIsCriticalQueueOpen(false);
+          const found = mergedIncidents.find((i) => i.id === incId);
+          if (found) {
+            onSelectIncident(found);
+            setInternalFocus([Number(found.latitude), Number(found.longitude)]);
+          }
+        }}
+      />
     </div>
   );
 }
