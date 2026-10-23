@@ -356,3 +356,116 @@ employerRouter.patch('/policies/:id', async (req, res, next) => {
     next(err);
   }
 });
+
+// GET /api/v1/employer/active-locations — Live active tracking locations for consented employees
+employerRouter.get('/active-locations', async (req, res, next) => {
+  try {
+    const requestedOrgId = req.query.organizationId ? String(req.query.organizationId) : undefined;
+    const orgIds = await getAuthorizedOrgIds(req.user!.userId, req.user!.role, requestedOrgId);
+    const primaryOrgId = orgIds[0];
+
+    if (!primaryOrgId) {
+      res.json({
+        success: true,
+        data: {
+          organizationId: null,
+          activeLocationsCount: 0,
+          locations: [],
+        },
+      });
+      return;
+    }
+
+    const policyRes = await db.query<any>(
+      `SELECT * FROM organization_tracking_policies WHERE organization_id = $1`,
+      [primaryOrgId]
+    );
+    const allowPrecise = Boolean(policyRes.rows[0]?.allow_precise_coordinate);
+
+    // Fetch active journeys belonging to this organization where consent is active (not revoked)
+    const activeJourneysRes = await db.query<any>(
+      `SELECT j.*, u.name as employee_name, u.email as employee_email,
+              tc.share_precise_coords, tc.purpose as consent_purpose, tc.policy_version
+       FROM journeys j
+       JOIN tracking_consents tc ON tc.id = j.consent_record_id
+       JOIN users u ON u.id = j.employee_id
+       WHERE tc.organization_id = $1
+         AND tc.revoked_at IS NULL
+         AND j.status IN ('ACTIVE', 'DELAYED')
+         AND j.ended_at IS NULL
+       ORDER BY j.started_at DESC`,
+      [primaryOrgId]
+    );
+
+    const locations = [];
+    for (const j of activeJourneysRes.rows) {
+      const latestCpRes = await db.query<any>(
+        `SELECT * FROM journey_checkpoints
+         WHERE journey_id = $1
+         ORDER BY recorded_at DESC LIMIT 1`,
+        [j.id]
+      );
+      const cp = latestCpRes.rows[0] || null;
+      const canExposePrecise = allowPrecise && Boolean(j.share_precise_coords);
+
+      locations.push({
+        journeyId: j.id,
+        employeeId: j.employee_id,
+        employeeName: j.employee_name,
+        employeeEmail: j.employee_email,
+        origin: j.origin,
+        destination: j.destination,
+        journeyStatus: j.status,
+        startedAt: j.started_at,
+        estimatedDelayMin: Number(j.estimated_delay_min || 0),
+        verifiedDelayMin: Number(j.verified_delay_min || 0),
+        verificationLevel: Number(j.verification_level || 1),
+        consentPolicyVersion: j.policy_version,
+        preciseCoordinatesRedacted: !canExposePrecise,
+        latestObservation: cp
+          ? {
+              recordedAt: cp.recorded_at,
+              receivedAt: cp.received_at,
+              sourceType: cp.source_type,
+              validationStatus: cp.validation_status,
+              ...(canExposePrecise
+                ? {
+                    latitude: Number(cp.latitude),
+                    longitude: Number(cp.longitude),
+                    accuracy: cp.accuracy !== null ? Number(cp.accuracy) : null,
+                    speed: cp.speed !== null ? Number(cp.speed) : null,
+                    calculatedSpeed:
+                      cp.calculated_speed !== null ? Number(cp.calculated_speed) : null,
+                    heading: cp.heading !== null ? Number(cp.heading) : null,
+                  }
+                : {}),
+            }
+          : null,
+      });
+    }
+
+    // Audit log access to active locations
+    await db.query(
+      `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, 'EMPLOYER_VIEW_ACTIVE_LOCATIONS', 'ORGANIZATION', $3, $4)`,
+      [
+        crypto.randomUUID(),
+        req.user!.userId,
+        primaryOrgId,
+        JSON.stringify({ activeLocationsRetrieved: locations.length }),
+      ]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        organizationId: primaryOrgId,
+        activeLocationsCount: locations.length,
+        locations,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
