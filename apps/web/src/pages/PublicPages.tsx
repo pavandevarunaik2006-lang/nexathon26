@@ -473,6 +473,7 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       const user = await registerCompany({
+<<<<<<< Updated upstream
         organizationName: companyName.trim(),
         adminName: adminName.trim(),
         adminEmail: adminEmail.trim(),
@@ -483,13 +484,28 @@ export function RegisterPage() {
         address: address ? address.trim() : undefined,
         defaultShiftStart: shiftStart || '09:00',
         defaultShiftEnd: shiftEnd || '18:00',
+=======
+        companyName,
+        adminName,
+        adminEmail,
+        password: companyPassword,
+        city,
+        contactPhone: contactPhone || undefined,
+        address: address || undefined,
+        shiftStartTime: shiftStart || undefined,
+        shiftEndTime: shiftEnd || undefined,
+>>>>>>> Stashed changes
       });
       showToast({
         type: 'success',
         title: 'Company registered successfully',
         message: `Welcome to RoadAlert Employer Portal, ${user.name}!`,
       });
+<<<<<<< Updated upstream
       navigate('/employer/dashboard');
+=======
+      navigate('/app/employer/dashboard');
+>>>>>>> Stashed changes
     } catch (err: any) {
       setError(err.message || 'Company registration failed');
     } finally {
@@ -512,7 +528,11 @@ export function RegisterPage() {
         title: 'Invitation accepted!',
         message: `Welcome to your organization's commute workspace, ${user.name}!`,
       });
+<<<<<<< Updated upstream
       navigate('/app/journeys');
+=======
+      navigate('/app/employee/commute');
+>>>>>>> Stashed changes
     } catch (err: any) {
       setError(err.message || 'Failed to accept invitation');
     } finally {

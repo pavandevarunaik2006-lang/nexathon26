@@ -443,6 +443,7 @@ export function EmployerDashboardPage() {
                                 <DemoDataBadge />
                               ) : null}
                             </div>
+<<<<<<< Updated upstream
                             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                               {j.employeeCode && (
                                 <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
@@ -462,6 +463,10 @@ export function EmployerDashboardPage() {
                             </div>
                             {j.employeeEmail && (
                               <span className="text-[10px] text-slate-500 block">{j.employeeEmail}</span>
+=======
+                            {j.employeeEmail && (
+                              <span className="text-[11px] text-slate-500">{j.employeeEmail}</span>
+>>>>>>> Stashed changes
                             )}
                           </td>
                           <td className="py-3 px-3 text-slate-300 font-medium">
