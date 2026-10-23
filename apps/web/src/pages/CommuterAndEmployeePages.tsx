@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,6 +15,11 @@ import {
   ThumbsUp,
   CheckCircle2,
   Sliders,
+  Building2,
+  Briefcase,
+  Save,
+  Navigation,
+  UserCheck,
 } from 'lucide-react';
 import { REGIONAL_DESTINATIONS, VERIFICATION_LEVELS } from '@roadalert/shared';
 import { apiRequest } from '../lib/api';
@@ -152,6 +157,11 @@ export function JourneysPage() {
   const [manualStatusNote, setManualStatusNote] = useState('');
   const [sharePreciseCoords, setSharePreciseCoords] = useState(false);
 
+  const { data: commuteProfile } = useQuery({
+    queryKey: ['my-commute-profile'],
+    queryFn: () => apiRequest<any>('/commute/profile'),
+  });
+
   const { data: consentsData, refetch: refetchConsents } = useQuery({
     queryKey: ['my-consents'],
     queryFn: () =>
@@ -162,6 +172,14 @@ export function JourneysPage() {
     queryKey: ['my-journeys'],
     queryFn: () => apiRequest<any[]>('/journeys'),
   });
+
+  useEffect(() => {
+    if (commuteProfile?.hasOrganization) {
+      if (commuteProfile.usualCommuteOrigin) setOrigin(commuteProfile.usualCommuteOrigin);
+      if (commuteProfile.usualCommuteDestination) setDestination(commuteProfile.usualCommuteDestination);
+      if (commuteProfile.sharePreciseCoords !== undefined) setSharePreciseCoords(commuteProfile.sharePreciseCoords);
+    }
+  }, [commuteProfile]);
 
   const activeConsent = consentsData?.consents?.find((c) => c.active);
   const activeJourney = journeys?.find((j) =>
@@ -663,13 +681,84 @@ export function VerificationCenterPage() {
 
 export function UserSettingsPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: profileData, isLoading, refetch } = useQuery({
+    queryKey: ['my-commute-profile'],
+    queryFn: () => apiRequest<any>('/commute/profile'),
+  });
+
+  const [department, setDepartment] = useState('');
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [usualOrigin, setUsualOrigin] = useState('');
+  const [usualDest, setUsualDest] = useState('');
+  const [usualCorridor, setUsualCorridor] = useState('');
+  const [shiftStart, setShiftStart] = useState('09:00');
+  const [shiftEnd, setShiftEnd] = useState('18:00');
+  const [sharePreciseCoords, setSharePreciseCoords] = useState(false);
+  const [formInitialized, setFormInitialized] = useState(false);
+
+  useEffect(() => {
+    if (profileData?.hasOrganization && !formInitialized) {
+      setDepartment(profileData.department || '');
+      setEmployeeCode(profileData.employeeCode || '');
+      setUsualOrigin(profileData.usualCommuteOrigin || '');
+      setUsualDest(profileData.usualCommuteDestination || '');
+      setUsualCorridor(profileData.usualCommuteCorridor || '');
+      setShiftStart(profileData.shiftStartTime || '09:00');
+      setShiftEnd(profileData.shiftEndTime || '18:00');
+      setSharePreciseCoords(Boolean(profileData.sharePreciseCoords));
+      setFormInitialized(true);
+    }
+  }, [profileData, formInitialized]);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: any) =>
+      apiRequest('/commute/profile', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: () => {
+      showToast({
+        type: 'success',
+        title: 'Commute Profile Saved',
+        message: 'Your commute details and scheduled shift hours have been updated.',
+      });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ['my-commute-profile'] });
+    },
+    onError: (err: any) => {
+      showToast({
+        type: 'error',
+        title: 'Failed to Save Profile',
+        message: err.message || 'An error occurred while updating profile.',
+      });
+    },
+  });
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveMutation.mutate({
+      department: department.trim(),
+      employeeCode: employeeCode.trim(),
+      usualCommuteOrigin: usualOrigin.trim(),
+      usualCommuteDestination: usualDest.trim(),
+      usualCommuteCorridor: usualCorridor.trim(),
+      shiftStartTime: shiftStart,
+      shiftEndTime: shiftEnd,
+      sharePreciseCoords,
+    });
+  };
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Account Profile Header */}
       <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
         <h1 className="text-xl font-bold text-white flex items-center gap-2">
           <Sliders className="w-5 h-5 text-cyan-400" /> Account Profile &amp; Privacy Preferences
         </h1>
-        <div className="grid sm:grid-cols-2 gap-4 text-xs">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
             <span className="text-slate-400 block">Display Name</span>
             <span className="font-bold text-white text-sm">{user?.name}</span>
@@ -687,21 +776,203 @@ export function UserSettingsPage() {
             <span className="font-bold text-emerald-300 text-sm">{user?.status}</span>
           </div>
         </div>
+      </div>
 
-        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs text-slate-300">
-          <h2 className="font-bold text-white">Privacy &amp; Location Protection Summary</h2>
-          <p>
-            • Browser geolocation is requested only when you explicitly click "My Location" or start
-            an active commute verification session.
+      {/* Organization & Commute Profile (Phase 4 requirement) */}
+      {profileData?.hasOrganization ? (
+        <form onSubmit={handleSaveProfile} className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-cyan-400" />
+                <h2 className="text-lg font-bold text-white">
+                  Organization Commute &amp; Delay Verification Profile
+                </h2>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Associated with <strong className="text-white">{profileData.organizationName}</strong> ({profileData.organizationCity})
+                &bull; Role: <span className="font-mono text-cyan-300">{profileData.membershipRole}</span>
+              </p>
+            </div>
+            <button
+              type="submit"
+              disabled={saveMutation.isPending}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold shadow-md shadow-cyan-500/20 disabled:opacity-50 transition-all"
+            >
+              <Save className="w-4 h-4" />
+              {saveMutation.isPending ? 'Saving...' : 'Save Commute Profile'}
+            </button>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Employee ID / Code
+              </label>
+              <input
+                type="text"
+                value={employeeCode}
+                onChange={(e) => setEmployeeCode(e.target.value)}
+                placeholder="e.g. EMP-2026-088"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400 font-mono"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Used by HR to correlate traffic delay certificates with your payroll record.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Department / Team
+              </label>
+              <input
+                type="text"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                placeholder="e.g. Engineering, Operations, Quality"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Usual Origin Area (Home / Transit Hub)
+              </label>
+              <input
+                type="text"
+                value={usualOrigin}
+                onChange={(e) => setUsualOrigin(e.target.value)}
+                placeholder="e.g. Udupi Karavali Bypass (NH-66)"
+                list="regional-dest-list"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Workplace Destination
+              </label>
+              <input
+                type="text"
+                value={usualDest}
+                onChange={(e) => setUsualDest(e.target.value)}
+                placeholder="e.g. Pumpwell Circle, Mangaluru (NH-66)"
+                list="regional-dest-list"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Usual Commute Corridor
+              </label>
+              <select
+                value={usualCorridor}
+                onChange={(e) => setUsualCorridor(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+              >
+                <option value="">Select Primary Coastal Corridor...</option>
+                <option value="Mangaluru–Udupi NH-66">Mangaluru–Udupi NH-66 (Coastal Mainline)</option>
+                <option value="Ullal–Mangaluru NH-66">Ullal–Mangaluru NH-66 (Netravati South)</option>
+                <option value="Bantwal–Mangaluru NH-75">Bantwal–Mangaluru NH-75 (Eastern Gateway)</option>
+                <option value="Surathkal–Mangaluru NH-66">Surathkal–Mangaluru NH-66 (Industrial Belt)</option>
+                <option value="Manipal–Udupi NH-169A">Manipal–Udupi NH-169A (Academic Corridor)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Scheduled Shift Start Time (Expected Arrival)
+              </label>
+              <input
+                type="time"
+                value={shiftStart}
+                onChange={(e) => setShiftStart(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Delays are calculated relative to your scheduled shift arrival window.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                Scheduled Shift End Time
+              </label>
+              <input
+                type="time"
+                value={shiftEnd}
+                onChange={(e) => setShiftEnd(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+          </div>
+
+          {/* Privacy & GPS Consent Controls */}
+          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-bold text-white">GPS Privacy &amp; Location Detail Sharing</span>
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  By default, RoadAlert protects your privacy by sharing only corridor delay durations, incident
+                  corroboration, and bottleneck verification. Precise GPS coordinates are redacted unless you explicitly toggle this on.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                <input
+                  type="checkbox"
+                  checked={sharePreciseCoords}
+                  onChange={(e) => setSharePreciseCoords(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-500"></div>
+              </label>
+            </div>
+            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+              <span>Consent Status: <strong className={profileData.consentActive ? 'text-emerald-400' : 'text-amber-400'}>{profileData.consentActive ? 'Active Consent Record' : 'No Active Session Consent'}</strong></span>
+              <Link to="/app/journeys" className="text-cyan-400 underline hover:text-cyan-300">
+                Manage Session Consents &rarr;
+              </Link>
+            </div>
+          </div>
+
+          <datalist id="regional-dest-list">
+            {REGIONAL_DESTINATIONS.map((d) => (
+              <option key={d.name} value={d.name} />
+            ))}
+          </datalist>
+        </form>
+      ) : (
+        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+          <div className="flex items-center gap-2 text-amber-400">
+            <Building2 className="w-5 h-5" />
+            <h2 className="text-base font-bold text-white">No Organization Associated</h2>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Your account is currently registered as a commuter. If you work for a company using RoadAlert
+            for commute delay verification, ask your HR administrator for an invitation code.
           </p>
-          <p>
-            • You can manage or revoke organization commute consent at any time in the{' '}
-            <Link to="/app/journeys" className="text-cyan-400 underline">
-              Commute Journeys
-            </Link>{' '}
-            view.
-          </p>
+          <div>
+            <Link
+              to="/register?tab=invite"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 text-xs font-bold hover:bg-cyan-400 transition-all"
+            >
+              Enter Organization Invite Code
+            </Link>
+          </div>
         </div>
+      )}
+
+      {/* Privacy Charter Summary */}
+      <div className="p-5 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2.5 text-xs text-slate-300">
+        <h3 className="font-bold text-white flex items-center gap-2">
+          <Lock className="w-4 h-4 text-emerald-400" /> Commute Data Collection &amp; Consent Charter
+        </h3>
+        <ul className="space-y-1.5 list-disc pl-5 text-slate-400">
+          <li><strong>Zero 24/7 Background Tracking:</strong> Location observations are only collected during an active commute session you explicitly initiate.</li>
+          <li><strong>Instant Consent Revocation:</strong> Revoking consent immediately terminates any ongoing tracking session and halts data sharing.</li>
+          <li><strong>Purpose Limitation:</strong> Telemetry is strictly used to verify road congestion against traffic police and crowd-reported incidents.</li>
+          <li><strong>Immutable Audit Trails:</strong> Every access to employee commute certificates is recorded with full timestamps.</li>
+        </ul>
       </div>
     </div>
   );

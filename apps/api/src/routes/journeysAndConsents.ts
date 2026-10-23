@@ -6,6 +6,7 @@ import { authenticate, requireRoles } from '../middleware/auth.js';
 import { ApiError } from '../middleware/errorHandler.js';
 import { StartJourneySchema, CheckpointSchema } from '@roadalert/shared';
 import { haversineDistanceKm } from '../services/verificationEngine.js';
+import { evaluateJourneyDelay } from '../services/delayVerificationService.js';
 
 export const journeysAndConsentsRouter = Router();
 
@@ -468,7 +469,7 @@ journeysAndConsentsRouter.post('/journeys/:id/checkpoints', authenticate, async 
 // POST /api/v1/journeys/:id/stop — Explicitly stop an active commute session
 journeysAndConsentsRouter.post('/journeys/:id/stop', authenticate, async (req, res, next) => {
   try {
-    const journeyId = req.params.id;
+    const journeyId = String(req.params.id);
     const jRes = await db.query<any>(`SELECT * FROM journeys WHERE id = $1`, [journeyId]);
     if (jRes.rows.length === 0) {
       throw new ApiError(404, 'JOURNEY_NOT_FOUND', 'Journey not found');
@@ -482,6 +483,13 @@ journeysAndConsentsRouter.post('/journeys/:id/stop', authenticate, async (req, r
       `UPDATE journeys SET status = 'COMPLETED', ended_at = NOW() WHERE id = $1`,
       [journeyId]
     );
+
+    // Auto-evaluate delay verification for employer verification audit trail
+    try {
+      await evaluateJourneyDelay({ journeyId, forceReevaluate: true });
+    } catch {
+      // Non-blocking for commuter stopping session
+    }
 
     await db.query(
       `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
@@ -498,6 +506,174 @@ journeysAndConsentsRouter.post('/journeys/:id/stop', authenticate, async (req, r
     res.json({
       success: true,
       data: updated.rows[0],
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const UpdateCommuteProfileSchema = z.object({
+  department: z.string().max(100).optional().or(z.literal('')),
+  employeeCode: z.string().max(50).optional().or(z.literal('')),
+  usualCommuteOrigin: z.string().max(200).optional().or(z.literal('')),
+  usualCommuteDestination: z.string().max(200).optional().or(z.literal('')),
+  usualCommuteCorridor: z.string().max(100).optional().or(z.literal('')),
+  usualCommuteOriginLat: z.number().min(-90).max(90).optional().nullable(),
+  usualCommuteOriginLng: z.number().min(-180).max(180).optional().nullable(),
+  usualCommuteDestLat: z.number().min(-90).max(90).optional().nullable(),
+  usualCommuteDestLng: z.number().min(-180).max(180).optional().nullable(),
+  shiftStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  shiftEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  sharePreciseCoords: z.boolean().optional(),
+});
+
+// GET /api/v1/commute/profile — Get employee's own commute profile and organization context
+journeysAndConsentsRouter.get('/commute/profile', authenticate, async (req, res, next) => {
+  try {
+    const memRes = await db.query<any>(
+      `SELECT om.*, o.name as organization_name, o.city as organization_city,
+              o.address as organization_address, o.default_shift_start, o.default_shift_end,
+              tc.id as consent_id, tc.share_precise_coords, tc.revoked_at as consent_revoked_at,
+              tc.granted_at as consent_granted_at, tc.purpose as consent_purpose
+       FROM organization_memberships om
+       JOIN organizations o ON o.id = om.organization_id
+       LEFT JOIN tracking_consents tc ON tc.user_id = om.user_id AND tc.organization_id = om.organization_id AND tc.revoked_at IS NULL
+       WHERE om.user_id = $1 AND om.status = 'ACTIVE'
+       LIMIT 1`,
+      [req.user!.userId]
+    );
+
+    if (memRes.rows.length === 0) {
+      res.json({
+        success: true,
+        data: {
+          hasOrganization: false,
+          membership: null,
+        },
+      });
+      return;
+    }
+
+    const r = memRes.rows[0];
+    res.json({
+      success: true,
+      data: {
+        hasOrganization: true,
+        organizationId: r.organization_id,
+        organizationName: r.organization_name,
+        organizationCity: r.organization_city,
+        membershipId: r.id,
+        membershipRole: r.membership_role,
+        department: r.department || '',
+        employeeCode: r.employee_code || '',
+        usualCommuteOrigin: r.usual_commute_origin || '',
+        usualCommuteDestination: r.usual_commute_destination || '',
+        usualCommuteCorridor: r.usual_commute_corridor || '',
+        usualCommuteOriginLat: r.usual_commute_origin_lat,
+        usualCommuteOriginLng: r.usual_commute_origin_lng,
+        usualCommuteDestLat: r.usual_commute_dest_lat,
+        usualCommuteDestLng: r.usual_commute_dest_lng,
+        shiftStartTime: r.shift_start_time || r.default_shift_start || '09:00',
+        shiftEndTime: r.shift_end_time || r.default_shift_end || '18:00',
+        consentId: r.consent_id || null,
+        consentActive: Boolean(r.consent_id && !r.consent_revoked_at),
+        sharePreciseCoords: Boolean(r.share_precise_coords),
+        consentGrantedAt: r.consent_granted_at || null,
+        consentPurpose: r.consent_purpose || null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/commute/profile — Configure or confirm employee's own commute profile and consent
+journeysAndConsentsRouter.patch('/commute/profile', authenticate, async (req, res, next) => {
+  try {
+    const parsed = UpdateCommuteProfileSchema.parse(req.body);
+
+    const memRes = await db.query<any>(
+      `SELECT * FROM organization_memberships WHERE user_id = $1 AND status = 'ACTIVE' LIMIT 1`,
+      [req.user!.userId]
+    );
+
+    if (memRes.rows.length === 0) {
+      throw new ApiError(404, 'NO_ACTIVE_MEMBERSHIP', 'No active organization membership found for this user');
+    }
+
+    const cur = memRes.rows[0];
+
+    // Check duplicate employee code within org if changing employee code
+    if (parsed.employeeCode && parsed.employeeCode.trim() && parsed.employeeCode.trim() !== cur.employee_code) {
+      const codeCheck = await db.query(
+        `SELECT id FROM organization_memberships WHERE organization_id = $1 AND employee_code = $2 AND id != $3`,
+        [cur.organization_id, parsed.employeeCode.trim(), cur.id]
+      );
+      if (codeCheck.rows.length > 0) {
+        throw new ApiError(
+          409,
+          'DUPLICATE_EMPLOYEE_CODE',
+          `An employee with Employee ID "${parsed.employeeCode}" already exists in your organization`
+        );
+      }
+    }
+
+    await db.query(
+      `UPDATE organization_memberships
+       SET department = $1,
+           employee_code = $2,
+           usual_commute_origin = $3,
+           usual_commute_destination = $4,
+           usual_commute_corridor = $5,
+           usual_commute_origin_lat = $6,
+           usual_commute_origin_lng = $7,
+           usual_commute_dest_lat = $8,
+           usual_commute_dest_lng = $9,
+           shift_start_time = $10,
+           shift_end_time = $11,
+           updated_at = NOW()
+       WHERE id = $12`,
+      [
+        parsed.department !== undefined ? (parsed.department || null) : cur.department,
+        parsed.employeeCode !== undefined ? (parsed.employeeCode || null) : cur.employee_code,
+        parsed.usualCommuteOrigin !== undefined ? (parsed.usualCommuteOrigin || null) : cur.usual_commute_origin,
+        parsed.usualCommuteDestination !== undefined ? (parsed.usualCommuteDestination || null) : cur.usual_commute_destination,
+        parsed.usualCommuteCorridor !== undefined ? (parsed.usualCommuteCorridor || null) : cur.usual_commute_corridor,
+        parsed.usualCommuteOriginLat !== undefined ? parsed.usualCommuteOriginLat : cur.usual_commute_origin_lat,
+        parsed.usualCommuteOriginLng !== undefined ? parsed.usualCommuteOriginLng : cur.usual_commute_origin_lng,
+        parsed.usualCommuteDestLat !== undefined ? parsed.usualCommuteDestLat : cur.usual_commute_dest_lat,
+        parsed.usualCommuteDestLng !== undefined ? parsed.usualCommuteDestLng : cur.usual_commute_dest_lng,
+        parsed.shiftStartTime ?? cur.shift_start_time,
+        parsed.shiftEndTime ?? cur.shift_end_time,
+        cur.id,
+      ]
+    );
+
+    // If sharePreciseCoords is specified, update or create tracking consent
+    if (parsed.sharePreciseCoords !== undefined) {
+      const activeConsent = await db.query<any>(
+        `SELECT id FROM tracking_consents WHERE user_id = $1 AND organization_id = $2 AND revoked_at IS NULL LIMIT 1`,
+        [req.user!.userId, cur.organization_id]
+      );
+      if (activeConsent.rows.length > 0) {
+        await db.query(
+          `UPDATE tracking_consents SET share_precise_coords = $1 WHERE id = $2`,
+          [parsed.sharePreciseCoords, activeConsent.rows[0].id]
+        );
+      }
+    }
+
+    await db.query(
+      `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, 'COMMUTE_PROFILE_UPDATED', 'ORGANIZATION_MEMBERSHIP', $3, $4)`,
+      [crypto.randomUUID(), req.user!.userId, cur.id, JSON.stringify(parsed)]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Commute profile successfully updated',
+      },
     });
   } catch (err) {
     next(err);

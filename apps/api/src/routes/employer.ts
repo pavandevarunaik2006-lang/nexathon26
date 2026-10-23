@@ -230,10 +230,13 @@ employerRouter.get('/dashboard', async (req, res, next) => {
               dv.verification_status as delay_verification_status,
               dv.journey_status as delay_journey_status,
               dv.conclusion_text as delay_conclusion_text,
-              dv.evidence_summary as delay_evidence_summary_text
+              dv.evidence_summary as delay_evidence_summary_text,
+              om.employee_code, om.department, om.shift_start_time, om.shift_end_time,
+              om.usual_commute_origin, om.usual_commute_destination, om.usual_commute_corridor
        FROM journeys j
        JOIN tracking_consents tc ON tc.id = j.consent_record_id
        JOIN users u ON u.id = j.employee_id
+       LEFT JOIN organization_memberships om ON om.user_id = u.id AND om.organization_id = $1
        LEFT JOIN delay_verifications dv ON dv.journey_id = j.id
        WHERE tc.organization_id = $1 AND tc.revoked_at IS NULL
        ORDER BY j.started_at DESC`,
@@ -264,6 +267,11 @@ employerRouter.get('/dashboard', async (req, res, next) => {
         employeeId: j.employee_id,
         employeeName: j.employee_name,
         employeeEmail: j.employee_email,
+        employeeCode: j.employee_code || null,
+        department: j.department || null,
+        shiftHours: (j.shift_start_time && j.shift_end_time) ? `${j.shift_start_time} - ${j.shift_end_time}` : '09:00 - 18:00',
+        consentStatus: j.revoked_at ? 'REVOKED' : 'ACTIVE',
+        sessionStatus: j.status,
         origin: j.origin,
         destination: j.destination,
         route: `${j.origin} → ${j.destination}`,
@@ -385,6 +393,7 @@ employerRouter.get('/dashboard', async (req, res, next) => {
         metrics: {
           totalEmployees,
           travellingCount: travellingJourneys.length,
+          activeConsentedSessionsCount: travellingJourneys.length,
           delayedCount: delayedJourneys.length,
           verifiedDelaysCount: verifiedDelays.length,
           unverifiedDelaysCount: unverifiedDelays.length,
@@ -582,6 +591,21 @@ employerRouter.post('/employees', async (req, res, next) => {
     let userId: string;
     const userRes = await db.query<any>(`SELECT id, role, status FROM users WHERE email = $1`, [emailLower]);
 
+    // Check for duplicate employee code within the organization
+    if (parsed.employeeCode && parsed.employeeCode.trim()) {
+      const codeCheck = await db.query(
+        `SELECT id FROM organization_memberships WHERE organization_id = $1 AND employee_code = $2`,
+        [primaryOrgId, parsed.employeeCode.trim()]
+      );
+      if (codeCheck.rows.length > 0) {
+        throw new ApiError(
+          409,
+          'DUPLICATE_EMPLOYEE_CODE',
+          `An employee with Employee ID "${parsed.employeeCode}" is already registered in this organization`
+        );
+      }
+    }
+
     if (userRes.rows.length > 0) {
       userId = userRes.rows[0].id;
 
@@ -703,6 +727,21 @@ employerRouter.patch('/employees/:id', async (req, res, next) => {
     }
 
     const cur = memRes.rows[0];
+
+    // Check for duplicate employee code if changing employee_code
+    if (parsed.employeeCode && parsed.employeeCode.trim() && parsed.employeeCode.trim() !== cur.employee_code) {
+      const codeCheck = await db.query(
+        `SELECT id FROM organization_memberships WHERE organization_id = $1 AND employee_code = $2 AND id != $3`,
+        [primaryOrgId, parsed.employeeCode.trim(), cur.id]
+      );
+      if (codeCheck.rows.length > 0) {
+        throw new ApiError(
+          409,
+          'DUPLICATE_EMPLOYEE_CODE',
+          `An employee with Employee ID "${parsed.employeeCode}" is already registered in this organization`
+        );
+      }
+    }
 
     await db.query(
       `UPDATE organization_memberships
@@ -926,14 +965,17 @@ employerRouter.get('/journeys', async (req, res, next) => {
 
     const journeysRes = await db.query<any>(
       `SELECT j.*, u.name as employee_name, u.email as employee_email,
-              tc.policy_version, tc.purpose as consent_purpose, tc.share_precise_coords,
+              tc.policy_version, tc.purpose as consent_purpose, tc.share_precise_coords, tc.revoked_at,
               dv.verification_status as delay_verification_status,
               dv.journey_status as delay_journey_status,
               dv.conclusion_text as delay_conclusion_text,
-              dv.evidence_summary as delay_evidence_summary_text
+              dv.evidence_summary as delay_evidence_summary_text,
+              om.employee_code, om.department, om.shift_start_time, om.shift_end_time,
+              om.usual_commute_origin, om.usual_commute_destination, om.usual_commute_corridor
        FROM journeys j
        JOIN tracking_consents tc ON tc.id = j.consent_record_id
        JOIN users u ON u.id = j.employee_id
+       LEFT JOIN organization_memberships om ON om.user_id = u.id AND om.organization_id = $1
        LEFT JOIN delay_verifications dv ON dv.journey_id = j.id
        WHERE tc.organization_id = $1 AND tc.revoked_at IS NULL
        ORDER BY j.started_at DESC`,
@@ -951,6 +993,11 @@ employerRouter.get('/journeys', async (req, res, next) => {
         employeeId: j.employee_id,
         employeeName: j.employee_name,
         employeeEmail: j.employee_email,
+        employeeCode: j.employee_code || null,
+        department: j.department || null,
+        shiftHours: (j.shift_start_time && j.shift_end_time) ? `${j.shift_start_time} - ${j.shift_end_time}` : '09:00 - 18:00',
+        consentStatus: j.revoked_at ? 'REVOKED' : 'ACTIVE',
+        sessionStatus: j.status,
         origin: j.origin,
         destination: j.destination,
         route: `${j.origin} → ${j.destination}`,

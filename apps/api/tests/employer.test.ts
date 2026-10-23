@@ -322,4 +322,109 @@ describe('RoadAlert Employer / Company Module — Full Test Suite', () => {
 
     expect(listRes.body.data.some((e: any) => e.id === addedEmployeeId)).toBe(false);
   });
+
+  it('13. Prevents duplicate employee code registration within the same organization', async () => {
+    // Attempting to register another employee with an already taken employee code
+    const dupCodeRes = await request(app)
+      .post('/api/v1/employer/employees')
+      .set('Authorization', `Bearer ${employerToken}`)
+      .send({
+        name: 'Vikas Rao',
+        email: 'vikas.rao@karavalitech.in',
+        employeeCode: 'EMP-104', // Already belongs to Ananya Rao
+        membershipRole: 'EMPLOYEE',
+      });
+
+    expect(dupCodeRes.status).toBe(409);
+    expect(dupCodeRes.body.error.code).toBe('DUPLICATE_EMPLOYEE_CODE');
+  });
+
+  it('14. Allows an employee to view and configure their own commute profile via /commute/profile', async () => {
+    // 1. Employee fetches own commute profile
+    const getProfileRes = await request(app)
+      .get('/api/v1/commute/profile')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(getProfileRes.status).toBe(200);
+    expect(getProfileRes.body.data.hasOrganization).toBe(true);
+    expect(getProfileRes.body.data.organizationName).toContain('Karavali');
+
+    // 2. Employee updates usual origin, destination, corridor, shift times, and GPS consent
+    const patchProfileRes = await request(app)
+      .patch('/api/v1/commute/profile')
+      .set('Authorization', `Bearer ${employeeToken}`)
+      .send({
+        usualCommuteOrigin: 'Udupi Karavali Bypass (NH-66)',
+        usualCommuteDestination: 'Pumpwell Circle, Mangaluru (NH-66)',
+        usualCommuteCorridor: 'Mangaluru–Udupi NH-66',
+        shiftStartTime: '08:45',
+        shiftEndTime: '17:45',
+        sharePreciseCoords: true,
+      });
+
+    expect(patchProfileRes.status).toBe(200);
+    expect(patchProfileRes.body.success).toBe(true);
+
+    // 3. Confirm persistence
+    const refetchRes = await request(app)
+      .get('/api/v1/commute/profile')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(refetchRes.body.data.usualCommuteCorridor).toBe('Mangaluru–Udupi NH-66');
+    expect(refetchRes.body.data.shiftStartTime).toBe('08:45');
+    expect(refetchRes.body.data.sharePreciseCoords).toBe(true);
+  });
+
+  it('15. Rejects expired invitation codes with INVITATION_EXPIRED error', async () => {
+    // Insert an already expired invitation
+    const expiredInviteCode = 'ROAD-EXPIRED99';
+    await db.query(
+      `INSERT INTO organization_invitations (
+        id, organization_id, email, invite_code, membership_role, status, expires_at
+      ) VALUES ($1, $2, 'expired@test.com', $3, 'EMPLOYEE', 'PENDING', NOW() - INTERVAL '2 days')`,
+      [crypto.randomUUID(), DEMO_IDS.orgs.primary, expiredInviteCode]
+    );
+
+    // Inspecting expired invite should fail
+    const inspectRes = await request(app).get(`/api/v1/auth/invites/${expiredInviteCode}`);
+    expect(inspectRes.status).toBe(400);
+    expect(inspectRes.body.error.code).toBe('INVITATION_EXPIRED');
+
+    // Attempting to accept expired invite should fail
+    const acceptRes = await request(app).post('/api/v1/auth/accept-invite').send({
+      inviteCode: expiredInviteCode,
+      name: 'Late Person',
+      password: 'RoadAlert@2026',
+    });
+    expect(acceptRes.status).toBe(400);
+    expect(acceptRes.body.error.code).toBe('INVITATION_EXPIRED');
+  });
+
+  it('16. Halts active commute tracking when consent is revoked', async () => {
+    // 1. Fetch current consent
+    const consentRes = await request(app)
+      .get('/api/v1/consents/me')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    const activeConsent = consentRes.body.data.consents.find((c: any) => c.active);
+    expect(activeConsent).toBeDefined();
+
+    // 2. Revoke consent
+    const revokeRes = await request(app)
+      .post(`/api/v1/consents/${activeConsent.id}/revoke`)
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(revokeRes.status).toBe(200);
+    expect(revokeRes.body.data.revoked).toBe(true);
+
+    // 3. Confirm active journey was terminated
+    const journeyRes = await request(app)
+      .get('/api/v1/journeys')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    const activeSession = journeyRes.body.data.find(
+      (j: any) => j.id === DEMO_IDS.journeys.activeCommute
+    );
+    expect(activeSession.status).toBe('TERMINATED');
+  });
 });

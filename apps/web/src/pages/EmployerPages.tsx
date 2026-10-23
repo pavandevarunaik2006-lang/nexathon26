@@ -443,8 +443,25 @@ export function EmployerDashboardPage() {
                                 <DemoDataBadge />
                               ) : null}
                             </div>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              {j.employeeCode && (
+                                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
+                                  {j.employeeCode}
+                                </span>
+                              )}
+                              {j.department && (
+                                <span className="text-[10px] text-slate-400">
+                                  {j.department}
+                                </span>
+                              )}
+                              {j.shiftHours && (
+                                <span className="text-[10px] text-slate-500">
+                                  ({j.shiftHours})
+                                </span>
+                              )}
+                            </div>
                             {j.employeeEmail && (
-                              <span className="text-[11px] text-slate-500">{j.employeeEmail}</span>
+                              <span className="text-[10px] text-slate-500 block">{j.employeeEmail}</span>
                             )}
                           </td>
                           <td className="py-3 px-3 text-slate-300 font-medium">
