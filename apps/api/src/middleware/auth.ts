@@ -2,13 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRole } from '@roadalert/shared';
 import { db } from '../db/index.js';
+import { env } from '../config/env.js';
+import { AuthTokenPayload } from '../types/index.js';
 
-export interface AuthTokenPayload {
-  userId: string;
-  email: string;
-  role: UserRole;
-  name: string;
-}
+export type { AuthTokenPayload };
 
 declare global {
   namespace Express {
@@ -18,10 +15,8 @@ declare global {
   }
 }
 
-const ACCESS_SECRET =
-  process.env.JWT_ACCESS_SECRET || 'roadalert_dev_access_secret_key_2026_nexathon';
-const REFRESH_SECRET =
-  process.env.JWT_REFRESH_SECRET || 'roadalert_dev_refresh_secret_key_2026_nexathon';
+const ACCESS_SECRET = env.JWT_ACCESS_SECRET;
+const REFRESH_SECRET = env.JWT_REFRESH_SECRET;
 
 export function signAccessToken(payload: AuthTokenPayload): string {
   return jwt.sign(payload, ACCESS_SECRET, { expiresIn: '2h' });

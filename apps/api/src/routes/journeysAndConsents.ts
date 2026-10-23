@@ -1,10 +1,13 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { z } from 'zod';
 import { db } from '../db/index.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { ApiError } from '../middleware/errorHandler.js';
-import { StartJourneySchema, CheckpointSchema } from '@roadalert/shared';
+import {
+  StartJourneySchema,
+  CheckpointSchema,
+  CreateConsentSchema,
+} from '../validators/index.js';
 import { haversineDistanceKm } from '../services/verificationEngine.js';
 
 export const journeysAndConsentsRouter = Router();
@@ -56,19 +59,7 @@ journeysAndConsentsRouter.get('/consents/me', authenticate, async (req, res, nex
 // POST /api/v1/consents — Explicitly grant commute session tracking consent
 journeysAndConsentsRouter.post('/consents', authenticate, async (req, res, next) => {
   try {
-    const ConsentCreateSchema = z.object({
-      organizationId: z.string().min(1).optional(),
-      policyVersion: z.string().default('v2026.1-PRIVACY-FIRST'),
-      purpose: z
-        .string()
-        .min(5)
-        .default(
-          'Explicit session-only commute delay verification along coastal Karnataka corridor'
-        ),
-      sharePreciseCoords: z.boolean().optional().default(false),
-    });
-
-    const parsed = ConsentCreateSchema.parse(req.body);
+    const parsed = CreateConsentSchema.parse(req.body);
 
     let organizationId = parsed.organizationId;
     if (!organizationId) {

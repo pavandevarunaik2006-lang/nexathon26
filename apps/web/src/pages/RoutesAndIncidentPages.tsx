@@ -16,6 +16,11 @@ import {
   Flag,
   Radio,
   Lock,
+  ArrowLeftRight,
+  Crosshair,
+  Check,
+  X,
+  Loader2,
 } from 'lucide-react';
 import {
   MapContainer,
@@ -24,6 +29,7 @@ import {
   CircleMarker,
   Tooltip as LeafletTooltip,
   useMapEvents,
+  useMap,
 } from 'react-leaflet';
 import type L from 'leaflet';
 import {
@@ -31,7 +37,7 @@ import {
   INCIDENT_SEVERITIES,
   REGIONAL_DESTINATIONS,
 } from '@roadalert/shared';
-import { apiRequest } from '../lib/api';
+import { apiRequest, API_BASE } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import {
@@ -46,6 +52,11 @@ import {
   StaggerItem,
   ENTERPRISE_EASE,
 } from '../components/MotionPrimitives';
+import {
+  RouteLocationInput,
+  parseClientCoordinateString,
+  type LocationEndpointValue,
+} from '../components/RouteLocationInput';
 
 function RoutePolylineWithDraw({
   route,
@@ -96,42 +107,201 @@ function RoutePolylineWithDraw({
   }, [isSelected, route.id, prefersReducedMotion, onDrawComplete]);
 
   return (
-    <Polyline
-      ref={polylineRef}
-      positions={route.geometry}
-      pathOptions={{
-        color: strokeColor,
-        weight: isSelected ? 6 : 3.5,
-        opacity: isSelected ? 0.95 : 0.45,
-        dashArray: route.hasRoadClosureWarning ? '8, 8' : undefined,
-        className:
-          isSelected && !prefersReducedMotion && !route.hasRoadClosureWarning
-            ? 'corridor-route-path-draw'
-            : undefined,
-      }}
-      eventHandlers={{
-        click: onSelect,
-      }}
-    />
+    <>
+      {isSelected && (
+        <Polyline
+          positions={route.geometry}
+          pathOptions={{
+            color: '#ffffff',
+            weight: 9,
+            opacity: 0.8,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }}
+        />
+      )}
+      <Polyline
+        ref={polylineRef}
+        positions={route.geometry}
+        pathOptions={{
+          color: strokeColor,
+          weight: isSelected ? 6 : 3.5,
+          opacity: isSelected ? 0.96 : 0.45,
+          lineCap: 'round',
+          lineJoin: 'round',
+          dashArray: route.hasRoadClosureWarning ? '8, 8' : undefined,
+          className:
+            isSelected && !prefersReducedMotion && !route.hasRoadClosureWarning
+              ? 'corridor-route-path-draw'
+              : undefined,
+        }}
+        eventHandlers={{
+          click: onSelect,
+        }}
+      />
+    </>
   );
+}
+
+/**
+ * Watches map clicks ONLY when "Pick on Map" mode is active, ignoring clicks on map controls/overlays.
+ */
+function RouteMapPickListener({
+  activeMode,
+  onPickCoordinate,
+}: {
+  activeMode: 'origin' | 'destination' | null;
+  onPickCoordinate: (lat: number, lng: number) => void;
+}) {
+  useMapEvents({
+    click(e) {
+      if (!activeMode) return;
+      const targetEl = e.originalEvent?.target as HTMLElement | null;
+      if (
+        targetEl &&
+        (targetEl.closest('.leaflet-control') || targetEl.closest('.route-map-pick-banner'))
+      ) {
+        return;
+      }
+      onPickCoordinate(
+        Math.round(e.latlng.lat * 100000) / 100000,
+        Math.round(e.latlng.lng * 100000) / 100000
+      );
+    },
+  });
+  return null;
+}
+
+/**
+ * Fits map bounds cleanly when a new route plan is calculated
+ */
+function RouteMapBoundsController({
+  planId,
+  originCoords,
+  destCoords,
+  selectedGeometry,
+  prefersReducedMotion,
+}: {
+  planId?: string;
+  originCoords?: { lat: number; lng: number } | null;
+  destCoords?: { lat: number; lng: number } | null;
+  selectedGeometry?: [number, number][];
+  prefersReducedMotion: boolean;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!planId) return;
+    const points: [number, number][] = [];
+    if (Array.isArray(selectedGeometry) && selectedGeometry.length >= 2) {
+      for (const pt of selectedGeometry) {
+        if (Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1])) {
+          points.push([pt[0], pt[1]]);
+        }
+      }
+    } else {
+      if (originCoords && Number.isFinite(originCoords.lat) && Number.isFinite(originCoords.lng)) {
+        points.push([originCoords.lat, originCoords.lng]);
+      }
+      if (destCoords && Number.isFinite(destCoords.lat) && Number.isFinite(destCoords.lng)) {
+        points.push([destCoords.lat, destCoords.lng]);
+      }
+    }
+
+    if (points.length >= 2) {
+      try {
+        map.fitBounds(points, {
+          padding: [42, 42],
+          maxZoom: 14,
+          animate: !prefersReducedMotion,
+        });
+      } catch {
+        // Ignore bounds error if map container is hidden/unmounted
+      }
+    }
+  }, [planId, map, originCoords, destCoords, selectedGeometry, prefersReducedMotion]);
+
+  return null;
 }
 
 export function RoutePlannerPage() {
   const { showToast } = useToast();
   const prefersReducedMotion = Boolean(useReducedMotion());
-  const [origin, setOrigin] = useState('Pumpwell Circle, Mangaluru (NH-66)');
-  const [destination, setDestination] = useState('Udupi Karavali Bypass (NH-66)');
+
+  const [originState, setOriginState] = useState<LocationEndpointValue>({
+    text: 'Pumpwell Circle, Mangaluru (NH-66)',
+    lat: 12.8669,
+    lng: 74.8692,
+    roadName: 'NH-66 Pumpwell Flyover',
+    source: 'PRESET',
+  });
+
+  const [destState, setDestState] = useState<LocationEndpointValue>({
+    text: 'Udupi Karavali Bypass (NH-66)',
+    lat: 13.3409,
+    lng: 74.7351,
+    roadName: 'NH-66 Udupi Karavali Bypass',
+    source: 'PRESET',
+  });
+
+  const [originError, setOriginError] = useState<string | null>(null);
+  const [destError, setDestError] = useState<string | null>(null);
+
   const [avoidIncidentZones, setAvoidIncidentZones] = useState(true);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [routePinsReady, setRoutePinsReady] = useState<boolean>(prefersReducedMotion);
 
+  // "Pick on Map" interactive selection state
+  const [mapPickMode, setMapPickMode] = useState<'origin' | 'destination' | null>(null);
+  const [mapPickSnapshot, setMapPickSnapshot] = useState<LocationEndpointValue | null>(null);
+  const [mapPickPreview, setMapPickPreview] = useState<{
+    lat: number;
+    lng: number;
+    label: string;
+    secondaryLabel: string;
+    roadName: string;
+    isResolving: boolean;
+  } | null>(null);
+  const reverseAbortRef = useRef<AbortController | null>(null);
+
   const planMutation = useMutation({
-    mutationFn: (payload: any) =>
+    mutationFn: (payload: {
+      origin: string;
+      destination: string;
+      originLat?: number;
+      originLng?: number;
+      destLat?: number;
+      destLng?: number;
+      avoidIncidentZones: boolean;
+    }) =>
       apiRequest<any>('/routes/plan', {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
     onSuccess: (data) => {
+      setOriginError(null);
+      setDestError(null);
+
+      // Synchronize resolved coordinates back to state so map markers A and B are accurate
+      if (data.originLocation) {
+        setOriginState((prev) => ({
+          ...prev,
+          text: prev.text || data.originLocation.label,
+          lat: data.originLocation.lat,
+          lng: data.originLocation.lng,
+          roadName: data.originLocation.roadName,
+        }));
+      }
+      if (data.destinationLocation) {
+        setDestState((prev) => ({
+          ...prev,
+          text: prev.text || data.destinationLocation.label,
+          lat: data.destinationLocation.lat,
+          lng: data.destinationLocation.lng,
+          roadName: data.destinationLocation.roadName,
+        }));
+      }
+
       const rec = data.routes?.find((r: any) => r.recommended) || data.routes?.[0];
       if (rec) {
         setRoutePinsReady(prefersReducedMotion);
@@ -139,35 +309,266 @@ export function RoutePlannerPage() {
       }
     },
     onError: (err: any) => {
+      const msg = String(err?.message || 'Unable to calculate route for the specified locations.');
+      if (msg.toLowerCase().includes('origin') && !msg.toLowerCase().includes('same location')) {
+        setOriginError(msg);
+      } else if (msg.toLowerCase().includes('destination')) {
+        setDestError(msg);
+      } else {
+        setOriginError(msg);
+      }
       showToast({
         type: 'error',
         title: 'Route calculation error',
-        message: err.message,
+        message: msg,
       });
     },
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     planMutation.mutate({
-      origin,
-      destination,
+      origin: originState.text,
+      destination: destState.text,
+      originLat: originState.lat,
+      originLng: originState.lng,
+      destLat: destState.lat,
+      destLng: destState.lng,
       avoidIncidentZones,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handlePlanSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const validateAndSubmitRoutePlan = (
+    overrideOrigin?: LocationEndpointValue,
+    overrideDest?: LocationEndpointValue
+  ) => {
+    const o = overrideOrigin || originState;
+    const d = overrideDest || destState;
+
+    setOriginError(null);
+    setDestError(null);
+
+    const oText = o.text.trim();
+    const dText = d.text.trim();
+
+    let hasErr = false;
+    if (!oText || oText.length < 2) {
+      setOriginError('Please select or enter an origin location (or click Pick on Map).');
+      hasErr = true;
+    } else {
+      const oCoord = parseClientCoordinateString(oText);
+      if (oCoord.isCoordAttempt && !oCoord.valid) {
+        setOriginError(oCoord.error || 'Invalid origin coordinates.');
+        hasErr = true;
+      }
+    }
+
+    if (!dText || dText.length < 2) {
+      setDestError('Please select or enter a destination location (or click Pick on Map).');
+      hasErr = true;
+    } else {
+      const dCoord = parseClientCoordinateString(dText);
+      if (dCoord.isCoordAttempt && !dCoord.valid) {
+        setDestError(dCoord.error || 'Invalid destination coordinates.');
+        hasErr = true;
+      }
+    }
+
+    if (hasErr) return;
+
+    if (
+      oText.toLowerCase() === dText.toLowerCase() ||
+      (o.lat != null &&
+        o.lng != null &&
+        d.lat != null &&
+        d.lng != null &&
+        Math.abs(o.lat - d.lat) < 0.0004 &&
+        Math.abs(o.lng - d.lng) < 0.0004)
+    ) {
+      setDestError('Origin and destination must be two distinct locations.');
+      return;
+    }
+
     planMutation.mutate({
-      origin,
-      destination,
+      origin: oText,
+      destination: dText,
+      originLat: o.lat,
+      originLng: o.lng,
+      destLat: d.lat,
+      destLng: d.lng,
       avoidIncidentZones,
     });
+  };
+
+  const handlePlanSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (mapPickMode) {
+      setMapPickMode(null);
+      setMapPickPreview(null);
+      setMapPickSnapshot(null);
+    }
+    validateAndSubmitRoutePlan();
+  };
+
+  const handleSwapEndpoints = () => {
+    if (mapPickMode) {
+      setMapPickMode(null);
+      setMapPickPreview(null);
+      setMapPickSnapshot(null);
+    }
+    const prevOrigin = { ...originState };
+    const prevDest = { ...destState };
+    setOriginState(prevDest);
+    setDestState(prevOrigin);
+    setOriginError(null);
+    setDestError(null);
+    validateAndSubmitRoutePlan(prevDest, prevOrigin);
+  };
+
+  const handleTogglePickOnMap = (role: 'origin' | 'destination') => {
+    if (mapPickMode === role) {
+      // Cancel active pick mode and restore previous snapshot
+      if (mapPickSnapshot) {
+        if (role === 'origin') setOriginState(mapPickSnapshot);
+        else setDestState(mapPickSnapshot);
+      }
+      setMapPickMode(null);
+      setMapPickPreview(null);
+      setMapPickSnapshot(null);
+      return;
+    }
+
+    // If switching from the other role without confirming, restore that other role's snapshot first
+    if (mapPickMode && mapPickSnapshot) {
+      if (mapPickMode === 'origin') setOriginState(mapPickSnapshot);
+      else setDestState(mapPickSnapshot);
+    }
+
+    const currentSnapshot = role === 'origin' ? { ...originState } : { ...destState };
+    setMapPickSnapshot(currentSnapshot);
+    setMapPickMode(role);
+    setMapPickPreview(null);
+    if (role === 'origin') setOriginError(null);
+    else setDestError(null);
+  };
+
+  const handleMapClickCoordinate = async (lat: number, lng: number) => {
+    if (!mapPickMode) return;
+    const activeRole = mapPickMode;
+    const coordFallbackLabel = `Map Point (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+    setMapPickPreview({
+      lat,
+      lng,
+      label: coordFallbackLabel,
+      secondaryLabel: 'Resolving nearest road or landmark...',
+      roadName: coordFallbackLabel,
+      isResolving: true,
+    });
+
+    // Update the corresponding field immediately with coordinate fallback
+    const immediateValue: LocationEndpointValue = {
+      text: coordFallbackLabel,
+      lat,
+      lng,
+      roadName: coordFallbackLabel,
+      source: 'MAP_PIN',
+    };
+    if (activeRole === 'origin') {
+      setOriginState(immediateValue);
+      setOriginError(null);
+    } else {
+      setDestState(immediateValue);
+      setDestError(null);
+    }
+
+    if (reverseAbortRef.current) {
+      reverseAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    reverseAbortRef.current = controller;
+
+    try {
+      const res = await fetch(`${API_BASE}/locations/reverse?lat=${lat}&lng=${lng}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error('Reverse geocode failed');
+      const json = await res.json();
+      if (json?.success && json.data) {
+        const resolved = json.data;
+        setMapPickPreview({
+          lat: resolved.lat,
+          lng: resolved.lng,
+          label: resolved.label,
+          secondaryLabel: resolved.secondaryLabel,
+          roadName: resolved.roadName,
+          isResolving: false,
+        });
+
+        const resolvedValue: LocationEndpointValue = {
+          text: resolved.label,
+          lat: resolved.lat,
+          lng: resolved.lng,
+          roadName: resolved.roadName,
+          source: 'MAP_PIN',
+        };
+        if (activeRole === 'origin') setOriginState(resolvedValue);
+        else setDestState(resolvedValue);
+      } else {
+        setMapPickPreview((prev) => (prev ? { ...prev, isResolving: false } : null));
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        setMapPickPreview((prev) =>
+          prev
+            ? {
+                ...prev,
+                secondaryLabel: `Coordinates ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`,
+                isResolving: false,
+              }
+            : null
+        );
+      }
+    }
+  };
+
+  const handleConfirmMapPick = (recalculateImmediately = true) => {
+    const confirmedRole = mapPickMode;
+    setMapPickMode(null);
+    setMapPickPreview(null);
+    setMapPickSnapshot(null);
+
+    if (recalculateImmediately && confirmedRole) {
+      validateAndSubmitRoutePlan();
+    }
+  };
+
+  const handleCancelMapPick = () => {
+    if (mapPickMode && mapPickSnapshot) {
+      if (mapPickMode === 'origin') setOriginState(mapPickSnapshot);
+      else setDestState(mapPickSnapshot);
+    }
+    if (reverseAbortRef.current) {
+      reverseAbortRef.current.abort();
+    }
+    setMapPickMode(null);
+    setMapPickPreview(null);
+    setMapPickSnapshot(null);
   };
 
   const routes = planMutation.data?.routes || [];
   const selectedRoute =
     routes.find((r: any) => r.id === selectedRouteId) || routes[0] || null;
+
+  const activeOriginCoords =
+    originState.lat != null && originState.lng != null
+      ? { lat: originState.lat, lng: originState.lng }
+      : planMutation.data?.originCoords || null;
+
+  const activeDestCoords =
+    destState.lat != null && destState.lng != null
+      ? { lat: destState.lat, lng: destState.lng }
+      : planMutation.data?.destCoords || null;
 
   return (
     <div className="space-y-5">
@@ -178,74 +579,110 @@ export function RoutePlannerPage() {
               Route Planner &amp; Incident Avoidance Engine
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Separates base road travel time from verified RoadAlert incident delays and flags confirmed road closures.
+              Choose corridor presets, type any place/road/coordinate, or pick Origin &amp; Destination directly on the map.
             </p>
           </div>
           <DemoDataBadge />
         </div>
 
-        <form onSubmit={handlePlanSubmit} className="grid sm:grid-cols-12 gap-3 items-end">
-          <div className="sm:col-span-4">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Origin Location
-            </label>
-            <select
-              value={origin}
-              onChange={(e) => setOrigin(e.target.value)}
-              className="enterprise-select w-full py-2"
-            >
-              {REGIONAL_DESTINATIONS.map((d) => (
-                <option key={d.name} value={d.name}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="sm:col-span-4">
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
-              Destination Location
-            </label>
-            <select
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              className="enterprise-select w-full py-2"
-            >
-              {REGIONAL_DESTINATIONS.map((d) => (
-                <option key={d.name} value={d.name}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="sm:col-span-2 flex items-center gap-2 pb-2">
-            <input
-              id="avoidZones"
-              type="checkbox"
-              checked={avoidIncidentZones}
-              onChange={(e) => setAvoidIncidentZones(e.target.checked)}
-              className="w-4 h-4 rounded accent-blue-600"
+        <form onSubmit={handlePlanSubmit} className="grid lg:grid-cols-12 gap-3 items-start">
+          {/* Origin Input (Dropdown + Manual Autocomplete + Pick on Map) */}
+          <div className="lg:col-span-4">
+            <RouteLocationInput
+              role="origin"
+              label="Origin Location"
+              markerBadge="A"
+              value={originState}
+              onChange={setOriginState}
+              isPickingOnMap={mapPickMode === 'origin'}
+              onTogglePickOnMap={() => handleTogglePickOnMap('origin')}
+              error={originError}
+              onClearError={() => setOriginError(null)}
             />
-            <label htmlFor="avoidZones" className="text-xs font-medium text-slate-700">
-              Avoid Incident Zones
-            </label>
           </div>
 
-          <div className="sm:col-span-2">
+          {/* Swap Origin <-> Destination Button */}
+          <div className="lg:col-span-1 flex items-center justify-center lg:pt-7">
+            <button
+              type="button"
+              onClick={handleSwapEndpoints}
+              title="Swap Origin and Destination"
+              aria-label="Swap Origin and Destination"
+              data-testid="swap-locations-btn"
+              className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold transition-all active:scale-95"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5 text-blue-600" />
+              <span className="lg:hidden">Swap Origin &amp; Destination</span>
+            </button>
+          </div>
+
+          {/* Destination Input (Dropdown + Manual Autocomplete + Pick on Map) */}
+          <div className="lg:col-span-4">
+            <RouteLocationInput
+              role="destination"
+              label="Destination Location"
+              markerBadge="B"
+              value={destState}
+              onChange={setDestState}
+              isPickingOnMap={mapPickMode === 'destination'}
+              onTogglePickOnMap={() => handleTogglePickOnMap('destination')}
+              error={destError}
+              onClearError={() => setDestError(null)}
+            />
+          </div>
+
+          {/* Avoid Incident Zones + Calculate Action */}
+          <div className="lg:col-span-3 flex flex-col justify-between gap-2.5 lg:pt-6">
+            <label
+              htmlFor="avoidZones"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer select-none"
+            >
+              <input
+                id="avoidZones"
+                type="checkbox"
+                checked={avoidIncidentZones}
+                onChange={(e) => setAvoidIncidentZones(e.target.checked)}
+                className="w-4 h-4 rounded accent-blue-600"
+              />
+              <span className="text-xs font-medium text-slate-700">
+                Avoid Verified Incident Zones
+              </span>
+            </label>
+
             <button
               type="submit"
               disabled={planMutation.isPending}
-              className="btn-primary w-full py-2"
+              data-testid="calculate-routes-btn"
+              className="btn-primary w-full py-2 flex items-center justify-center gap-1.5"
             >
-              {planMutation.isPending ? 'Calculating...' : 'Calculate Routes'}
+              {planMutation.isPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Calculating...</span>
+                </>
+              ) : (
+                <>
+                  <Navigation className="w-3.5 h-3.5" />
+                  <span>Calculate Routes</span>
+                </>
+              )}
             </button>
           </div>
         </form>
 
         {planMutation.data?.disclaimer && (
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
-            <strong>Routing Transparency Note:</strong> {planMutation.data.disclaimer}
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <strong>Routing Transparency Note:</strong> {planMutation.data.disclaimer}
+            </div>
+            {planMutation.data?.originLocation && planMutation.data?.destinationLocation && (
+              <span className="text-[10px] font-mono text-slate-500">
+                A ({planMutation.data.originLocation.lat.toFixed(4)},{' '}
+                {planMutation.data.originLocation.lng.toFixed(4)}) → B (
+                {planMutation.data.destinationLocation.lat.toFixed(4)},{' '}
+                {planMutation.data.destinationLocation.lng.toFixed(4)})
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -362,13 +799,89 @@ export function RoutePlannerPage() {
           })}
         </div>
 
-        {/* Route Map Display */}
-        <div className="lg:col-span-7 enterprise-card overflow-hidden min-h-[520px] map-tiles-light">
-          <MapContainer center={[13.06, 74.81]} zoom={10} className="w-full h-[560px] z-0">
+        {/* Route Map Display with Direct Map Selection Banner */}
+        <div
+          className={`lg:col-span-7 enterprise-card overflow-hidden min-h-[520px] map-tiles-light relative ${
+            mapPickMode ? 'ring-2 ring-blue-600 border-blue-600 cursor-crosshair' : ''
+          }`}
+        >
+          {/* Active "Pick on Map" Mode Banner */}
+          {mapPickMode && (
+            <div
+              data-testid="map-pick-banner"
+              className="route-map-pick-banner absolute top-3 left-14 right-3 z-[500] bg-slate-900/95 text-white px-3.5 py-2.5 rounded-xl shadow-lg border border-slate-700 flex flex-wrap items-center justify-between gap-2"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span
+                  className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold shrink-0 ${
+                    mapPickMode === 'origin' ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'
+                  }`}
+                >
+                  {mapPickMode === 'origin' ? 'A' : 'B'}
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold flex items-center gap-1.5">
+                    <Crosshair className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                    <span>
+                      Picking {mapPickMode === 'origin' ? 'Origin (A)' : 'Destination (B)'} on Map
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 truncate">
+                    {mapPickPreview
+                      ? `${mapPickPreview.label} (${mapPickPreview.lat.toFixed(4)}, ${mapPickPreview.lng.toFixed(4)})`
+                      : 'Click any road or junction on the map to place your pin.'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {mapPickPreview && (
+                  <button
+                    type="button"
+                    data-testid="confirm-map-pick-btn"
+                    onClick={() => handleConfirmMapPick(true)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Confirm &amp; Route</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  data-testid="cancel-map-pick-btn"
+                  onClick={handleCancelMapPick}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-600 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Cancel</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <MapContainer
+            center={[13.06, 74.81]}
+            zoom={10}
+            className={`w-full h-[560px] z-0 ${mapPickMode ? 'cursor-crosshair' : ''}`}
+          >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
+
+            <RouteMapPickListener
+              activeMode={mapPickMode}
+              onPickCoordinate={handleMapClickCoordinate}
+            />
+
+            <RouteMapBoundsController
+              planId={planMutation.data?.id}
+              originCoords={activeOriginCoords}
+              destCoords={activeDestCoords}
+              selectedGeometry={selectedRoute?.geometry}
+              prefersReducedMotion={prefersReducedMotion}
+            />
+
             {routes.map((route: any) => {
               const isSelected = selectedRoute?.id === route.id;
               const strokeColor = route.hasRoadClosureWarning
@@ -385,6 +898,7 @@ export function RoutePlannerPage() {
                   strokeColor={strokeColor}
                   prefersReducedMotion={prefersReducedMotion}
                   onSelect={() => {
+                    if (mapPickMode) return;
                     if (selectedRouteId !== route.id) {
                       setRoutePinsReady(prefersReducedMotion);
                       setSelectedRouteId(route.id);
@@ -395,6 +909,51 @@ export function RoutePlannerPage() {
               );
             })}
 
+            {/* Origin Marker (A) */}
+            {activeOriginCoords &&
+              Number.isFinite(activeOriginCoords.lat) &&
+              Number.isFinite(activeOriginCoords.lng) && (
+                <CircleMarker
+                  center={[activeOriginCoords.lat, activeOriginCoords.lng]}
+                  radius={9}
+                  pathOptions={{
+                    color: '#ffffff',
+                    fillColor: '#2563eb',
+                    fillOpacity: 1,
+                    weight: 3,
+                  }}
+                >
+                  <LeafletTooltip direction="top" offset={[0, -8]} opacity={0.96}>
+                    <div className="text-[11px] font-sans">
+                      <strong>Origin (A):</strong> {originState.text}
+                    </div>
+                  </LeafletTooltip>
+                </CircleMarker>
+              )}
+
+            {/* Destination Marker (B) */}
+            {activeDestCoords &&
+              Number.isFinite(activeDestCoords.lat) &&
+              Number.isFinite(activeDestCoords.lng) && (
+                <CircleMarker
+                  center={[activeDestCoords.lat, activeDestCoords.lng]}
+                  radius={9}
+                  pathOptions={{
+                    color: '#ffffff',
+                    fillColor: '#059669',
+                    fillOpacity: 1,
+                    weight: 3,
+                  }}
+                >
+                  <LeafletTooltip direction="top" offset={[0, -8]} opacity={0.96}>
+                    <div className="text-[11px] font-sans">
+                      <strong>Destination (B):</strong> {destState.text}
+                    </div>
+                  </LeafletTooltip>
+                </CircleMarker>
+              )}
+
+            {/* Intersecting Incident Markers Along Selected Route */}
             {routePinsReady &&
               selectedRoute?.affectingIncidents?.map(
                 (inc: any) =>

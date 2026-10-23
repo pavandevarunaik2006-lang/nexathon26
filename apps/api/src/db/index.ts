@@ -36,8 +36,28 @@ class DatabaseManager {
         process.env.PGLITE_DATA_DIR || './data/pglite'
       );
       fs.mkdirSync(path.dirname(dataDir), { recursive: true });
-      this.pglite = new PGlite(dataDir);
-      await this.pglite.waitReady;
+      this.cleanupStaleLocks(dataDir);
+      try {
+        this.pglite = new PGlite(dataDir);
+        await this.pglite.waitReady;
+      } catch (err) {
+        console.warn(
+          '[RoadAlert DB] Recovering local PGlite storage after abrupt restart...',
+          err instanceof Error ? err.message : err
+        );
+        try {
+          fs.rmSync(dataDir, { recursive: true, force: true });
+          fs.mkdirSync(path.dirname(dataDir), { recursive: true });
+          this.pglite = new PGlite(dataDir);
+          await this.pglite.waitReady;
+        } catch {
+          console.warn(
+            '[RoadAlert DB] Falling back to in-memory PGlite instance due to filesystem lock.'
+          );
+          this.pglite = new PGlite();
+          await this.pglite.waitReady;
+        }
+      }
     }
 
     this.initialized = true;
@@ -86,6 +106,42 @@ class DatabaseManager {
     if (this.pglite) {
       await this.pglite.exec(sql);
       return;
+    }
+  }
+
+  private cleanupStaleLocks(dataDir: string) {
+    if (!fs.existsSync(dataDir)) return;
+    const lockFiles = [
+      'postmaster.pid',
+      '.s.PGSQL.5432.lock',
+      '.s.PGSQL.5432.lock.in',
+      '.s.PGSQL.5432.lock.out',
+    ];
+    for (const file of lockFiles) {
+      const fullPath = path.join(dataDir, file);
+      if (fs.existsSync(fullPath)) {
+        try {
+          fs.unlinkSync(fullPath);
+        } catch {
+          // Ignore if locked
+        }
+      }
+    }
+  }
+
+  public async close(): Promise<void> {
+    try {
+      if (this.pglite) {
+        await this.pglite.close();
+        this.pglite = null;
+      }
+      if (this.pgPool) {
+        await this.pgPool.end();
+        this.pgPool = null;
+      }
+      this.initialized = false;
+    } catch {
+      // Ignore close errors during shutdown
     }
   }
 

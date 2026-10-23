@@ -15,21 +15,49 @@ Unlike ordinary navigation apps that display an unexplained red line, RoadAlert 
 ```
 Nexathon26/
 ├── apps/
-│   ├── api/                  # Node.js + Express + TypeScript REST API (/api/v1) + OpenAPI/Swagger
+│   ├── api/                        # Node.js + Express + TypeScript REST API (/api/v1) + OpenAPI/Swagger
 │   │   ├── src/
-│   │   │   ├── db/           # Dual-mode PostgreSQL manager (pg.Pool TCP + embedded PGlite Postgres)
-│   │   │   ├── middleware/   # JWT auth, RBAC role guards, Zod & Multer centralized error handling
-│   │   │   ├── routes/       # Auth, Incidents, Map/Routes, Journeys/Consents, Employer, Authority, Admin
-│   │   │   └── services/     # Explainable Verification Engine, OSRM/Corridor Routing Adapter, AI Assist
-│   │   └── tests/            # Vitest + Supertest automated test suite (15 acceptance & security tests)
-│   └── web/                  # React 18 + Vite + TypeScript + Tailwind CSS + React Leaflet + Recharts
+│   │   │   ├── config/             # Zod-validated environment configuration (env.ts)
+│   │   │   ├── controllers/        # HTTP request & response handlers (auth, incidents, authority)
+│   │   │   ├── db/                 # Dual-mode PostgreSQL manager (pg.Pool + PGlite), migrations & seed
+│   │   │   ├── integrations/       # External API clients (OSRM routing client with timeout fallback)
+│   │   │   ├── middleware/         # JWT auth, RBAC role guards, centralized Zod/Multer error handler
+│   │   │   ├── repositories/       # Data access layer (users, incidents, organizations, audit logs)
+│   │   │   ├── routes/             # Express route definitions mounted under /api/v1
+│   │   │   ├── services/           # Domain logic (verificationEngine, routingService, incidentService, etc.)
+│   │   │   ├── types/              # Backend domain & Express request types
+│   │   │   ├── validators/         # Request validation schemas re-exported from @roadalert/shared
+│   │   │   ├── app.ts              # Express app factory
+│   │   │   └── server.ts           # HTTP server entry point
+│   │   └── tests/                  # Vitest + Supertest automated test suite (15 acceptance & security tests)
+│   └── web/                        # React 18 + Vite + TypeScript + Tailwind CSS + React Leaflet + Recharts
+│       └── src/
+│           ├── app/                # Application entry, routing (routes.tsx), and providers (providers.tsx)
+│           ├── components/
+│           │   ├── shared/         # Shared domain components (CorridorIntelligenceMap, IncidentInvestigationPanel)
+│           │   └── ui/             # Reusable UI & motion primitives (Badges, MotionPrimitives)
+│           ├── config/             # Frontend corridor & API configuration
+│           ├── context/            # Auth & Toast context providers
+│           ├── features/           # Feature modules (incidents, map, routes, verification, commute, alerts, analytics, auth, admin)
+│           ├── hooks/              # Reusable React hooks (useAuth, useToast)
+│           ├── layouts/            # Enterprise application shell & navigation (AppShell)
+│           ├── lib/                # Typed API client & formatting utilities
+│           ├── pages/              # Feature route views
+│           ├── styles/             # Global Tailwind styles, map keyframes & design tokens
+│           └── types/              # Frontend TypeScript interfaces
 ├── packages/
-│   └── shared/               # Shared Zod validation schemas, confidence interfaces, regional landmarks
+│   └── shared/                     # Shared TypeScript package (@roadalert/shared)
+│       └── src/
+│           ├── constants/          # Roles, categories, severities, statuses, verification levels, landmarks
+│           ├── types/              # Shared domain interfaces (ConfidenceScoreBreakdown, RoutePlanOption)
+│           ├── validators/         # Shared Zod schemas for API & frontend validation
+│           └── index.ts            # Package barrel export
 ├── prisma/
-│   ├── schema.prisma         # Normalized relational PostgreSQL schema
-│   └── migrations/001_init/  # Version-controlled SQL migration
-├── docker-compose.yml        # PostgreSQL 16 + PostGIS container configuration
-└── .env.example              # Complete environment variable reference
+│   ├── schema.prisma               # Normalized relational PostgreSQL schema
+│   └── migrations/001_init/        # Version-controlled SQL migration
+├── docker-compose.yml              # PostgreSQL 16 + PostGIS container configuration
+├── .gitignore                      # Excludes node_modules, dist, .env, local pglite data, and uploads
+└── .env.example                    # Complete environment variable reference
 ```
 
 ### Key Differentiators Implemented

@@ -1,38 +1,14 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { z } from 'zod';
 import { db } from '../db/index.js';
 import { authenticate, requireRoles } from '../middleware/auth.js';
 import { ApiError } from '../middleware/errorHandler.js';
+import { getAuthorizedOrgIds } from '../repositories/organizationRepository.js';
+import { UpdatePolicySchema } from '../validators/index.js';
 
 export const employerRouter = Router();
 
 employerRouter.use(authenticate, requireRoles('EMPLOYER', 'ADMIN'));
-
-async function getAuthorizedOrgIds(userId: string, role: string, requestedOrgId?: string): Promise<string[]> {
-  if (role === 'ADMIN') {
-    if (requestedOrgId) return [requestedOrgId];
-    const allOrgs = await db.query<{ id: string }>(`SELECT id FROM organizations`);
-    return allOrgs.rows.map((o) => o.id);
-  }
-
-  const memRes = await db.query<{ organization_id: string }>(
-    `SELECT organization_id FROM organization_memberships
-     WHERE user_id = $1 AND status = 'ACTIVE'`,
-    [userId]
-  );
-  const authorizedIds = memRes.rows.map((m) => m.organization_id);
-
-  if (requestedOrgId && !authorizedIds.includes(requestedOrgId)) {
-    throw new ApiError(
-      403,
-      'ORGANIZATION_ISOLATION_VIOLATION',
-      'Employer is not authorized to access records belonging to another organization'
-    );
-  }
-
-  return authorizedIds;
-}
 
 // GET /api/v1/employer/dashboard
 employerRouter.get('/dashboard', async (req, res, next) => {
@@ -302,13 +278,7 @@ employerRouter.get('/policies', async (req, res, next) => {
 employerRouter.patch('/policies/:id', async (req, res, next) => {
   try {
     const policyId = req.params.id;
-    const PolicyUpdateSchema = z.object({
-      trackingMode: z.enum(['SESSION_ONLY_EXPLICIT', 'CORRIDOR_CHECKPOINT_ONLY']).optional(),
-      retentionDays: z.number().min(1).max(365).optional(),
-      requireConsent: z.boolean().optional(),
-      allowPreciseCoordinate: z.boolean().optional(),
-    });
-    const parsed = PolicyUpdateSchema.parse(req.body);
+    const parsed = UpdatePolicySchema.parse(req.body);
 
     const existing = await db.query<any>(
       `SELECT * FROM organization_tracking_policies WHERE id = $1`,

@@ -1,4 +1,5 @@
 import { haversineDistanceKm } from './verificationEngine.js';
+import { fetchOsrmPrimaryRoute } from '../integrations/osrmClient.js';
 
 export interface RoutePoint {
   lat: number;
@@ -29,17 +30,37 @@ export interface PlannedRouteOption {
     estimatedDelayMinutes: number;
     distanceFromRouteKm: number;
     roadName: string;
+    latitude: number;
+    longitude: number;
   }[];
 }
 
 /**
- * Compute minimum distance from an incident point to a polyline of [lat, lng] coordinates
+ * Compute minimum distance from an incident point [lat, lng] to a polyline of [lat, lng] coordinates,
+ * checking both vertices and segment projections.
  */
 function minDistanceToPolylineKm(lat: number, lng: number, polyline: [number, number][]): number {
+  if (!polyline || polyline.length === 0) return Infinity;
   let minKm = Infinity;
-  for (const [pLat, pLng] of polyline) {
-    const d = haversineDistanceKm(lat, lng, pLat, pLng);
-    if (d < minKm) minKm = d;
+
+  for (let i = 0; i < polyline.length; i++) {
+    const [pLat, pLng] = polyline[i];
+    const vertexDist = haversineDistanceKm(lat, lng, pLat, pLng);
+    if (vertexDist < minKm) minKm = vertexDist;
+
+    if (i < polyline.length - 1) {
+      const [nLat, nLng] = polyline[i + 1];
+      const dLat = nLat - pLat;
+      const dLng = nLng - pLng;
+      const lenSq = dLat * dLat + dLng * dLng;
+      if (lenSq > 1e-10) {
+        const t = Math.max(0, Math.min(1, ((lat - pLat) * dLat + (lng - pLng) * dLng) / lenSq));
+        const projLat = pLat + t * dLat;
+        const projLng = pLng + t * dLng;
+        const segDist = haversineDistanceKm(lat, lng, projLat, projLng);
+        if (segDist < minKm) minKm = segDist;
+      }
+    }
   }
   return minKm;
 }
@@ -71,7 +92,10 @@ export async function calculateRoutesWithIncidents(
 ): Promise<{
   origin: string;
   destination: string;
+  originCoords: RoutePoint;
+  destCoords: RoutePoint;
   avoidIncidentZones: boolean;
+  allRoutesClosedWarning: boolean;
   disclaimer: string;
   routes: PlannedRouteOption[];
 }> {
@@ -80,28 +104,13 @@ export async function calculateRoutesWithIncidents(
   let primaryBaseMin = 0;
   let providerSource: 'OSRM_LIVE' | 'REGIONAL_CORRIDOR_FALLBACK' = 'REGIONAL_CORRIDOR_FALLBACK';
 
-  // Attempt live OSRM query with 2.5s timeout
-  if (process.env.NODE_ENV !== 'test') {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 2500);
-      const osrmBase = process.env.OSRM_BASE_URL || 'https://router.project-osrm.org';
-      const url = `${osrmBase}/route/v1/driving/${originCoords.lng},${originCoords.lat};${destCoords.lng},${destCoords.lat}?overview=full&geometries=geojson&alternatives=true`;
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (res.ok) {
-        const data: any = await res.json();
-        if (data?.routes?.length > 0) {
-          const r0 = data.routes[0];
-          primaryGeometry = r0.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
-          primaryDistKm = Math.round((r0.distance / 1000) * 10) / 10;
-          primaryBaseMin = Math.max(8, Math.round(r0.duration / 60));
-          providerSource = 'OSRM_LIVE';
-        }
-      }
-    } catch {
-      // Fallback cleanly to deterministic coastal Karnataka corridor geometry
-    }
+  // Attempt live OSRM query with 2.5s timeout via integration client
+  const osrmResult = await fetchOsrmPrimaryRoute(originCoords, destCoords);
+  if (osrmResult && osrmResult.geometry.length >= 2) {
+    primaryGeometry = osrmResult.geometry;
+    primaryDistKm = osrmResult.distanceKm;
+    primaryBaseMin = osrmResult.baseDurationMin;
+    providerSource = 'OSRM_LIVE';
   }
 
   const directDist = haversineDistanceKm(
@@ -115,8 +124,8 @@ export async function calculateRoutesWithIncidents(
   if (!primaryGeometry) {
     // Check if this is along the Mangaluru -> Udupi coastal axis
     const isNorthSouthCoastal =
-      Math.abs(originCoords.lng - 74.82) < 0.2 && Math.abs(destCoords.lng - 74.76) < 0.2;
-    if (isNorthSouthCoastal && Math.abs(destCoords.lat - originCoords.lat) > 0.15) {
+      Math.abs(originCoords.lng - 74.82) < 0.22 && Math.abs(destCoords.lng - 74.76) < 0.22;
+    if (isNorthSouthCoastal && Math.abs(destCoords.lat - originCoords.lat) > 0.12) {
       const goingNorth = destCoords.lat > originCoords.lat;
       const coastalWaypoints: [number, number][] = [
         [12.8669, 74.8692], // Pumpwell
@@ -131,8 +140,8 @@ export async function calculateRoutesWithIncidents(
         [13.3409, 74.7351], // Udupi
       ];
       const filtered = coastalWaypoints.filter((wp) => {
-        const minLat = Math.min(originCoords.lat, destCoords.lat) - 0.02;
-        const maxLat = Math.max(originCoords.lat, destCoords.lat) + 0.02;
+        const minLat = Math.min(originCoords.lat, destCoords.lat) - 0.015;
+        const maxLat = Math.max(originCoords.lat, destCoords.lat) + 0.015;
         return wp[0] >= minLat && wp[0] <= maxLat;
       });
       const ordered = goingNorth ? filtered : [...filtered].reverse();
@@ -150,17 +159,21 @@ export async function calculateRoutesWithIncidents(
         [destCoords.lat, destCoords.lng],
       ]);
     }
-    primaryDistKm = Math.max(3.5, Math.round(directDist * 1.24 * 10) / 10);
-    primaryBaseMin = Math.max(8, Math.round((primaryDistKm / 46) * 60));
+    primaryDistKm = Math.max(1.2, Math.round(directDist * 1.24 * 10) / 10);
+    primaryBaseMin = Math.max(4, Math.round((primaryDistKm / 44) * 60));
   }
+
+  // Scale lateral bypass shift proportional to trip distance so short urban trips have realistic bypasses
+  const lateralShift1 = Math.min(0.068, Math.max(0.012, directDist * 0.0014));
+  const lateralShift2 = Math.min(0.028, Math.max(0.006, directDist * 0.00065));
 
   // Build Option 2: Inland / State Highway Alternative (via Bajpe / Moodbidri / Karkala / Padubidri SH-1 or Airport Rd bypass)
   const midLat = (originCoords.lat + destCoords.lat) / 2;
-  const midLng = (originCoords.lng + destCoords.lng) / 2 + 0.068; // Shift ~7.5km east inland
+  const midLng = (originCoords.lng + destCoords.lng) / 2 + lateralShift1;
   const q1Lat = originCoords.lat * 0.7 + destCoords.lat * 0.3;
-  const q1Lng = originCoords.lng * 0.7 + destCoords.lng * 0.3 + 0.052;
+  const q1Lng = originCoords.lng * 0.7 + destCoords.lng * 0.3 + lateralShift1 * 0.76;
   const q3Lat = originCoords.lat * 0.3 + destCoords.lat * 0.7;
-  const q3Lng = originCoords.lng * 0.3 + destCoords.lng * 0.7 + 0.052;
+  const q3Lng = originCoords.lng * 0.3 + destCoords.lng * 0.7 + lateralShift1 * 0.76;
 
   const altGeometry1 = interpolatePolyline([
     [originCoords.lat, originCoords.lng],
@@ -169,14 +182,14 @@ export async function calculateRoutesWithIncidents(
     [q3Lat, q3Lng],
     [destCoords.lat, destCoords.lng],
   ]);
-  const altDistKm1 = Math.round(primaryDistKm * 1.18 * 10) / 10;
-  const altBaseMin1 = Math.round(primaryBaseMin * 1.2);
+  const altDistKm1 = Math.max(1.5, Math.round(primaryDistKm * 1.18 * 10) / 10);
+  const altBaseMin1 = Math.max(5, Math.round(primaryBaseMin * 1.2));
 
   // Build Option 3: Coastal Service / Express Connector Alternative
   const w1Lat = originCoords.lat * 0.65 + destCoords.lat * 0.35;
-  const w1Lng = originCoords.lng * 0.65 + destCoords.lng * 0.35 + 0.025;
+  const w1Lng = originCoords.lng * 0.65 + destCoords.lng * 0.35 + lateralShift2 * 0.9;
   const w2Lat = originCoords.lat * 0.35 + destCoords.lat * 0.65;
-  const w2Lng = originCoords.lng * 0.35 + destCoords.lng * 0.65 + 0.028;
+  const w2Lng = originCoords.lng * 0.35 + destCoords.lng * 0.65 + lateralShift2;
 
   const altGeometry2 = interpolatePolyline([
     [originCoords.lat, originCoords.lng],
@@ -184,14 +197,14 @@ export async function calculateRoutesWithIncidents(
     [w2Lat, w2Lng],
     [destCoords.lat, destCoords.lng],
   ]);
-  const altDistKm2 = Math.round(primaryDistKm * 1.09 * 10) / 10;
-  const altBaseMin2 = Math.round(primaryBaseMin * 1.11);
+  const altDistKm2 = Math.max(1.4, Math.round(primaryDistKm * 1.09 * 10) / 10);
+  const altBaseMin2 = Math.max(5, Math.round(primaryBaseMin * 1.11));
 
   const rawCandidates = [
     {
       id: 'route-nh66-primary',
       name: 'NH-66 Primary Coastal Highway',
-      corridorDescription: `${originName} → Pumpwell / Surathkal / Mulki → ${destName} (Direct NH-66 Corridor)`,
+      corridorDescription: `${originName} → Primary Highway Corridor → ${destName}`,
       distanceKm: primaryDistKm,
       baseDurationMin: primaryBaseMin,
       geometry: primaryGeometry,
@@ -225,11 +238,11 @@ export async function calculateRoutesWithIncidents(
 
     for (const inc of activeIncidents) {
       if (inc.status === 'RESOLVED' || inc.status === 'REJECTED') continue;
-      const distKm = minDistanceToPolylineKm(
-        Number(inc.latitude),
-        Number(inc.longitude),
-        cand.geometry
-      );
+      const incLat = Number(inc.latitude);
+      const incLng = Number(inc.longitude);
+      if (!Number.isFinite(incLat) || !Number.isFinite(incLng)) continue;
+
+      const distKm = minDistanceToPolylineKm(incLat, incLng, cand.geometry);
       // Consider an incident intersecting/affecting the route if within 1.8 km
       if (distKm <= 1.8) {
         const isClosed =
@@ -262,6 +275,8 @@ export async function calculateRoutesWithIncidents(
           estimatedDelayMinutes: Number(inc.estimated_delay_minutes || 15),
           distanceFromRouteKm: Math.round(distKm * 100) / 100,
           roadName: inc.road_name,
+          latitude: incLat,
+          longitude: incLng,
         });
       }
     }
@@ -296,13 +311,15 @@ export async function calculateRoutesWithIncidents(
   });
 
   const bestId = sorted[0].id;
+  const allRoutesClosedWarning = evaluatedRoutes.every((r) => r.hasRoadClosureWarning);
 
   const finalRoutes = evaluatedRoutes.map((r) => {
     const isBest = r.id === bestId;
     let reason = '';
     if (r.hasRoadClosureWarning) {
-      reason =
-        'WARNING: Potentially affected by a credible or authority-confirmed road closure. Do not traverse closed segments.';
+      reason = allRoutesClosedWarning
+        ? 'CRITICAL WARNING: All evaluated corridors intersect an active road closure. Defer non-essential travel or follow local authority diversions.'
+        : 'WARNING: Potentially affected by a credible or authority-confirmed road closure. Do not traverse closed segments.';
     } else if (isBest) {
       if (r.affectingIncidents.length === 0) {
         reason = `Recommended: Zero active incidents intersecting corridor (Avoidance Score ${r.avoidanceScore}/100) with reliable travel time (${r.totalEstimatedMin} min).`;
@@ -325,7 +342,10 @@ export async function calculateRoutesWithIncidents(
   return {
     origin: originName,
     destination: destName,
+    originCoords,
+    destCoords,
     avoidIncidentZones,
+    allRoutesClosedWarning,
     disclaimer:
       'Base travel times reflect standard road geometry (OSRM/Corridor model). Incident delay estimates are calculated separately from verified RoadAlert incident reports and confidence scores.',
     routes: finalRoutes,

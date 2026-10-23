@@ -340,4 +340,188 @@ describe('RoadAlert API — Acceptance Criteria & Security Suite (15 Criteria)',
     expect(badFileRes.status).toBe(400);
     expect(badFileRes.body.error.code).toBe('INVALID_FILE_TYPE');
   });
+
+  it('16. Provides location autocomplete suggestions for presets, landmarks, roads, and coordinate strings', async () => {
+    // Empty query returns preset corridor locations
+    const presetRes = await request(app).get('/api/v1/locations/search?q=');
+    expect(presetRes.status).toBe(200);
+    expect(presetRes.body.data.suggestions.length).toBeGreaterThanOrEqual(5);
+    expect(presetRes.body.data.suggestions[0].source).toBe('PRESET');
+
+    // Landmark query ("Jyothi Circle")
+    const landmarkRes = await request(app).get(
+      '/api/v1/locations/search?q=' + encodeURIComponent('Jyothi Circle')
+    );
+    expect(landmarkRes.status).toBe(200);
+    expect(landmarkRes.body.data.suggestions.length).toBeGreaterThanOrEqual(1);
+    expect(landmarkRes.body.data.suggestions[0].label).toContain('Jyothi Circle');
+    expect(landmarkRes.body.data.suggestions[0].lat).toBeCloseTo(12.8732, 3);
+
+    // Coordinate string query ("13.0108, 74.7943")
+    const coordRes = await request(app).get(
+      '/api/v1/locations/search?q=' + encodeURIComponent('13.0108, 74.7943')
+    );
+    expect(coordRes.status).toBe(200);
+    expect(coordRes.body.data.suggestions[0].source).toBe('COORDINATE');
+    expect(coordRes.body.data.suggestions[0].lat).toBeCloseTo(13.0108, 3);
+  });
+
+  it('17. Reverse geocodes map-selected coordinates cleanly with exact, nearby, and coordinate fallback labels', async () => {
+    // Near Pumpwell Circle
+    const exactRes = await request(app).get('/api/v1/locations/reverse?lat=12.8670&lng=74.8691');
+    expect(exactRes.status).toBe(200);
+    expect(exactRes.body.data.label).toContain('Pumpwell');
+    expect(exactRes.body.data.source).toBe('GAZETTEER_EXACT');
+
+    // Nearby corridor point (~1.5km from Surathkal)
+    const nearbyRes = await request(app).get('/api/v1/locations/reverse?lat=13.0210&lng=74.7960');
+    expect(nearbyRes.status).toBe(200);
+    expect(nearbyRes.body.data.label).toContain('Near');
+    expect(nearbyRes.body.data.lat).toBeCloseTo(13.021, 3);
+
+    // Reject out-of-range coordinates
+    const invalidRes = await request(app).get('/api/v1/locations/reverse?lat=140.5&lng=74.8');
+    expect(invalidRes.status).toBe(400);
+    expect(invalidRes.body.error.code).toBe('INVALID_COORDINATES');
+  });
+
+  it('18. Plans routes for Dropdown Origin + Dropdown Destination and includes incident coordinates', async () => {
+    const planRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Pumpwell Circle, Mangaluru (NH-66)',
+      destination: 'Udupi Karavali Bypass (NH-66)',
+      avoidIncidentZones: true,
+    });
+
+    expect(planRes.status).toBe(200);
+    expect(planRes.body.data.routes.length).toBe(3);
+    expect(planRes.body.data.originLocation.source).toBe('PRESET');
+    expect(planRes.body.data.destinationLocation.source).toBe('PRESET');
+
+    // Verify affectingIncidents include numeric latitude and longitude for map pin rendering
+    const primaryRoute = planRes.body.data.routes.find(
+      (r: any) => r.id === 'route-nh66-primary'
+    );
+    expect(primaryRoute).toBeDefined();
+    expect(primaryRoute.affectingIncidents.length).toBeGreaterThanOrEqual(1);
+    for (const inc of primaryRoute.affectingIncidents) {
+      expect(typeof inc.latitude).toBe('number');
+      expect(typeof inc.longitude).toBe('number');
+      expect(Number.isFinite(inc.latitude)).toBe(true);
+      expect(Number.isFinite(inc.longitude)).toBe(true);
+    }
+  });
+
+  it('19. Plans routes combining Dropdown + Manual Entry and Manual Entry + Dropdown', async () => {
+    // Dropdown Origin + Manual Landmark Destination
+    const combo1 = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Pumpwell Circle, Mangaluru (NH-66)',
+      destination: 'Manipal Tiger Circle',
+      avoidIncidentZones: true,
+    });
+    expect(combo1.status).toBe(200);
+    expect(combo1.body.data.originLocation.lat).toBeCloseTo(12.8669, 3);
+    expect(combo1.body.data.destinationLocation.lat).toBeCloseTo(13.3525, 3);
+    expect(combo1.body.data.routes.length).toBe(3);
+
+    // Manual Landmark Origin + Dropdown Destination
+    const combo2 = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Jyothi Circle, Mangaluru',
+      destination: 'Surathkal NITK Corridor (NH-66)',
+      avoidIncidentZones: true,
+    });
+    expect(combo2.status).toBe(200);
+    expect(combo2.body.data.originLocation.lat).toBeCloseTo(12.8732, 3);
+    expect(combo2.body.data.destinationLocation.lat).toBeCloseTo(13.0108, 3);
+  });
+
+  it('20. Plans routes for Manual Origin + Manual Destination including raw coordinate strings', async () => {
+    const manualRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: '12.8878, 74.8419', // Bejai KSRTC coordinates typed manually
+      destination: 'Moodbidri Alvas Campus',
+      avoidIncidentZones: true,
+    });
+
+    expect(manualRes.status).toBe(200);
+    expect(manualRes.body.data.originLocation.source).toBe('COORDINATE');
+    expect(manualRes.body.data.originLocation.lat).toBeCloseTo(12.8878, 3);
+    expect(manualRes.body.data.destinationLocation.lat).toBeCloseTo(13.0692, 3);
+    expect(manualRes.body.data.routes.length).toBe(3);
+  });
+
+  it('21. Plans routes using Map-Selected Origin and Map-Selected Destination coordinates', async () => {
+    const mapPickRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Near Kottara Chowki Flyover (12.9085, 74.8380)',
+      originLat: 12.9085,
+      originLng: 74.838,
+      destination: 'Near Karkala Pulkeri Bypass (13.2150, 74.9960)',
+      destLat: 13.215,
+      destLng: 74.996,
+      avoidIncidentZones: true,
+    });
+
+    expect(mapPickRes.status).toBe(200);
+    expect(mapPickRes.body.data.originLocation.source).toBe('MAP_PIN');
+    expect(mapPickRes.body.data.destinationLocation.source).toBe('MAP_PIN');
+    expect(mapPickRes.body.data.originCoords.lat).toBeCloseTo(12.9085, 4);
+    expect(mapPickRes.body.data.destCoords.lat).toBeCloseTo(13.215, 4);
+    expect(mapPickRes.body.data.routes[0].geometry.length).toBeGreaterThan(2);
+  });
+
+  it('22. Supports swapping Origin and Destination endpoints cleanly', async () => {
+    const forwardRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'KPT Junction, Mangaluru (NH-66)',
+      destination: 'Padubidri Karkala Cross (NH-66 / SH-1)',
+      avoidIncidentZones: true,
+    });
+    expect(forwardRes.status).toBe(200);
+
+    const swappedRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Padubidri Karkala Cross (NH-66 / SH-1)',
+      destination: 'KPT Junction, Mangaluru (NH-66)',
+      avoidIncidentZones: true,
+    });
+    expect(swappedRes.status).toBe(200);
+    expect(swappedRes.body.data.originLocation.lat).toBeCloseTo(
+      forwardRes.body.data.destinationLocation.lat,
+      4
+    );
+    expect(swappedRes.body.data.destinationLocation.lat).toBeCloseTo(
+      forwardRes.body.data.originLocation.lat,
+      4
+    );
+  });
+
+  it('23. Rejects unrecognized, malformed, ambiguous, or identical route endpoints cleanly', async () => {
+    // Unrecognized location text
+    const unrecRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Atlantis Underwater Expressway XYZ999',
+      destination: 'Udupi Karavali Bypass (NH-66)',
+    });
+    expect(unrecRes.status).toBe(400);
+    expect(unrecRes.body.error.code).toBe('UNRECOGNIZED_LOCATION');
+
+    // Malformed / out-of-bounds coordinate string
+    const badCoordRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: '98.1234, 74.8500',
+      destination: 'Udupi Karavali Bypass (NH-66)',
+    });
+    expect(badCoordRes.status).toBe(400);
+    expect(badCoordRes.body.error.code).toBe('INVALID_COORDINATES');
+
+    // Ambiguous generic token query
+    const ambigRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Junction',
+      destination: 'Udupi Karavali Bypass (NH-66)',
+    });
+    expect(ambigRes.status).toBe(400);
+    expect(ambigRes.body.error.code).toBe('AMBIGUOUS_LOCATION');
+
+    // Identical origin and destination
+    const sameRes = await request(app).post('/api/v1/routes/plan').send({
+      origin: 'Pumpwell Circle, Mangaluru (NH-66)',
+      destination: 'Pumpwell Circle',
+    });
+    expect(sameRes.status).toBe(400);
+    expect(sameRes.body.error.code).toBe('SAME_ORIGIN_DESTINATION');
+  });
 });

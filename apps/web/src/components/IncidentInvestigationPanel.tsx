@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -29,6 +29,8 @@ import {
   AnimatedNumber,
   SkeletonBlock,
   panelFadeVariants,
+  SPRING_SNAPPY,
+  ENTERPRISE_EASE,
 } from './MotionPrimitives';
 
 export function IncidentInvestigationPanel({
@@ -42,6 +44,7 @@ export function IncidentInvestigationPanel({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const prefersReducedMotion = useReducedMotion();
+  const [activeTab, setActiveTab] = useState<'overview' | 'evidence' | 'nearby'>('overview');
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['incident-detail', incidentId],
@@ -182,97 +185,250 @@ export function IncidentInvestigationPanel({
             {incident.description}
           </p>
 
-          {/* Explainable Confidence Breakdown Visualization */}
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Verification Score
-              </span>
-              <span className="text-[11px] font-medium text-blue-700">
-                {VERIFICATION_LEVELS[incident.verificationLevel as keyof typeof VERIFICATION_LEVELS]}
-              </span>
-            </div>
-
-            <ConfidenceMeter
-              score={confidenceBreakdown.totalScore}
-              authorityConfirmed={confidenceBreakdown.authorityConfirmed}
-            />
-
-            {/* 5-Pillar Micro Bars */}
-            <div className="grid grid-cols-5 gap-1.5 pt-1 text-center">
-              {[
-                {
-                  label: 'Reports',
-                  pts: confidenceBreakdown.components.independentReports,
-                  max: 30,
-                },
-                {
-                  label: 'Proximity',
-                  pts: confidenceBreakdown.components.locationTimeProximity,
-                  max: 20,
-                },
-                {
-                  label: 'GPS Speed',
-                  pts: confidenceBreakdown.components.gpsCorroboration,
-                  max: 20,
-                },
-                {
-                  label: 'Media',
-                  pts: confidenceBreakdown.components.mediaEvidence,
-                  max: 15,
-                },
-                {
-                  label: 'Authority',
-                  pts: confidenceBreakdown.components.authorityConfirmation,
-                  max: 15,
-                },
-              ].map((p) => (
-                <div
-                  key={p.label}
-                  className="p-1.5 rounded-md bg-white border border-slate-200"
+          {/* Smooth Investigation Tab Bar */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+            {(
+              [
+                { id: 'overview', label: 'Verification' },
+                { id: 'evidence', label: `Evidence (${evidences?.length || 0})` },
+                { id: 'nearby', label: `Nearby (${nearbyIncidents?.length || 0})` },
+              ] as const
+            ).map((tab) => {
+              const isTabActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`relative flex-1 py-1 px-2 rounded-md text-[11px] font-semibold transition-colors ${
+                    isTabActive ? 'text-blue-600' : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <div className="text-[9px] font-medium text-slate-500 truncate">{p.label}</div>
-                  <div className="text-xs font-bold text-slate-900 tabular-nums mt-0.5">
-                    +<AnimatedNumber value={p.pts} />
-                    <span className="text-[9px] font-normal text-slate-400">/{p.max}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {confidenceBreakdown.explanation?.length > 0 && (
-              <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
-                {confidenceBreakdown.explanation[0]}
-              </p>
-            )}
+                  {isTabActive &&
+                    (prefersReducedMotion ? (
+                      <span className="absolute inset-0 bg-white rounded-md shadow-xs" />
+                    ) : (
+                      <motion.span
+                        layoutId="incident-investigation-tab-pill"
+                        transition={SPRING_SNAPPY}
+                        className="absolute inset-0 bg-white rounded-md shadow-xs"
+                      />
+                    ))}
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Attached Evidence & Photos Summary */}
-          {evidences?.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="font-semibold text-slate-700 flex items-center gap-1">
-                  <Camera className="w-3.5 h-3.5 text-emerald-600" /> Validated Evidence ({evidences.length})
-                </span>
-              </div>
-              <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
-                {evidences.slice(0, 3).map((ev: any) => (
-                  <div
-                    key={ev.id}
-                    className="px-2.5 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-[11px] flex items-center justify-between gap-2"
-                  >
-                    <span className="truncate text-slate-700">
-                      <strong className="text-slate-900">{ev.evidence_type}:</strong>{' '}
-                      {ev.metadata?.caption || ev.storage_key || 'Verified telemetry'}
+          <AnimatePresence mode="wait">
+            {activeTab === 'overview' && (
+              <motion.div
+                key="tab-overview"
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, y: -3 }}
+                transition={{ duration: 0.16, ease: ENTERPRISE_EASE }}
+                className="space-y-3"
+              >
+                {/* Explainable Confidence Breakdown Visualization */}
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Verification Score
                     </span>
-                    <span className="text-[10px] text-emerald-700 font-semibold shrink-0">
-                      {ev.validation_status}
+                    <span className="text-[11px] font-medium text-blue-700">
+                      {
+                        VERIFICATION_LEVELS[
+                          incident.verificationLevel as keyof typeof VERIFICATION_LEVELS
+                        ]
+                      }
                     </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+
+                  <ConfidenceMeter
+                    score={confidenceBreakdown.totalScore}
+                    authorityConfirmed={confidenceBreakdown.authorityConfirmed}
+                  />
+
+                  {/* 5-Pillar Micro Bars */}
+                  <div className="grid grid-cols-5 gap-1.5 pt-1 text-center">
+                    {[
+                      {
+                        label: 'Reports',
+                        pts: confidenceBreakdown.components.independentReports,
+                        max: 30,
+                      },
+                      {
+                        label: 'Proximity',
+                        pts: confidenceBreakdown.components.locationTimeProximity,
+                        max: 20,
+                      },
+                      {
+                        label: 'GPS Speed',
+                        pts: confidenceBreakdown.components.gpsCorroboration,
+                        max: 20,
+                      },
+                      {
+                        label: 'Media',
+                        pts: confidenceBreakdown.components.mediaEvidence,
+                        max: 15,
+                      },
+                      {
+                        label: 'Authority',
+                        pts: confidenceBreakdown.components.authorityConfirmation,
+                        max: 15,
+                      },
+                    ].map((p) => {
+                      const pct = Math.min(100, Math.round((p.pts / p.max) * 100));
+                      return (
+                        <div
+                          key={p.label}
+                          className="p-1.5 rounded-md bg-white border border-slate-200 space-y-1"
+                        >
+                          <div className="text-[9px] font-medium text-slate-500 truncate">
+                            {p.label}
+                          </div>
+                          <div className="text-xs font-bold text-slate-900 tabular-nums">
+                            +<AnimatedNumber value={p.pts} />
+                            <span className="text-[9px] font-normal text-slate-400">/{p.max}</span>
+                          </div>
+                          <div className="w-full h-1 rounded-full bg-slate-100 overflow-hidden">
+                            {prefersReducedMotion ? (
+                              <div
+                                className="h-full bg-blue-600 rounded-full"
+                                style={{ width: `${pct}%` }}
+                              />
+                            ) : (
+                              <motion.div
+                                className="h-full bg-blue-600 rounded-full"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${pct}%` }}
+                                transition={{ duration: 0.4, ease: ENTERPRISE_EASE }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {confidenceBreakdown.explanation?.length > 0 && (
+                    <p className="text-[11px] text-slate-600 leading-snug pt-0.5">
+                      {confidenceBreakdown.explanation[0]}
+                    </p>
+                  )}
+                </div>
+
+                {/* Attached Evidence & Photos Summary */}
+                {evidences?.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-semibold text-slate-700 flex items-center gap-1">
+                        <Camera className="w-3.5 h-3.5 text-emerald-600" /> Validated Evidence (
+                        {evidences.length})
+                      </span>
+                    </div>
+                    <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                      {evidences.slice(0, 3).map((ev: any) => (
+                        <div
+                          key={ev.id}
+                          className="px-2.5 py-1.5 rounded-md bg-slate-50 border border-slate-200 text-[11px] flex items-center justify-between gap-2"
+                        >
+                          <span className="truncate text-slate-700">
+                            <strong className="text-slate-900">{ev.evidence_type}:</strong>{' '}
+                            {ev.metadata?.caption || ev.storage_key || 'Verified telemetry'}
+                          </span>
+                          <span className="text-[10px] text-emerald-700 font-semibold shrink-0">
+                            {ev.validation_status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {activeTab === 'evidence' && (
+              <motion.div
+                key="tab-evidence"
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, y: -3 }}
+                transition={{ duration: 0.16, ease: ENTERPRISE_EASE }}
+                className="space-y-2"
+              >
+                {evidences?.length > 0 ? (
+                  evidences.map((ev: any) => (
+                    <div
+                      key={ev.id}
+                      className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
+                          {ev.evidence_type}
+                        </span>
+                        <span className="text-[10px] text-emerald-700 font-semibold">
+                          {ev.validation_status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-medium text-slate-800">
+                        {ev.metadata?.caption || ev.storage_key || 'Verified telemetry'}
+                      </p>
+                      <p className="text-[10px] text-slate-500">
+                        Submitted by {ev.submitter_name || 'Commuter'}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-center text-xs text-slate-500">
+                    No media or telemetry attachments recorded yet.
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {activeTab === 'nearby' && (
+              <motion.div
+                key="tab-nearby"
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={prefersReducedMotion ? undefined : { opacity: 0, y: -3 }}
+                transition={{ duration: 0.16, ease: ENTERPRISE_EASE }}
+                className="space-y-1.5"
+              >
+                {nearbyIncidents?.length > 0 ? (
+                  nearbyIncidents.map((nb: any) => (
+                    <button
+                      key={nb.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('overview');
+                        onSelectNearby?.(nb);
+                      }}
+                      className="w-full text-left p-2.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-xs flex items-center justify-between gap-2 transition-all active:scale-[0.99]"
+                    >
+                      <div className="min-w-0">
+                        <span className="truncate text-slate-900 font-semibold block">
+                          {nb.title}
+                        </span>
+                        <span className="text-[10px] text-slate-500 block truncate">
+                          {nb.road_name} • Confidence {nb.confidence_score}%
+                        </span>
+                      </div>
+                      <span className="text-blue-600 font-bold shrink-0 text-[11px]">
+                        {nb.distanceKm} km
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-center text-xs text-slate-500">
+                    No other active incidents within 8 km.
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Interactive Role-Aware Action Controls */}
           <div className="space-y-2 pt-2 border-t border-slate-200">
