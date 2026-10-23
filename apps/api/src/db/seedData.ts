@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import { db } from './index.js';
 import { recalculateIncidentConfidence } from '../services/verificationEngine.js';
+import { evaluateJourneyDelay } from '../services/delayVerificationService.js';
 
 export const DEMO_IDS = {
   users: {
@@ -37,6 +38,8 @@ export async function seedDatabase(options?: { force?: boolean }): Promise<void>
 
   // Clear existing data in reverse foreign-key order if force re-seeding
   await db.exec(`
+    DELETE FROM delay_verifications;
+    DELETE FROM organization_invitations;
     DELETE FROM problem_reports;
     DELETE FROM complaints;
     DELETE FROM audit_logs;
@@ -113,20 +116,26 @@ export async function seedDatabase(options?: { force?: boolean }): Promise<void>
 
   // 2. Seed Organizations & Memberships
   await db.query(
-    `INSERT INTO organizations (id, name, organization_type, status)
-     VALUES
-     ($1, 'Karavali Coastal Tech Park Pvt Ltd (Mangaluru)', 'IT_ENTERPRISE', 'ACTIVE'),
-     ($2, 'Udupi FinCorp Coastal Services', 'FINANCIAL_SERVICES', 'ACTIVE')`,
+    `INSERT INTO organizations (
+      id, name, organization_type, contact_email, contact_phone,
+      address, city, default_shift_start, default_shift_end, status
+    ) VALUES
+     ($1, 'Karavali Coastal Tech Park Pvt Ltd (Mangaluru)', 'IT_ENTERPRISE', 'ops@karavalitech.in', '+91 824 2490001', 'Kavoor NH-66 Corridor, Mangaluru, KA 575015', 'Mangaluru', '09:00', '18:00', 'ACTIVE'),
+     ($2, 'Udupi FinCorp Coastal Services', 'FINANCIAL_SERVICES', 'hr@udupifincorp.in', '+91 820 2520002', 'Karavali Bypass Road, Udupi, KA 576101', 'Udupi', '09:30', '18:30', 'ACTIVE')`,
     [DEMO_IDS.orgs.primary, DEMO_IDS.orgs.secondary]
   );
 
   await db.query(
-    `INSERT INTO organization_memberships (id, organization_id, user_id, membership_role, status)
-     VALUES
-     ('22222222-2222-4222-8222-222222222211', $1, $3, 'EMPLOYER_ADMIN', 'ACTIVE'),
-     ('22222222-2222-4222-8222-222222222212', $1, $4, 'EMPLOYEE', 'ACTIVE'),
-     ('22222222-2222-4222-8222-222222222213', $1, $5, 'EMPLOYEE', 'ACTIVE'),
-     ('22222222-2222-4222-8222-222222222214', $2, $6, 'EMPLOYER_ADMIN', 'ACTIVE')`,
+    `INSERT INTO organization_memberships (
+      id, organization_id, user_id, membership_role, status,
+      department, employee_code, usual_commute_origin, usual_commute_destination,
+      usual_commute_origin_lat, usual_commute_origin_lng, usual_commute_dest_lat,
+      usual_commute_dest_lng, usual_commute_corridor, shift_start_time, shift_end_time, notes
+    ) VALUES
+     ('22222222-2222-4222-8222-222222222211', $1, $3, 'EMPLOYER_ADMIN', 'ACTIVE', 'Operations Management', 'EMP-001', 'Hampankatta / State Bank, Mangaluru', 'Pumpwell Circle, Mangaluru (NH-66)', 12.8698, 74.8431, 12.8669, 74.8692, 'Mangaluru Central', '08:30', '17:30', 'Company Administrator'),
+     ('22222222-2222-4222-8222-222222222212', $1, $4, 'EMPLOYEE', 'ACTIVE', 'Platform Engineering', 'EMP-104', 'Udupi Karavali Bypass (NH-66)', 'Pumpwell Circle, Mangaluru (NH-66)', 13.3409, 74.7351, 12.8669, 74.8692, 'NH-66 Coastal Corridor', '09:00', '18:00', 'Daily intercity NH-66 commuter'),
+     ('22222222-2222-4222-8222-222222222213', $1, $5, 'EMPLOYEE', 'ACTIVE', 'Infrastructure & Quality', 'EMP-208', 'Surathkal NITK Toll Gate (NH-66)', 'Nanthoor Junction, Mangaluru (NH-66)', 13.0108, 74.7943, 12.8825, 74.8648, 'NH-66 North Corridor', '09:30', '18:30', 'Surathkal coastal transit'),
+     ('22222222-2222-4222-8222-222222222214', $2, $6, 'EMPLOYER_ADMIN', 'ACTIVE', 'People Operations', 'FIN-001', 'Kaup (Kapu) Junction (NH-66)', 'Udupi Karavali Bypass (NH-66)', 13.2244, 74.7484, 13.3409, 74.7351, 'Udupi South', '09:00', '18:00', 'HR Operations Lead')`,
     [
       DEMO_IDS.orgs.primary,
       DEMO_IDS.orgs.secondary,
@@ -135,6 +144,19 @@ export async function seedDatabase(options?: { force?: boolean }): Promise<void>
       DEMO_IDS.users.employee2,
       DEMO_IDS.users.employerOther,
     ]
+  );
+
+  // Seed sample invitation
+  await db.query(
+    `INSERT INTO organization_invitations (
+      id, organization_id, email, invite_code, membership_role,
+      department, usual_commute_origin, usual_commute_destination, status, created_by, expires_at
+    ) VALUES (
+      '22222222-2222-4222-8222-222222222288', $1, 'new.hire@karavalitech.in', 'ROAD-DEMO2026', 'EMPLOYEE',
+      'Data Analytics', 'KPT Junction, Mangaluru (NH-66)', 'Pumpwell Circle, Mangaluru (NH-66)',
+      'PENDING', $2, NOW() + INTERVAL '7 days'
+    )`,
+    [DEMO_IDS.orgs.primary, DEMO_IDS.users.employer]
   );
 
   // 3. Seed Organization Tracking Policies
@@ -837,6 +859,11 @@ export async function seedDatabase(options?: { force?: boolean }): Promise<void>
      ('44444444-4444-4444-8444-444444444413', $1, 12.9261, 74.8267, 18.0, 'BROWSER_GPS', 'Crossing Kuloor Bridge toward Nanthoor/Pumpwell')`,
     [DEMO_IDS.journeys.activeCommute]
   );
+
+  // Automatically evaluate and store realistic evidence-based delay verifications for seeded journeys
+  await evaluateJourneyDelay({ journeyId: DEMO_IDS.journeys.activeCommute, organizationId: DEMO_IDS.orgs.primary, forceReevaluate: true });
+  await evaluateJourneyDelay({ journeyId: DEMO_IDS.journeys.completedCommute, organizationId: DEMO_IDS.orgs.primary, forceReevaluate: true });
+  await evaluateJourneyDelay({ journeyId: DEMO_IDS.journeys.employee2Commute, organizationId: DEMO_IDS.orgs.primary, forceReevaluate: true });
 
   // 7. Seed Notifications
   const notifications = [

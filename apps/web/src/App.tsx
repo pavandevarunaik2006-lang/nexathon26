@@ -32,6 +32,9 @@ import {
   EmployerEmployeesPage,
   EmployerJourneysAndReportsPage,
   EmployerPoliciesPage,
+  EmployerJourneyDetailPage,
+  EmployerVerificationsPage,
+  EmployerSettingsPage,
 } from './pages/EmployerPages';
 import {
   AuthorityDashboardPage,
@@ -197,6 +200,30 @@ export function App() {
                 element={
                   <ProtectedRoute allowedRoles={['EMPLOYER', 'ADMIN']}>
                     <EmployerJourneysAndReportsPage mode="journeys" />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/employer/journeys/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['EMPLOYER', 'ADMIN']}>
+                    <EmployerJourneyDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/employer/verifications"
+                element={
+                  <ProtectedRoute allowedRoles={['EMPLOYER', 'ADMIN']}>
+                    <EmployerVerificationsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/employer/settings"
+                element={
+                  <ProtectedRoute allowedRoles={['EMPLOYER', 'ADMIN']}>
+                    <EmployerSettingsPage />
                   </ProtectedRoute>
                 }
               />

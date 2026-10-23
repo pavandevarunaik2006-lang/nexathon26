@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck,
   MapPin,
@@ -13,6 +13,9 @@ import {
   Sparkles,
   Play,
   Mail,
+  Building2,
+  KeyRound,
+  Users,
 } from 'lucide-react';
 import { RoadAlertLogo, DemoDataBadge } from '../components/Badges';
 import { useAuth, getDefaultHomeForRole } from '../context/AuthContext';
@@ -106,6 +109,12 @@ export function LandingPage() {
               </Link>
             ) : (
               <>
+                <Link
+                  to="/register?tab=company"
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500/10 text-xs font-semibold hidden sm:inline-flex items-center gap-1.5"
+                >
+                  <Building2 className="w-3.5 h-3.5" /> Register Company
+                </Link>
                 <Link
                   to="/login"
                   className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs font-semibold text-white"
@@ -391,6 +400,10 @@ export function LoginPage() {
             <Link to="/register" className="text-cyan-400 font-semibold hover:underline">
               Create an account
             </Link>
+            {' '}&bull;{' '}
+            <Link to="/register?tab=company" className="text-cyan-300 font-semibold hover:underline">
+              Register Company
+            </Link>
           </p>
         </div>
       </div>
@@ -399,18 +412,43 @@ export function LoginPage() {
 }
 
 export function RegisterPage() {
-  const { register } = useAuth();
+  const { register, registerCompany, acceptInvite } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
 
+  const inviteParam = searchParams.get('invite') || '';
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<'personal' | 'company' | 'invite'>(
+    inviteParam ? 'invite' : tabParam === 'company' ? 'company' : 'personal'
+  );
+
+  // Personal form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'PASSENGER' | 'EMPLOYEE'>('PASSENGER');
+
+  // Company form state
+  const [companyName, setCompanyName] = useState('');
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [companyPassword, setCompanyPassword] = useState('');
+  const [city, setCity] = useState('Mangaluru');
+  const [contactPhone, setContactPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [shiftStart, setShiftStart] = useState('09:00');
+  const [shiftEnd, setShiftEnd] = useState('18:00');
+
+  // Invite form state
+  const [inviteCode, setInviteCode] = useState(inviteParam);
+  const [inviteeName, setInviteeName] = useState('');
+  const [inviteePassword, setInviteePassword] = useState('');
+
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handlePersonalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
@@ -429,100 +467,372 @@ export function RegisterPage() {
     }
   };
 
+  const handleCompanySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const user = await registerCompany({
+        companyName,
+        adminName,
+        adminEmail,
+        password: companyPassword,
+        city,
+        contactPhone: contactPhone || undefined,
+        address: address || undefined,
+        shiftStartTime: shiftStart || undefined,
+        shiftEndTime: shiftEnd || undefined,
+      });
+      showToast({
+        type: 'success',
+        title: 'Company registered successfully',
+        message: `Welcome to RoadAlert Employer Portal, ${user.name}!`,
+      });
+      navigate('/app/employer/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'Company registration failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const user = await acceptInvite({
+        inviteCode: inviteCode.trim(),
+        name: inviteeName.trim(),
+        password: inviteePassword,
+      });
+      showToast({
+        type: 'success',
+        title: 'Invitation accepted!',
+        message: `Welcome to your organization's commute workspace, ${user.name}!`,
+      });
+      navigate('/app/employee/commute');
+    } catch (err: any) {
+      setError(err.message || 'Failed to accept invitation');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md space-y-2 text-center">
+      <div className="sm:mx-auto sm:w-full sm:max-w-xl space-y-2 text-center">
         <div className="flex justify-center">
           <Link to="/">
             <RoadAlertLogo />
           </Link>
         </div>
-        <h1 className="text-2xl font-bold text-white">Create Your RoadAlert Account</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Create Your Account</h1>
         <p className="text-xs text-slate-400">
-          Report coastal Karnataka incidents, verify reports, or verify employee commutes
+          Access coastal Karnataka incident reporting or onboard your organization for commute delay verification
         </p>
       </div>
 
-      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-slate-900 border border-slate-800 py-6 px-6 shadow-2xl rounded-2xl space-y-5">
+      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-xl">
+        <div className="bg-slate-900 border border-slate-800 shadow-2xl rounded-2xl p-6 space-y-6">
+          {/* Tab Navigation */}
+          <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('personal');
+                setError(null);
+              }}
+              className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                activeTab === 'personal'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Personal</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('company');
+                setError(null);
+              }}
+              className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                activeTab === 'company'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>Company (B2B)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('invite');
+                setError(null);
+              }}
+              className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                activeTab === 'invite'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Use Invite Code</span>
+            </button>
+          </div>
+
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-xs">
+            <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-xs font-medium">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
-              <input
-                type="text"
-                required
-                minLength={2}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., Deepak Hegde"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
-              />
-            </div>
+          {/* TAB 1: Personal Account */}
+          {activeTab === 'personal' && (
+            <form onSubmit={handlePersonalSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., Deepak Hegde"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Email Address
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="deepak@example.com"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
-              />
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="deepak@example.com"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Password (min 8 chars)
-              </label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
-              />
-            </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Password (min 8 chars)
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Account Type
-              </label>
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value as 'PASSENGER' | 'EMPLOYEE')}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Account Type
+                </label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as 'PASSENGER' | 'EMPLOYEE')}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                >
+                  <option value="PASSENGER">PASSENGER — Commuter &amp; Incident Reporter</option>
+                  <option value="EMPLOYEE">
+                    EMPLOYEE — Commuter + Consented Commute Delay Verification
+                  </option>
+                </select>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Consented employees can record trips and generate tamper-evident delay certificates for employers.
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 transition-all"
               >
-                <option value="PASSENGER">PASSENGER — Commuter &amp; Incident Reporter</option>
-                <option value="EMPLOYEE">
-                  EMPLOYEE — Commuter + Consented Commute Verification
-                </option>
-              </select>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Note: Authority, Employer, and Admin roles are provisioned by system administrators.
-              </p>
-            </div>
+                {submitting ? 'Creating Account...' : 'Register Personal Account'}
+              </button>
+            </form>
+          )}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm"
-            >
-              {submitting ? 'Creating Account...' : 'Register Account'}
-            </button>
-          </form>
+          {/* TAB 2: Company / Organization Onboarding */}
+          {activeTab === 'company' && (
+            <form onSubmit={handleCompanySubmit} className="space-y-4">
+              <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs leading-relaxed">
+                <span className="font-bold">Employer B2B Onboarding:</span> Sets up your isolated organization workspace, registers you as Company Admin, and unlocks commute delay auditing.
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Company / Organization Name *</label>
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    placeholder="e.g., Karavali Tech Parks Ltd."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Admin Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    minLength={2}
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    placeholder="e.g., HR Director"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Admin Work Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    placeholder="admin@company.com"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Password (min 8 chars) *</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={companyPassword}
+                    onChange={(e) => setCompanyPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">HQ City</label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="Mangaluru / Udupi"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Contact Phone</label>
+                  <input
+                    type="tel"
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="+91 824 2223344"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Shift Start Time</label>
+                  <input
+                    type="time"
+                    value={shiftStart}
+                    onChange={(e) => setShiftStart(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Shift End Time</label>
+                  <input
+                    type="time"
+                    value={shiftEnd}
+                    onChange={(e) => setShiftEnd(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 transition-all"
+              >
+                {submitting ? 'Registering Organization...' : 'Create Company Workspace'}
+              </button>
+            </form>
+          )}
+
+          {/* TAB 3: Accept Organization Invite Code */}
+          {activeTab === 'invite' && (
+            <form onSubmit={handleInviteSubmit} className="space-y-4">
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs leading-relaxed">
+                <span className="font-bold">Organization Invitation:</span> Enter the secure invitation code provided by your HR or Team Admin to associate your account with your company.
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Invitation Code *</label>
+                <input
+                  type="text"
+                  required
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  placeholder="e.g., ROAD-DEMO2026 or 8-char hex code"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white font-mono uppercase focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Your Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  value={inviteeName}
+                  onChange={(e) => setInviteeName(e.target.value)}
+                  placeholder="e.g., Praveen Kumar"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Create Password (min 8 chars) *</label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={inviteePassword}
+                  onChange={(e) => setInviteePassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all"
+              >
+                {submitting ? 'Accepting Invitation...' : 'Join Organization'}
+              </button>
+            </form>
+          )}
 
           <p className="text-center text-xs text-slate-400">
-            Already registered?{' '}
+            Already have an active account?{' '}
             <Link to="/login" className="text-cyan-400 font-semibold hover:underline">
               Sign in
             </Link>

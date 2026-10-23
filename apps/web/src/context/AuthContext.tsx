@@ -21,6 +21,8 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<AuthUser>;
   register: (name: string, email: string, password: string, role: 'PASSENGER' | 'EMPLOYEE') => Promise<AuthUser>;
+  registerCompany: (companyData: any) => Promise<AuthUser>;
+  acceptInvite: (data: { inviteCode: string; name: string; password: string }) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -78,6 +80,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return res.user;
   };
 
+  const registerCompany = async (companyData: any): Promise<AuthUser> => {
+    const res = await apiRequest<{ user: AuthUser; accessToken: string }>('/auth/register-company', {
+      method: 'POST',
+      body: JSON.stringify(companyData),
+    });
+    setStoredToken(res.accessToken);
+    setUser(res.user);
+    return res.user;
+  };
+
+  const acceptInvite = async (data: { inviteCode: string; name: string; password: string }): Promise<AuthUser> => {
+    const res = await apiRequest<{ user: AuthUser; accessToken: string }>('/auth/accept-invite', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    setStoredToken(res.accessToken);
+    setUser(res.user);
+    return res.user;
+  };
+
   const logout = async () => {
     try {
       await apiRequest('/auth/logout', { method: 'POST' });
@@ -89,7 +111,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        register,
+        registerCompany,
+        acceptInvite,
+        logout,
+        refreshUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

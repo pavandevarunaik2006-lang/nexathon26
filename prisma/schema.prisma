@@ -40,22 +40,46 @@ model Organization {
   name             String
   organizationType String   @map("organization_type")
   status           String   @default("ACTIVE")
+  contactEmail     String?  @map("contact_email")
+  contactPhone     String?  @map("contact_phone")
+  address          String?
+  city             String?  @default("Mangaluru")
+  description      String?
+  logoUrl          String?  @map("logo_url")
+  defaultShiftStart String? @default("09:00") @map("default_shift_start")
+  defaultShiftEnd   String? @default("18:00") @map("default_shift_end")
   createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime? @updatedAt @map("updated_at")
 
-  memberships OrganizationMembership[]
-  consents    TrackingConsent[]
-  policies    OrganizationTrackingPolicy[]
+  memberships       OrganizationMembership[]
+  consents          TrackingConsent[]
+  policies          OrganizationTrackingPolicy[]
+  invitations       OrganizationInvitation[]
+  delayVerifications DelayVerification[]
 
   @@map("organizations")
 }
 
 model OrganizationMembership {
-  id             String   @id @default(uuid())
-  organizationId String   @map("organization_id")
-  userId         String   @map("user_id")
-  membershipRole String   @map("membership_role") // EMPLOYER_ADMIN | EMPLOYEE
-  status         String   @default("ACTIVE")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id                     String    @id @default(uuid())
+  organizationId         String    @map("organization_id")
+  userId                 String    @map("user_id")
+  membershipRole         String    @map("membership_role") // EMPLOYER_ADMIN | HR_VIEWER | EMPLOYEE
+  status                 String    @default("ACTIVE") // ACTIVE | INACTIVE | DEACTIVATED
+  usualCommuteOrigin     String?   @map("usual_commute_origin")
+  usualCommuteDestination String?  @map("usual_commute_destination")
+  usualCommuteOriginLat  Float?    @map("usual_commute_origin_lat")
+  usualCommuteOriginLng  Float?    @map("usual_commute_origin_lng")
+  usualCommuteDestLat    Float?    @map("usual_commute_dest_lat")
+  usualCommuteDestLng    Float?    @map("usual_commute_dest_lng")
+  usualCommuteCorridor   String?   @map("usual_commute_corridor")
+  shiftStartTime         String?   @default("09:00") @map("shift_start_time")
+  shiftEndTime           String?   @default("18:00") @map("shift_end_time")
+  department             String?
+  employeeCode           String?   @map("employee_code")
+  notes                  String?
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime? @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -155,11 +179,16 @@ model Journey {
   manualSelfReported   Boolean   @default(false) @map("manual_self_reported")
   manualStatusNote     String?   @map("manual_status_note")
   demoData             Boolean   @default(false) @map("demo_data")
+  verificationStatus   String?   @default("UNVERIFIED") @map("verification_status")
+  journeyDisplayStatus String?   @default("Normal") @map("journey_display_status")
+  delayEvidenceSummary String?   @map("delay_evidence_summary")
+  lastDataUpdateAt     DateTime? @default(now()) @map("last_data_update_at")
 
-  employee      User                @relation(fields: [employeeId], references: [id])
-  consentRecord TrackingConsent     @relation(fields: [consentRecordId], references: [id])
-  checkpoints   JourneyCheckpoint[]
-  notifications Notification[]
+  employee          User                @relation(fields: [employeeId], references: [id])
+  consentRecord     TrackingConsent     @relation(fields: [consentRecordId], references: [id])
+  checkpoints       JourneyCheckpoint[]
+  notifications     Notification[]
+  delayVerifications DelayVerification[]
 
   @@index([employeeId])
   @@index([status])
@@ -291,4 +320,58 @@ model ProblemReport {
   creator User @relation(fields: [createdBy], references: [id])
 
   @@map("problem_reports")
+}
+
+model OrganizationInvitation {
+  id                     String    @id @default(uuid())
+  organizationId         String    @map("organization_id")
+  email                  String
+  inviteCode             String    @unique @map("invite_code")
+  membershipRole         String    @default("EMPLOYEE") @map("membership_role")
+  department             String?
+  usualCommuteOrigin     String?   @map("usual_commute_origin")
+  usualCommuteDestination String?  @map("usual_commute_destination")
+  status                 String    @default("PENDING")
+  createdBy              String?   @map("created_by")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  expiresAt              DateTime  @map("expires_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, email])
+  @@index([inviteCode])
+  @@map("organization_invitations")
+}
+
+model DelayVerification {
+  id                    String    @id @default(uuid())
+  journeyId             String    @map("journey_id")
+  organizationId        String    @map("organization_id")
+  employeeId            String    @map("employee_id")
+  verificationStatus    String    @map("verification_status") // VERIFIED | PARTIALLY_VERIFIED | UNVERIFIED | NOT_TRAFFIC_RELATED
+  journeyStatus         String    @default("DELAYED") @map("journey_status")
+  delayMinutes          Int       @default(0) @map("delay_minutes")
+  incidentIds           Json      @default("[]") @map("incident_ids")
+  incidentDetails       Json      @default("[]") @map("incident_details")
+  journeyWindowStart    DateTime  @map("journey_window_start")
+  journeyWindowEnd      DateTime? @map("journey_window_end")
+  evidenceSummary       String    @map("evidence_summary")
+  conclusionText        String    @map("conclusion_text")
+  verificationMethod    String    @default("CORRIDOR_SPATIO_TEMPORAL_INTERSECTION") @map("verification_method")
+  spatialIntersection   Boolean   @default(false) @map("spatial_intersection")
+  temporalIntersection  Boolean   @default(false) @map("temporal_intersection")
+  gpsObservationSummary String?   @map("gps_observation_summary")
+  speedDropDetected     Boolean   @default(false) @map("speed_drop_detected")
+  missingEvidenceFactors Json     @default("[]") @map("missing_evidence_factors")
+  verifiedAt            DateTime  @default(now()) @map("verified_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  journey      Journey      @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([journeyId])
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([verificationStatus])
+  @@map("delay_verifications")
 }

@@ -60,6 +60,8 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
     { label: 'Employer Command', to: '/employer/dashboard', icon: Building2 },
     { label: 'Authorized Staff', to: '/employer/employees', icon: Users },
     { label: 'Commute Sessions', to: '/employer/journeys', icon: Briefcase },
+    { label: 'Delay Verifications', to: '/employer/verifications', icon: ShieldCheck },
+    { label: 'Organization Settings', to: '/employer/settings', icon: Settings },
     { label: 'Tracking Policies', to: '/employer/policies', icon: Lock },
     { label: 'Delay CSV Reports', to: '/employer/reports', icon: FileSpreadsheet },
   ];

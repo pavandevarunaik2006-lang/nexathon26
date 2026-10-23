@@ -153,3 +153,137 @@ export const REGIONAL_DESTINATIONS = [
   { name: 'Kuloor Bridge, Mangaluru (NH-66)', lat: 12.9261, lng: 74.8267, corridor: 'NH-66 Bridge' },
   { name: 'Hampankatta / State Bank, Mangaluru', lat: 12.8698, lng: 74.8431, corridor: 'Mangaluru CBD' },
 ] as const;
+
+export const ORGANIZATION_MEMBERSHIP_ROLES = ['EMPLOYER_ADMIN', 'HR_VIEWER', 'EMPLOYEE'] as const;
+export type OrganizationMembershipRole = (typeof ORGANIZATION_MEMBERSHIP_ROLES)[number];
+
+export const DELAY_VERIFICATION_STATUSES = [
+  'VERIFIED',
+  'PARTIALLY_VERIFIED',
+  'UNVERIFIED',
+  'NOT_TRAFFIC_RELATED',
+] as const;
+export type DelayVerificationStatus = (typeof DELAY_VERIFICATION_STATUSES)[number];
+
+export const JOURNEY_DISPLAY_STATUSES = [
+  'Normal',
+  'Traffic',
+  'Road Block',
+  'Delayed',
+  'Completed',
+  'Unknown',
+] as const;
+export type JourneyDisplayStatus = (typeof JOURNEY_DISPLAY_STATUSES)[number];
+
+export const RegisterCompanySchema = z.object({
+  organizationName: z.string().min(2, 'Company name is required').max(150),
+  organizationType: z.string().min(2, 'Organization type is required').default('ENTERPRISE'),
+  contactEmail: z.string().email('Invalid contact email').optional(),
+  contactPhone: z.string().max(20).optional(),
+  address: z.string().max(300).optional(),
+  city: z.string().default('Mangaluru'),
+  defaultShiftStart: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Format HH:MM').optional().default('09:00'),
+  defaultShiftEnd: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Format HH:MM').optional().default('18:00'),
+  adminName: z.string().min(2, 'Admin name is required').max(100),
+  adminEmail: z.string().email('Invalid admin email'),
+  adminPassword: z.string().min(8, 'Password must be at least 8 characters').max(100),
+});
+
+export const UpdateOrganizationProfileSchema = z.object({
+  name: z.string().min(2).max(150).optional(),
+  organizationType: z.string().min(2).optional(),
+  contactEmail: z.string().email().optional().or(z.literal('')),
+  contactPhone: z.string().max(20).optional().or(z.literal('')),
+  address: z.string().max(300).optional().or(z.literal('')),
+  city: z.string().max(100).optional(),
+  description: z.string().max(1000).optional().or(z.literal('')),
+  defaultShiftStart: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Format HH:MM').optional(),
+  defaultShiftEnd: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Format HH:MM').optional(),
+});
+
+export const AddEmployeeSchema = z.object({
+  name: z.string().min(2, 'Employee name is required').max(100),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(8).optional().default('RoadAlert@2026'),
+  membershipRole: z.enum(['EMPLOYER_ADMIN', 'HR_VIEWER', 'EMPLOYEE']).default('EMPLOYEE'),
+  department: z.string().max(100).optional(),
+  employeeCode: z.string().max(50).optional(),
+  usualCommuteOrigin: z.string().max(200).optional(),
+  usualCommuteDestination: z.string().max(200).optional(),
+  usualCommuteOriginLat: z.number().min(-90).max(90).optional(),
+  usualCommuteOriginLng: z.number().min(-180).max(180).optional(),
+  usualCommuteDestLat: z.number().min(-90).max(90).optional(),
+  usualCommuteDestLng: z.number().min(-180).max(180).optional(),
+  usualCommuteCorridor: z.string().max(100).optional(),
+  shiftStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional().default('09:00'),
+  shiftEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional().default('18:00'),
+  notes: z.string().max(500).optional(),
+});
+
+export const UpdateEmployeeSchema = z.object({
+  membershipRole: z.enum(['EMPLOYER_ADMIN', 'HR_VIEWER', 'EMPLOYEE']).optional(),
+  status: z.enum(['ACTIVE', 'INACTIVE', 'DEACTIVATED']).optional(),
+  department: z.string().max(100).optional().or(z.literal('')),
+  employeeCode: z.string().max(50).optional().or(z.literal('')),
+  usualCommuteOrigin: z.string().max(200).optional().or(z.literal('')),
+  usualCommuteDestination: z.string().max(200).optional().or(z.literal('')),
+  usualCommuteOriginLat: z.number().min(-90).max(90).optional().nullable(),
+  usualCommuteOriginLng: z.number().min(-180).max(180).optional().nullable(),
+  usualCommuteDestLat: z.number().min(-90).max(90).optional().nullable(),
+  usualCommuteDestLng: z.number().min(-180).max(180).optional().nullable(),
+  usualCommuteCorridor: z.string().max(100).optional().or(z.literal('')),
+  shiftStartTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  shiftEndTime: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/).optional(),
+  notes: z.string().max(500).optional().or(z.literal('')),
+});
+
+export const CreateInvitationSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  membershipRole: z.enum(['EMPLOYER_ADMIN', 'HR_VIEWER', 'EMPLOYEE']).default('EMPLOYEE'),
+  department: z.string().max(100).optional(),
+  usualCommuteOrigin: z.string().max(200).optional(),
+  usualCommuteDestination: z.string().max(200).optional(),
+  expiresInDays: z.number().min(1).max(30).optional().default(7),
+});
+
+export const AcceptInvitationSchema = z.object({
+  inviteCode: z.string().min(6),
+  name: z.string().min(2).max(100),
+  password: z.string().min(8).max(100),
+});
+
+export interface DelayVerificationEvaluation {
+  id?: string;
+  journeyId: string;
+  organizationId: string;
+  employeeId: string;
+  employeeName?: string;
+  verificationStatus: DelayVerificationStatus;
+  journeyStatus: JourneyDisplayStatus;
+  delayMinutes: number;
+  incidentIds: string[];
+  incidentDetails: Array<{
+    id: string;
+    title: string;
+    category: string;
+    severity: string;
+    roadName: string;
+    confidenceScore: number;
+    estimatedDelayMinutes: number;
+    authorityConfirmed: boolean;
+    roadClosed: boolean;
+    distanceKm?: number;
+  }>;
+  journeyWindowStart: string;
+  journeyWindowEnd?: string | null;
+  evidenceSummary: string;
+  conclusionText: string;
+  verificationMethod: string;
+  spatialIntersection: boolean;
+  temporalIntersection: boolean;
+  gpsObservationSummary?: string | null;
+  speedDropDetected: boolean;
+  missingEvidenceFactors: string[];
+  verifiedAt: string;
+}
+
