@@ -14,50 +14,71 @@ Unlike ordinary navigation apps that display an unexplained red line, RoadAlert 
 
 ```
 Nexathon26/
-├── apps/
-│   ├── api/                        # Node.js + Express + TypeScript REST API (/api/v1) + OpenAPI/Swagger
-│   │   ├── src/
-│   │   │   ├── config/             # Zod-validated environment configuration (env.ts)
-│   │   │   ├── controllers/        # HTTP request & response handlers (auth, incidents, authority)
-│   │   │   ├── db/                 # Dual-mode PostgreSQL manager (pg.Pool + PGlite), migrations & seed
-│   │   │   ├── integrations/       # External API clients (OSRM routing client with timeout fallback)
-│   │   │   ├── middleware/         # JWT auth, RBAC role guards, centralized Zod/Multer error handler
-│   │   │   ├── repositories/       # Data access layer (users, incidents, organizations, audit logs)
-│   │   │   ├── routes/             # Express route definitions mounted under /api/v1
-│   │   │   ├── services/           # Domain logic (verificationEngine, routingService, incidentService, etc.)
-│   │   │   ├── types/              # Backend domain & Express request types
-│   │   │   ├── validators/         # Request validation schemas re-exported from @roadalert/shared
-│   │   │   ├── app.ts              # Express app factory
-│   │   │   └── server.ts           # HTTP server entry point
-│   │   └── tests/                  # Vitest + Supertest automated test suite (15 acceptance & security tests)
-│   └── web/                        # React 18 + Vite + TypeScript + Tailwind CSS + React Leaflet + Recharts
-│       └── src/
-│           ├── app/                # Application entry, routing (routes.tsx), and providers (providers.tsx)
-│           ├── components/
-│           │   ├── shared/         # Shared domain components (CorridorIntelligenceMap, IncidentInvestigationPanel)
-│           │   └── ui/             # Reusable UI & motion primitives (Badges, MotionPrimitives)
-│           ├── config/             # Frontend corridor & API configuration
-│           ├── context/            # Auth & Toast context providers
-│           ├── features/           # Feature modules (incidents, map, routes, verification, commute, alerts, analytics, auth, admin)
-│           ├── hooks/              # Reusable React hooks (useAuth, useToast)
-│           ├── layouts/            # Enterprise application shell & navigation (AppShell)
-│           ├── lib/                # Typed API client & formatting utilities
-│           ├── pages/              # Feature route views
-│           ├── styles/             # Global Tailwind styles, map keyframes & design tokens
-│           └── types/              # Frontend TypeScript interfaces
-├── packages/
-│   └── shared/                     # Shared TypeScript package (@roadalert/shared)
-│       └── src/
-│           ├── constants/          # Roles, categories, severities, statuses, verification levels, landmarks
-│           ├── types/              # Shared domain interfaces (ConfidenceScoreBreakdown, RoutePlanOption)
-│           ├── validators/         # Shared Zod schemas for API & frontend validation
-│           └── index.ts            # Package barrel export
-├── prisma/
+├── frontend/                       # React 18 + Vite + TypeScript + Tailwind CSS + React Leaflet + Recharts
+│   ├── public/
+│   ├── src/
+│   │   ├── app/                    # Application entry, routing (routes.tsx), and providers (providers.tsx)
+│   │   ├── components/             # Reusable UI & motion primitives (Badges, MotionPrimitives, shared/, ui/)
+│   │   ├── config/                 # Frontend corridor & API configuration
+│   │   ├── context/                # Auth & Toast context providers
+│   │   ├── features/               # Feature modules (admin, alerts, analytics, authentication, dashboard, gps, incidents, maps, routes, vehicles, verification)
+│   │   ├── hooks/                  # Reusable React hooks (useAuth, useToast)
+│   │   ├── layouts/                # Enterprise application shell & navigation (AppShell)
+│   │   ├── lib/                    # Formatting utilities & API client compatibility export
+│   │   ├── pages/                  # Route page views
+│   │   ├── services/               # Typed REST API client (apiClient.ts)
+│   │   ├── styles/                 # Global Tailwind styles, map keyframes & design tokens
+│   │   └── types/                  # Frontend TypeScript interfaces
+│   ├── index.html
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
+│
+├── backend/                        # Node.js + Express + TypeScript REST API (/api/v1) + OpenAPI/Swagger
+│   ├── src/
+│   │   ├── config/                 # Zod-validated environment configuration (env.ts)
+│   │   ├── controllers/            # HTTP request & response handlers (auth, incidents, authority, journeys, employer, mapAndRoutes, admin, notifications)
+│   │   ├── db/                     # Dual-mode PostgreSQL manager (pg.Pool + PGlite), migrations & seed
+│   │   ├── integrations/           # External API clients (OSRM routing client with timeout fallback)
+│   │   ├── middleware/             # JWT auth, RBAC role guards, centralized Zod/Multer error handler
+│   │   ├── repositories/           # Data access layer (users, incidents, organizations, audit logs)
+│   │   ├── routes/                 # Declarative Express route definitions mounted under /api/v1
+│   │   ├── services/               # Domain logic (verificationEngine, gpsTrackingService, routingService, geocodingService, incidentService, authorityService, authService, aiAssistantService)
+│   │   ├── types/                  # Backend domain & Express request types
+│   │   ├── utils/                  # Anonymization & query helper utilities
+│   │   ├── validators/             # Request validation schemas re-exported from @roadalert/shared
+│   │   ├── app.ts                  # Express app factory
+│   │   ├── server.ts               # HTTP server entry point
+│   │   └── swagger.ts              # OpenAPI 3.0 specification
+│   ├── tests/                      # Vitest + Supertest automated test suites (api.test.ts, gpsTracking.test.ts, routingAndSimulation.test.ts)
+│   ├── data/                       # Local PGlite PostgreSQL storage (gitignored)
+│   ├── uploads/                    # Local uploaded incident evidence storage (gitignored)
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── database/                       # Database schema, migrations & seed scripts
+│   ├── migrations/
+│   │   ├── 001_init/               # Core relational tables & indexes
+│   │   └── 002_gps_tracking/       # JourneyCheckpoint GPS telemetry & anomaly columns
 │   ├── schema.prisma               # Normalized relational PostgreSQL schema
-│   └── migrations/001_init/        # Version-controlled SQL migration
-├── docker-compose.yml              # PostgreSQL 16 + PostGIS container configuration
+│   └── seed.ts                     # Canonical database seed entrypoint
+│
+├── shared/                         # Shared TypeScript package (@roadalert/shared)
+│   ├── src/
+│   │   ├── constants/              # Roles, categories, severities, statuses, GPS validation statuses, landmarks
+│   │   ├── schemas/                # Shared Zod validation schemas for API & frontend
+│   │   ├── simulation/             # Multi-category corridor vehicle simulation & incident-aware rerouting engine
+│   │   ├── types/                  # Shared domain interfaces (ConfidenceScoreBreakdown, ExplicitRouteState, IncidentVerificationState)
+│   │   └── index.ts                # Package barrel export
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── .env.example                    # Complete environment variable reference
 ├── .gitignore                      # Excludes node_modules, dist, .env, local pglite data, and uploads
-└── .env.example                    # Complete environment variable reference
+├── docker-compose.yml              # PostgreSQL 16 + PostGIS container configuration
+├── package.json                    # Root npm workspace & orchestration scripts
+├── package-lock.json
+└── README.md
 ```
 
 ### Key Differentiators Implemented
@@ -83,7 +104,7 @@ Nexathon26/
 
 ### Prerequisites
 - **Node.js** `>= 20.x` and **npm** `>= 10.x`
-- **Database:** Works out-of-the-box with **zero external setup** using embedded persistent PostgreSQL (`@electric-sql/pglite` stored in `./data/pglite`), OR connects to a managed/Docker PostgreSQL instance when `DATABASE_URL` is set.
+- **Database:** Works out-of-the-box with **zero external setup** using embedded persistent PostgreSQL (`@electric-sql/pglite` stored in `backend/data/pglite`), OR connects to a managed/Docker PostgreSQL instance when `DATABASE_URL` is set.
 
 ### Step-by-Step Commands
 
@@ -94,14 +115,16 @@ npm install
 # 2. (Optional) Copy environment configuration
 cp .env.example .env
 
-# 3. Run PostgreSQL schema migrations
+# 3. Validate Prisma schema & run PostgreSQL schema migrations
+npm run db:validate
 npm run db:migrate
 
 # 4. Seed demo roles, organizations, and 18 coastal Karnataka incidents
 npm run db:seed
 
-# 5. Run TypeScript typechecks and automated API integration tests (15/15 passing)
-npm run lint
+# 5. Run TypeScript typechecks, build, and automated API integration tests (49/49 passing)
+npm run typecheck
+npm run build
 npm test
 
 # 6. Start both Backend API (port 4000) and Frontend Web App (port 5173)
@@ -131,37 +154,11 @@ All demo accounts share the development password: **`RoadAlert@2026`**
 
 ---
 
-## 4. Demo Walkthrough (Mangaluru → Udupi Journey)
-
-1. **Explore the Live Corridor Control Room (`/app/dashboard` & `/app/map`):**
-   - Sign in as `passenger@roadalert.in` (or click the **Passenger** launcher on `/`).
-   - Inspect active seeded incidents at **Pumpwell Circle** (Monsoon Waterlogging, Confidence 100/100), **Thokkottu Flyover** (Container Breakdown), **Mulki Junction** (Emergency Culvert Road Closure), and **Nanthoor Circle** (Signal Failure).
-2. **Plan a Bypass Route (`/app/routes`):**
-   - Select Origin: `Pumpwell Circle, Mangaluru (NH-66)` and Destination: `Udupi Karavali Bypass (NH-66)`.
-   - Observe how the primary NH-66 route is flagged with a **Road Closure Warning** at Mulki Junction (+45 min delay), while the **Inland SH-1 / Bajpe–Padubidri Bypass** is recommended with a clear explanation and separate Base Travel Time vs. Incident Delay breakdown.
-3. **Report & Corroborate an Incident (`/app/report-incident` & `/app/incidents/:id`):**
-   - Submit a new incident, click **Auto-Suggest Category & Evidence**, and pin coordinates on the map.
-   - Open the created incident detail page to inspect the 5-pillar confidence score breakdown (`+points` per pillar and what is missing for `100/100`).
-4. **Employee Privacy-First Commute Session (`/app/journeys`):**
-   - Sign in as `employee@roadalert.in`. Notice the persistent green **Consented Commute Tracking Active** indicator in the top header.
-   - Log a checkpoint, inspect the difference between **Estimated Route Delay** and **Incident-Verified Delay**, and click **Stop Session Now** (or **Revoke Consent**) to verify tracking stops immediately.
-5. **Employer Commute Verification (`/employer/dashboard` & `/employer/reports`):**
-   - Sign in as `employer@roadalert.in`. Inspect authorized employee commutes with `Exact GPS Redacted` enforced, and click **Export Authorized CSV**.
-6. **Traffic Authority Investigation & Permanent Problem Reports (`/authority/dashboard`, `/authority/analytics`, `/authority/problem-reports`):**
-   - Sign in as `authority@roadalert.in`. Confirm or resolve an incident with a mandatory audited reason, filter historical SQL analytics (`daily`/`weekly`/`monthly`/`quarterly`/`annual`), and generate a printable **Permanent Infrastructure Problem Report** for Pumpwell Circle.
-
----
-
-## 5. External Integrations & Deployment Guide
+## 4. External Integrations & Deployment Guide
 
 - **Map Tiles:** Uses OpenStreetMap standard tiles by default (`VITE_MAP_TILE_URL`). Includes a graceful fallback banner if tile servers are unreachable while keeping incident lists interactive.
 - **Routing Provider:** Uses `OSRM` (`OSRM_BASE_URL`) with a 2.5-second timeout and automatic fallback to deterministic coastal Karnataka corridor geometry so demos never fail offline.
 - **Database Deployment:** For production on Render/Railway/Supabase/Neon, set `DATABASE_URL=postgresql://user:pass@host:5432/dbname` or run `docker compose up -d` for local PostGIS 16.
 - **Frontend & Backend Deployment:**
-  - Deploy `apps/web` to Vercel (build command: `npm run build --workspace=apps/web`, output directory: `apps/web/dist`, set `VITE_API_BASE_URL`).
-  - Deploy `apps/api` to Render or Railway (start command: `npm run start --workspace=apps/api`).
-
-## 6. Known Limitations
-- **Confidence Scoring Heuristic:** Weights (30/20/20/15/15) are transparent product heuristics for decision support and are not calibrated statistical probabilities.
-- **Routing Traffic Feed:** OSRM provides base road geometry and travel duration; incident delays are computed separately by intersecting route polylines against active RoadAlert incidents.
-- **Push Notifications:** In-app notification center with polling and unread badges is fully implemented; external Web Push / FCM credentials are not required for the MVP.
+  - Deploy `frontend` to Vercel (build command: `npm run build --workspace=frontend`, output directory: `frontend/dist`, set `VITE_API_BASE_URL`).
+  - Deploy `backend` to Render or Railway (start command: `npm run start --workspace=backend`).

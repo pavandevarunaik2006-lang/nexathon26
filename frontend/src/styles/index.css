@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #f0f4f9;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  /* Classic Enterprise Card */
+  .enterprise-card {
+    @apply bg-white border border-slate-200/90 rounded-xl shadow-card;
+  }
+  .enterprise-input {
+    @apply w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all;
+  }
+  .enterprise-select {
+    @apply px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-b from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 active:from-blue-700 active:to-blue-800 active:scale-[0.98] text-white font-semibold text-xs shadow-neu-button transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-[0.98] text-slate-700 border border-slate-200/90 font-semibold text-xs shadow-neu-raised-sm transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* NEUMORPHISM DESIGN SYSTEM TOKENS & UTILITIES                              */
+  /* -------------------------------------------------------------------------- */
+  .neu-card {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    box-shadow: 4px 4px 12px rgba(166, 180, 200, 0.25), -4px -4px 12px rgba(255, 255, 255, 0.95);
+    border-radius: 0.875rem;
+  }
+
+  .neu-card-interactive {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    box-shadow: 4px 4px 12px rgba(166, 180, 200, 0.22), -4px -4px 12px rgba(255, 255, 255, 0.95);
+    border-radius: 0.875rem;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .neu-card-interactive:hover {
+    box-shadow: 6px 6px 16px rgba(160, 175, 198, 0.32), -6px -6px 16px rgba(255, 255, 255, 1);
+    transform: translateY(-1px);
+  }
+  .neu-card-interactive:active {
+    box-shadow: inset 2px 2px 5px rgba(160, 175, 198, 0.35), inset -2px -2px 5px rgba(255, 255, 255, 0.85);
+    transform: translateY(0);
+  }
+
+  .neu-inset {
+    background: #f8fafc;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: inset 2px 2px 5px rgba(160, 175, 198, 0.3), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+    border-radius: 0.75rem;
+  }
+
+  .neu-btn {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 3px 3px 8px rgba(160, 175, 198, 0.28), -3px -3px 8px rgba(255, 255, 255, 0.95);
+    border-radius: 0.625rem;
+    transition: all 0.15s ease;
+  }
+  .neu-btn:hover {
+    box-shadow: 4px 4px 10px rgba(160, 175, 198, 0.38), -4px -4px 10px rgba(255, 255, 255, 1);
+    color: #1d4ed8;
+  }
+  .neu-btn:active, .neu-btn-active {
+    box-shadow: inset 2px 2px 4px rgba(160, 175, 198, 0.4), inset -2px -2px 4px rgba(255, 255, 255, 0.9);
+    background: #f1f5f9;
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /* GLASSMORPHISM DESIGN SYSTEM TOKENS & UTILITIES                            */
+  /* -------------------------------------------------------------------------- */
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+    border-radius: 0.875rem;
+  }
+
+  .glass-pill {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  }
+
+  .glass-dark {
+    background: rgba(12, 22, 44, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .glass-telemetry-badge {
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #f8fafc;
+  }
+}
+
+.leaflet-container {
+  background-color: #e2e8f0 !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+/* Optional High-Contrast / Satellite-style Dark Map Tile Mode */
+.map-tiles-dark .leaflet-tile-pane {
+  filter: invert(100%) hue-rotate(180deg) brightness(94%) contrast(92%) saturate(115%);
+}
+
+/* Clean Enterprise Daylight Map Tile Polish */
+.map-tiles-light .leaflet-tile-pane {
+  filter: contrast(98%) saturate(92%) brightness(101%);
+}
+
+/* Custom Marker & Cluster Reset */
+.roadalert-custom-pin,
+.roadalert-cluster-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Native SVG Corridor Route Drawing Animation */
+@keyframes route-draw-path {
+  0% {
+    stroke-dashoffset: 1400;
+    opacity: 0.25;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+}
+
+.corridor-route-path-draw {
+  stroke-dasharray: 1400;
+  stroke-dashoffset: 1400;
+  animation: route-draw-path 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Coordinated Pin Reveal Entrance Animation */
+@keyframes pin-pop-reveal {
+  0% {
+    transform: scale(0.35) translateY(6px);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.pin-reveal-enter {
+  animation: pin-pop-reveal 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes marker-pulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+.animate-marker-pulse {
+  animation: marker-pulse 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marker-pulse,
+  .corridor-route-path-draw,
+  .pin-reveal-enter,
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Subtle enterprise scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+}

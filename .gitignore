@@ -16,8 +16,8 @@ build/
 .env.production.local
 
 # Local embedded database & uploaded evidence files
-apps/api/data/
-apps/api/uploads/
+backend/data/
+backend/uploads/
 .pglite-data/
 
 # Logs & OS files
