@@ -1,0 +1,25 @@
+{
+  "name": "roadalert-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RoadAlert — Intelligent Traffic Incident Verification & Response Platform (Nexathon 26)",
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n API,WEB -c cyan,magenta \"npm run dev --workspace=apps/api\" \"npm run dev --workspace=apps/web\"",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=packages/shared && npm run build --workspace=apps/api && npm run build --workspace=apps/web",
+    "db:migrate": "npm run db:migrate --workspace=apps/api",
+    "db:seed": "npm run db:seed --workspace=apps/api",
+    "test": "npm run test --workspace=apps/api",
+    "lint": "npm run typecheck --workspace=apps/api && npm run typecheck --workspace=apps/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}

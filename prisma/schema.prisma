@@ -1,0 +1,294 @@
+// Prisma Schema for RoadAlert — Intelligent Traffic Incident Verification & Response Platform
+// Compatible with PostgreSQL 16 + PostGIS
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         String   @default("PASSENGER") // PASSENGER | EMPLOYEE | EMPLOYER | TRAFFIC_AUTHORITY | ADMIN
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  memberships    OrganizationMembership[]
+  incidents      Incident[]               @relation("ReportedIncidents")
+  evidences      IncidentEvidence[]
+  corroborations IncidentCorroboration[]
+  journeys       Journey[]
+  consents       TrackingConsent[]
+  notifications  Notification[]
+  reviews        IncidentReview[]
+  auditLogs      AuditLog[]
+  complaints     Complaint[]
+  problemReports ProblemReport[]
+
+  @@map("users")
+}
+
+model Organization {
+  id               String   @id @default(uuid())
+  name             String
+  organizationType String   @map("organization_type")
+  status           String   @default("ACTIVE")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  memberships OrganizationMembership[]
+  consents    TrackingConsent[]
+  policies    OrganizationTrackingPolicy[]
+
+  @@map("organizations")
+}
+
+model OrganizationMembership {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  userId         String   @map("user_id")
+  membershipRole String   @map("membership_role") // EMPLOYER_ADMIN | EMPLOYEE
+  status         String   @default("ACTIVE")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("organization_memberships")
+}
+
+model Incident {
+  id                     String   @id @default(uuid())
+  reporterId             String   @map("reporter_id")
+  title                  String
+  description            String
+  category               String
+  severity               String
+  latitude               Float
+  longitude              Float
+  roadName               String   @map("road_name")
+  occurrenceTime         DateTime @map("occurrence_time")
+  reportedAt             DateTime @default(now()) @map("reported_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+  status                 String   @default("REPORTED")
+  confidenceScore        Int      @default(20) @map("confidence_score")
+  verificationLevel      Int      @default(1) @map("verification_level")
+  authorityConfirmed     Boolean  @default(false) @map("authority_confirmed")
+  roadClosed             Boolean  @default(false) @map("road_closed")
+  anonymousPublicDisplay Boolean  @default(false) @map("anonymous_public_display")
+  estimatedDelayMinutes  Int      @default(15) @map("estimated_delay_minutes")
+  idempotencyKey         String?  @unique @map("idempotency_key")
+  demoData               Boolean  @default(false) @map("demo_data")
+
+  reporter       User                    @relation("ReportedIncidents", fields: [reporterId], references: [id])
+  evidences      IncidentEvidence[]
+  corroborations IncidentCorroboration[]
+  reviews        IncidentReview[]
+  complaints     Complaint[]
+  notifications  Notification[]
+
+  @@index([category])
+  @@index([status])
+  @@index([severity])
+  @@index([reportedAt])
+  @@map("incidents")
+}
+
+model IncidentEvidence {
+  id               String   @id @default(uuid())
+  incidentId       String   @map("incident_id")
+  submittedBy      String   @map("submitted_by")
+  evidenceType     String   @map("evidence_type") // PHOTO | VIDEO | GPS_TELEMETRY | AUTHORITY_FIELD_INSPECTION | LOCATION_PROXIMITY
+  storageKey       String?  @map("storage_key")
+  metadata         Json?
+  validationStatus String   @default("VALIDATED") @map("validation_status")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  incident  Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  submitter User     @relation(fields: [submittedBy], references: [id])
+
+  @@index([incidentId])
+  @@map("incident_evidences")
+}
+
+model IncidentCorroboration {
+  id                String   @id @default(uuid())
+  incidentId        String   @map("incident_id")
+  userId            String   @map("user_id")
+  corroborationType String   @map("corroboration_type") // CORROBORATE | DISPUTE | GPS_CONGESTION
+  latitude          Float?
+  longitude         Float?
+  speedKmh          Float?   @map("speed_kmh")
+  notes             String?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([incidentId, userId, corroborationType])
+  @@map("incident_corroborations")
+}
+
+model Journey {
+  id                   String    @id @default(uuid())
+  employeeId           String    @map("employee_id")
+  origin               String
+  destination          String
+  originLat            Float?    @map("origin_lat")
+  originLng            Float?    @map("origin_lng")
+  destLat              Float?    @map("dest_lat")
+  destLng              Float?    @map("dest_lng")
+  startedAt            DateTime  @default(now()) @map("started_at")
+  endedAt              DateTime? @map("ended_at")
+  status               String    @default("ACTIVE") // ACTIVE | COMPLETED | DELAYED | TERMINATED
+  consentRecordId      String    @map("consent_record_id")
+  estimatedDelayMin    Int       @default(0) @map("estimated_delay_min")
+  verifiedDelayMin     Int       @default(0) @map("verified_delay_min")
+  verificationLevel    Int       @default(1) @map("verification_level")
+  manualSelfReported   Boolean   @default(false) @map("manual_self_reported")
+  manualStatusNote     String?   @map("manual_status_note")
+  demoData             Boolean   @default(false) @map("demo_data")
+
+  employee      User                @relation(fields: [employeeId], references: [id])
+  consentRecord TrackingConsent     @relation(fields: [consentRecordId], references: [id])
+  checkpoints   JourneyCheckpoint[]
+  notifications Notification[]
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("journeys")
+}
+
+model JourneyCheckpoint {
+  id         String   @id @default(uuid())
+  journeyId  String   @map("journey_id")
+  latitude   Float
+  longitude  Float
+  recordedAt DateTime @default(now()) @map("recorded_at")
+  speed      Float    @default(0)
+  sourceType String   @default("BROWSER_GPS") @map("source_type")
+  statusNote String?  @map("status_note")
+
+  journey Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+
+  @@index([journeyId])
+  @@map("journey_checkpoints")
+}
+
+model TrackingConsent {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  organizationId String    @map("organization_id")
+  policyVersion  String    @map("policy_version")
+  purpose        String
+  sharePreciseCoords Boolean @default(false) @map("share_precise_coords")
+  grantedAt      DateTime  @default(now()) @map("granted_at")
+  revokedAt      DateTime? @map("revoked_at")
+
+  user         User         @relation(fields: [userId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+  journeys     Journey[]
+
+  @@index([userId, organizationId])
+  @@map("tracking_consents")
+}
+
+model OrganizationTrackingPolicy {
+  id                     String   @id @default(uuid())
+  organizationId         String   @unique @map("organization_id")
+  trackingMode           String   @default("SESSION_ONLY_EXPLICIT") @map("tracking_mode")
+  retentionDays          Int      @default(30) @map("retention_days")
+  requireConsent         Boolean  @default(true) @map("require_consent")
+  allowPreciseCoordinate Boolean  @default(false) @map("allow_precise_coordinate")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("organization_tracking_policies")
+}
+
+model Notification {
+  id             String    @id @default(uuid())
+  userId         String    @map("user_id")
+  type           String    // HIGH_CONFIDENCE_ALERT | ROAD_CLOSURE | STATUS_CHANGE | COMMUTE_DELAY | CORROBORATION
+  title          String
+  message        String
+  incidentId     String?   @map("incident_id")
+  journeyId      String?   @map("journey_id")
+  deliveryStatus String    @default("DELIVERED") @map("delivery_status")
+  readAt         DateTime? @map("read_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  incident Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  journey  Journey?  @relation(fields: [journeyId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+model IncidentReview {
+  id         String   @id @default(uuid())
+  incidentId String   @map("incident_id")
+  reviewerId String   @map("reviewer_id")
+  decision   String
+  reason     String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  reviewer User     @relation(fields: [reviewerId], references: [id])
+
+  @@index([incidentId])
+  @@map("incident_reviews")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?  @map("actor_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Complaint {
+  id         String   @id @default(uuid())
+  reporterId String   @map("reporter_id")
+  incidentId String   @map("incident_id")
+  reason     String
+  status     String   @default("OPEN") // OPEN | UNDER_INVESTIGATION | DISMISSED | ACTIONED
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  reporter User     @relation(fields: [reporterId], references: [id])
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@map("complaints")
+}
+
+model ProblemReport {
+  id           String   @id @default(uuid())
+  createdBy    String   @map("created_by")
+  locationName String   @map("location_name")
+  periodStart  DateTime @map("period_start")
+  periodEnd    DateTime @map("period_end")
+  reportData   Json     @map("report_data")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  creator User @relation(fields: [createdBy], references: [id])
+
+  @@map("problem_reports")
+}
