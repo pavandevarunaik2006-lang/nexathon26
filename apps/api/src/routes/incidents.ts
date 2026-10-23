@@ -447,6 +447,261 @@ incidentsRouter.get('/:id', async (req, res, next) => {
 
 // GET /api/v1/incidents/:id/gps-evidence — Retrieve authorized GPS telemetry evidence for an incident
 incidentsRouter.get('/:id/gps-evidence', authenticate, async (req, res, next) => {
+<<<<<<< HEAD
+=======
+  try {
+    const incidentId = String(req.params.id);
+    const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
+    if (incRes.rows.length === 0) {
+      throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
+    }
+    const inc = incRes.rows[0];
+
+    // Authorization: Only TRAFFIC_AUTHORITY, ADMIN, EMPLOYER, or the user who reported
+    const userRole = req.user!.role;
+    const isReporter = inc.reporter_id === req.user!.userId;
+    const isAuthorizedRole = ['TRAFFIC_AUTHORITY', 'ADMIN', 'EMPLOYER'].includes(userRole);
+
+    if (!isAuthorizedRole && !isReporter) {
+      throw new ApiError(
+        403,
+        'FORBIDDEN',
+        'Not authorized to inspect raw GPS evidence for this incident'
+      );
+    }
+
+    const corrRes = await db.query<any>(
+      `SELECT ic.*, u.role as user_role
+       FROM incident_corroborations ic
+       JOIN users u ON u.id = ic.user_id
+       WHERE ic.incident_id = $1 AND ic.corroboration_type = 'GPS_CONGESTION'
+       ORDER BY ic.created_at DESC`,
+      [incidentId]
+    );
+
+    const evidRes = await db.query<any>(
+      `SELECT ie.*, u.role as submitter_role
+       FROM incident_evidences ie
+       JOIN users u ON u.id = ie.submitted_by
+       WHERE ie.incident_id = $1 AND ie.evidence_type = 'GPS_TELEMETRY'
+       ORDER BY ie.created_at DESC`,
+      [incidentId]
+    );
+
+    // Redact raw user IDs unless ADMIN or the reporter themselves
+    const canSeePii = userRole === 'ADMIN' || isReporter;
+
+    const corroborations = corrRes.rows.map((c: any) => ({
+      id: c.id,
+      corroborationType: c.corroboration_type,
+      latitude: Number(c.latitude),
+      longitude: Number(c.longitude),
+      speedKmh: c.speed_kmh !== null ? Number(c.speed_kmh) : null,
+      notes: c.notes,
+      createdAt: c.created_at,
+      submitterRole: c.user_role,
+      userId: canSeePii ? c.user_id : undefined,
+      submitterHash: crypto.createHash('sha256').update(c.user_id).digest('hex').slice(0, 8),
+    }));
+
+    const telemetryEvidences = evidRes.rows.map((e: any) => ({
+      id: e.id,
+      evidenceType: e.evidence_type,
+      metadata: e.metadata,
+      validationStatus: e.validation_status,
+      createdAt: e.created_at,
+      submitterRole: e.submitter_role,
+      submittedBy: canSeePii ? e.submitted_by : undefined,
+      submitterHash: crypto.createHash('sha256').update(e.submitted_by).digest('hex').slice(0, 8),
+    }));
+
+    // Record audit trail for telemetry access
+    await db.query(
+      `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, 'INCIDENT_GPS_EVIDENCE_ACCESSED', 'INCIDENT', $3, $4)`,
+      [
+        crypto.randomUUID(),
+        req.user!.userId,
+        incidentId,
+        JSON.stringify({
+          corroborationsCount: corroborations.length,
+          evidencesCount: telemetryEvidences.length,
+        }),
+      ]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        incidentId,
+        incidentTitle: inc.title,
+        roadName: inc.road_name,
+        confidenceScore: Number(inc.confidence_score),
+        verificationLevel: Number(inc.verification_level),
+        gpsCongestionCorroborations: corroborations,
+        gpsTelemetryEvidences: telemetryEvidences,
+        totalGpsSignals: corroborations.length + telemetryEvidences.length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PATCH /api/v1/incidents/:id — Update severity or status by authorized users
+incidentsRouter.patch(
+
+  '/:id',
+  authenticate,
+  requireRoles('TRAFFIC_AUTHORITY', 'ADMIN'),
+  async (req, res, next) => {
+    try {
+      const incidentId = String(req.params.id);
+      const PatchSchema = z.object({
+        severity: z.enum(INCIDENT_SEVERITIES).optional(),
+        status: z.enum(INCIDENT_STATUSES).optional(),
+        estimatedDelayMinutes: z.number().min(0).max(720).optional(),
+        roadClosed: z.boolean().optional(),
+        reason: z.string().min(3).max(500).optional(),
+      });
+      const parsed = PatchSchema.parse(req.body);
+
+      const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
+      if (incRes.rows.length === 0) {
+        throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
+      }
+      const current = incRes.rows[0];
+
+      await db.query(
+        `UPDATE incidents
+         SET severity = $1,
+             status = $2,
+             estimated_delay_minutes = $3,
+             road_closed = $4,
+             updated_at = NOW()
+         WHERE id = $5`,
+        [
+          parsed.severity ?? current.severity,
+          parsed.status ?? current.status,
+          parsed.estimatedDelayMinutes ?? current.estimated_delay_minutes,
+          parsed.roadClosed ?? current.road_closed,
+          incidentId,
+        ]
+      );
+
+      await db.query(
+        `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, $2, 'INCIDENT_PATCHED', 'INCIDENT', $3, $4)`,
+        [
+          crypto.randomUUID(),
+          req.user!.userId,
+          incidentId,
+          JSON.stringify(parsed),
+        ]
+      );
+
+      const breakdown = await recalculateIncidentConfidence(
+        incidentId,
+        req.user!.userId,
+        'INCIDENT_PATCHED'
+      );
+      const updated = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
+
+      res.json({
+        success: true,
+        data: {
+          incident: formatIncidentRow(updated.rows[0]),
+          confidenceBreakdown: breakdown,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/incidents/:id/evidence — Attach photo/video or telemetry evidence
+incidentsRouter.post(
+  '/:id/evidence',
+  authenticate,
+  upload.single('file'),
+  async (req, res, next) => {
+    try {
+      const incidentId = String(req.params.id);
+      const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
+      if (incRes.rows.length === 0) {
+        throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
+      }
+
+      const evidenceType = req.file
+        ? req.file.mimetype.startsWith('video/')
+          ? 'VIDEO'
+          : 'PHOTO'
+        : req.body?.evidenceType || 'PHOTO';
+
+      if (!['PHOTO', 'VIDEO', 'GPS_TELEMETRY', 'LOCATION_PROXIMITY'].includes(evidenceType)) {
+        throw new ApiError(400, 'INVALID_EVIDENCE_TYPE', 'Invalid evidence type');
+      }
+
+      const storageKey = req.file ? req.file.filename : req.body?.storageKey || 'uploaded-evidence.jpg';
+      const metadata = {
+        originalName: req.file?.originalname || req.body?.caption || 'Scene evidence',
+        mimeType: req.file?.mimetype || 'image/jpeg',
+        sizeBytes: req.file?.size || 0,
+        caption: req.body?.caption || 'User submitted verification evidence',
+        latitude: req.body?.latitude ? Number(req.body.latitude) : undefined,
+        longitude: req.body?.longitude ? Number(req.body.longitude) : undefined,
+      };
+
+      const evidenceId = crypto.randomUUID();
+      await db.query(
+        `INSERT INTO incident_evidences (id, incident_id, submitted_by, evidence_type, storage_key, metadata, validation_status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'VALIDATED')`,
+        [
+          evidenceId,
+          incidentId,
+          req.user!.userId,
+          evidenceType,
+          storageKey,
+          JSON.stringify(metadata),
+        ]
+      );
+
+      await db.query(
+        `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, $2, 'EVIDENCE_SUBMITTED', 'INCIDENT', $3, $4)`,
+        [
+          crypto.randomUUID(),
+          req.user!.userId,
+          incidentId,
+          JSON.stringify({ evidenceId, evidenceType, storageKey }),
+        ]
+      );
+
+      const breakdown = await recalculateIncidentConfidence(
+        incidentId,
+        req.user!.userId,
+        'EVIDENCE_ATTACHED'
+      );
+
+      res.status(201).json({
+        success: true,
+        data: {
+          evidenceId,
+          evidenceType,
+          storageKey,
+          confidenceBreakdown: breakdown,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/v1/incidents/:id/corroborate — Submit independent corroboration, dispute, or GPS speed corroboration
+incidentsRouter.post('/:id/corroborate', authenticate, async (req, res, next) => {
+>>>>>>> 91629bb (Save GPS tracking implementation)
   try {
     const incidentId = String(req.params.id);
     const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
