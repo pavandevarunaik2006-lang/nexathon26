@@ -79,6 +79,29 @@ export async function authenticate(
   }
 }
 
+export async function optionalAuthenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    let token: string | undefined;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+    } else if (req.cookies?.accessToken) {
+      token = req.cookies.accessToken;
+    }
+    if (token) {
+      const decoded = jwt.verify(token, ACCESS_SECRET) as AuthTokenPayload;
+      req.user = decoded;
+    }
+  } catch {
+    // Graceful fallback for optional auth
+  }
+  next();
+}
+
 export function requireRoles(...allowedRoles: UserRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {

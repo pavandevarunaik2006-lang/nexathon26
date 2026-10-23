@@ -33,6 +33,12 @@ import {
   ShieldCheck,
   HeartPulse,
   ShieldAlert,
+  Search,
+  Globe,
+  Building2,
+  MapPin,
+  ExternalLink,
+  Sparkles,
 } from 'lucide-react';
 import {
   REGIONAL_DESTINATIONS,
@@ -57,8 +63,18 @@ import {
 } from '../incidents/MapIncidentReportOverlay';
 import { HospitalLifelineDrawer } from '../lifeline/HospitalLifelineDrawer';
 import { CorridorFragilityModal } from '../fragility/CorridorFragilityModal';
+import { RoadAlertImpactSimulatorModal } from '../simulation/RoadAlertImpactSimulatorModal';
+import type { SimulationResult } from '@roadalert/shared';
+import { CORRIDOR_GRAPH_EDGES, CORRIDOR_GRAPH_NODES } from '@roadalert/shared';
 import { DecisionCriticalQueueModal } from '../verification/DecisionCriticalQueueModal';
 import { apiRequest } from '../../lib/api';
+import { GoogleSatelliteMap } from './GoogleSatelliteMap';
+import { GoogleCloudSetupModal } from './GoogleCloudSetupModal';
+import {
+  getGoogleMapsConfig,
+  loadGoogleMapsApi,
+  type GoogleMapsConfig,
+} from '../../services/googleMapsLoader';
 
 // Coastal NH-66 Backbone Polyline (Thokkottu -> Pumpwell -> Nanthoor -> KPT -> Kuloor -> Baikampady -> Surathkal -> Mulki -> Padubidri -> Kaup -> Udupi -> Manipal)
 const NH66_CORRIDOR_POLYLINE: [number, number][] = [
@@ -408,6 +424,8 @@ export interface CorridorIntelligenceMapProps {
     decision: string;
     timestamp: number;
   } | null;
+  primaryRoute?: { points: [number, number][]; summary?: string; roadClosureAvoided?: boolean } | null;
+  alternativeRoutes?: { points: [number, number][]; summary?: string }[] | null;
 }
 
 const ALL_VEHICLE_CATEGORIES: VehicleCategoryGroup[] = [
@@ -425,11 +443,36 @@ export function CorridorIntelligenceMap({
   onFocusCoordsChange,
   heightClass = 'h-[520px]',
   externalIncidentEvent = null,
+  primaryRoute = null,
+  alternativeRoutes = null,
 }: CorridorIntelligenceMapProps) {
   const { showToast } = useToast();
   const prefersReducedMotion = Boolean(useReducedMotion());
 
-  const [mapStyle, setMapStyle] = useState<'map' | 'satellite' | 'terrain'>('map');
+  const [mapStyle, setMapStyle] = useState<'satellite' | 'hybrid' | 'map' | 'terrain'>('satellite');
+  const [googleMapsConfig, setGoogleMapsConfig] = useState<GoogleMapsConfig>(getGoogleMapsConfig());
+  const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
+  const [useGoogleEngine, setUseGoogleEngine] = useState(false);
+  const [isGoogleSetupOpen, setIsGoogleSetupOpen] = useState(false);
+
+  // Real-world place, hospital and junction search state
+  const [placeSearchQuery, setPlaceSearchQuery] = useState('');
+  const [placeSearchResults, setPlaceSearchResults] = useState<
+    Array<{
+      id: string;
+      label: string;
+      sublabel?: string;
+      category: 'HOSPITAL' | 'CORRIDOR' | 'JUNCTION' | 'COORDINATE' | 'ADDRESS';
+      lat: number;
+      lng: number;
+    }>
+  >([]);
+  const [isPlaceSearchOpen, setIsPlaceSearchOpen] = useState(false);
+  const [activeSearchPin, setActiveSearchPin] = useState<{
+    label: string;
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [darkTacticalTiles, setDarkTacticalTiles] = useState(false);
   const [showCorridorLine, setShowCorridorLine] = useState(true);
   const [showCongestionLayer, setShowCongestionLayer] = useState(true);
@@ -440,6 +483,9 @@ export function CorridorIntelligenceMap({
   const [showFragilityHeatmap, setShowFragilityHeatmap] = useState(false);
   const [selectedHospital, setSelectedHospital] = useState<LifelineHospital | null>(null);
   const [isFragilityModalOpen, setIsFragilityModalOpen] = useState(false);
+  const [isImpactSimulatorOpen, setIsImpactSimulatorOpen] = useState(false);
+  const [activeSimulation, setActiveSimulation] = useState<SimulationResult | null>(null);
+  const [simulatorInitialEdgeId, setSimulatorInitialEdgeId] = useState<string | null>(null);
   const [isCriticalQueueOpen, setIsCriticalQueueOpen] = useState(false);
   const [fragilityData, setFragilityData] = useState<CorridorFragilityRank[]>([]);
   const [simulationSpeed, setSimulationSpeed] = useState<number>(1);
@@ -474,10 +520,155 @@ export function CorridorIntelligenceMap({
   const effectiveFocus = focusCoords || internalFocus;
 
   useEffect(() => {
+    const cfg = getGoogleMapsConfig();
+    setGoogleMapsConfig(cfg);
+    if (cfg.isConfigured) {
+      loadGoogleMapsApi()
+        .then(() => {
+          setGoogleMapsLoaded(true);
+          setUseGoogleEngine(true);
+        })
+        .catch((err) => {
+          console.warn('[RoadAlert] Google Maps Platform notice:', err);
+          setGoogleMapsLoaded(false);
+          setUseGoogleEngine(false);
+        });
+    }
+  }, []);
+
+  const handleSearchChange = async (query: string) => {
+    setPlaceSearchQuery(query);
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      setPlaceSearchResults([]);
+      setIsPlaceSearchOpen(false);
+      return;
+    }
+
+    setIsPlaceSearchOpen(true);
+    const results: Array<{
+      id: string;
+      label: string;
+      sublabel?: string;
+      category: 'HOSPITAL' | 'CORRIDOR' | 'JUNCTION' | 'COORDINATE' | 'ADDRESS';
+      lat: number;
+      lng: number;
+    }> = [];
+
+    // 1. Check coordinates (e.g. 12.87, 74.85)
+    const coordMatch = q.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1]);
+      const lng = parseFloat(coordMatch[3]);
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        results.push({
+          id: `coord-${lat}-${lng}`,
+          label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+          sublabel: 'Custom Geographic Coordinate Point',
+          category: 'COORDINATE',
+          lat,
+          lng,
+        });
+      }
+    }
+
+    // 2. Check Lifeline Hospitals
+    LIFELINE_HOSPITALS.forEach((hosp) => {
+      if (
+        hosp.name.toLowerCase().includes(q) ||
+        hosp.city.toLowerCase().includes(q) ||
+        'hospital'.includes(q)
+      ) {
+        results.push({
+          id: `hosp-${hosp.id}`,
+          label: hosp.name,
+          sublabel: `${hosp.city} • Level ${hosp.traumaLevel} Trauma • ${hosp.emergencyBeds} Beds`,
+          category: 'HOSPITAL',
+          lat: hosp.lat,
+          lng: hosp.lng,
+        });
+      }
+    });
+
+    // 3. Check Regional Corridor Destinations & Junctions
+    REGIONAL_DESTINATIONS.forEach((dest) => {
+      if (
+        dest.name.toLowerCase().includes(q) ||
+        dest.corridor.toLowerCase().includes(q)
+      ) {
+        results.push({
+          id: `dest-${dest.name}`,
+          label: dest.name,
+          sublabel: `${dest.corridor} Corridor Checkpoint`,
+          category: 'JUNCTION',
+          lat: dest.lat,
+          lng: dest.lng,
+        });
+      }
+    });
+
+    // 4. Query backend geocoding / gazetteer search
+    if (q.length >= 2) {
+      try {
+        const res = await apiRequest<any>(`/locations/search?q=${encodeURIComponent(query)}&limit=5`);
+        const suggestions = res?.suggestions || res?.data?.suggestions || [];
+        suggestions.forEach((s: any) => {
+          if (!results.some((r) => Math.abs(r.lat - s.lat) < 0.001 && Math.abs(r.lng - s.lng) < 0.001)) {
+            results.push({
+              id: s.id || `loc-${s.lat}-${s.lng}`,
+              label: s.label,
+              sublabel: s.secondaryLabel || s.roadName,
+              category: 'ADDRESS',
+              lat: Number(s.lat),
+              lng: Number(s.lng),
+            });
+          }
+        });
+      } catch {
+        // Fallback continues with local results
+      }
+    }
+
+    setPlaceSearchResults(results.slice(0, 8));
+  };
+
+  const handleSelectSearchResult = (result: {
+    label: string;
+    lat: number;
+    lng: number;
+  }) => {
+    setInternalFocus([result.lat, result.lng]);
+    onFocusCoordsChange?.([result.lat, result.lng]);
+    setZoom(14);
+    setActiveSearchPin(result);
+    setIsPlaceSearchOpen(false);
+    setPlaceSearchQuery(result.label);
+
+    if (isPlacementMode) {
+      setDraftIncidentCoords([result.lat, result.lng]);
+      showToast({
+        type: 'info',
+        title: 'Incident Pin Positioned',
+        message: `Set draft incident at ${result.label}`,
+      });
+    } else {
+      showToast({
+        type: 'info',
+        title: 'Map Centered',
+        message: `Focused on ${result.label}`,
+      });
+    }
+  };
+
+  useEffect(() => {
     if (showFragilityHeatmap && fragilityData.length === 0) {
       apiRequest<any>('/corridor/fragility')
         .then((res) => {
-          if (res?.data?.segments) {
+          const segs = res?.segments || res?.data?.segments;
+          if (segs) {
+            setFragilityData(segs);
+          }
+          if (false) {
             setFragilityData(res.data.segments);
           }
         })
@@ -935,7 +1126,7 @@ export function CorridorIntelligenceMap({
   ).length;
 
   const tileUrl = useMemo(() => {
-    if (mapStyle === 'satellite') {
+    if (mapStyle === 'satellite' || mapStyle === 'hybrid') {
       return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
     }
     if (mapStyle === 'terrain') {
@@ -988,6 +1179,93 @@ export function CorridorIntelligenceMap({
 
         {/* Right Compact Map & Incident Controls */}
         <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+          {/* Google Maps Platform Status / Setup Modal Trigger */}
+          <button
+            type="button"
+            data-testid="google-maps-status-pill"
+            onClick={() => setIsGoogleSetupOpen(true)}
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-[0.97] pointer-events-auto ${
+              googleMapsLoaded && useGoogleEngine
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-500 shadow-emerald-500/20'
+                : googleMapsConfig.isConfigured
+                ? 'glass-pill text-blue-700 border-blue-300'
+                : 'glass-pill text-amber-800 border-amber-300 bg-amber-50/80 hover:bg-amber-100'
+            }`}
+            title="Google Maps Platform Satellite Mode status and configuration guide"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>
+              {googleMapsLoaded && useGoogleEngine
+                ? 'Google Satellite (Active)'
+                : googleMapsConfig.isConfigured
+                ? 'Google Maps SDK (Ready)'
+                : 'Google Maps Key (Pending)'}
+            </span>
+          </button>
+
+          {/* Real-World Place, Hospital & Junction Search Bar */}
+          <div className="relative pointer-events-auto">
+            <div className="flex items-center gap-1 px-3 py-1.5 rounded-2xl glass-pill border-white/80 shadow-sm bg-white/80 backdrop-blur-md">
+              <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <input
+                type="text"
+                value={placeSearchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => {
+                  if (placeSearchQuery) setIsPlaceSearchOpen(true);
+                }}
+                placeholder="Search hospital, road, junction..."
+                className="bg-transparent text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none w-44 sm:w-56"
+              />
+              {placeSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlaceSearchQuery('');
+                    setPlaceSearchResults([]);
+                    setIsPlaceSearchOpen(false);
+                    setActiveSearchPin(null);
+                  }}
+                  className="p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Suggestions Dropdown */}
+            {isPlaceSearchOpen && placeSearchResults.length > 0 && (
+              <div className="absolute top-full right-0 mt-1.5 w-80 max-h-72 overflow-y-auto bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/80 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Search Results ({placeSearchResults.length})
+                </div>
+                {placeSearchResults.map((res) => (
+                  <button
+                    key={res.id}
+                    type="button"
+                    onClick={() => handleSelectSearchResult(res)}
+                    className="w-full text-left p-2 rounded-xl text-xs hover:bg-blue-50/90 transition-colors flex items-start gap-2 border border-transparent hover:border-blue-200"
+                  >
+                    <span className="text-sm mt-0.5">
+                      {res.category === 'HOSPITAL'
+                        ? '🏥'
+                        : res.category === 'CORRIDOR'
+                        ? '🛣️'
+                        : res.category === 'COORDINATE'
+                        ? '🌐'
+                        : '📍'}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-slate-900 truncate">{res.label}</div>
+                      {res.sublabel && (
+                        <div className="text-[10px] text-slate-500 truncate">{res.sublabel}</div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {/* Report Incident Directly on Map Toggle */}
           <button
             type="button"
@@ -1057,6 +1335,25 @@ export function CorridorIntelligenceMap({
           >
             <HeartPulse className="w-3.5 h-3.5" />
             <span>Lifelines</span>
+          </button>
+
+          {/* Open RoadAlert Impact Simulator Modal */}
+          <button
+            type="button"
+            data-testid="open-impact-simulator-btn"
+            onClick={() => setIsImpactSimulatorOpen(true)}
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1.5 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+              activeSimulation
+                ? 'bg-gradient-to-r from-amber-600 to-rose-600 text-white border-amber-500 shadow-amber-500/40 animate-pulse'
+                : 'text-slate-800 hover:bg-white/80'
+            }`}
+            title="RoadAlert Impact Simulator: What-if road disruption modeling & emergency decisions"
+          >
+            <FlaskConical className={`w-3.5 h-3.5 ${activeSimulation ? 'text-white' : 'text-amber-600'}`} />
+            <span>Impact Simulator</span>
+            {activeSimulation && (
+              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+            )}
           </button>
 
           {/* Toggle Corridor Fragility Heatmap */}
@@ -1365,7 +1662,7 @@ export function CorridorIntelligenceMap({
               : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
           }`}
         >
-          <span>Map</span>
+          <span>Roadmap</span>
         </button>
         <button
           type="button"
@@ -1377,6 +1674,18 @@ export function CorridorIntelligenceMap({
           }`}
         >
           <span>Satellite</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMapStyle('hybrid')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            mapStyle === 'hybrid'
+              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/40'
+              : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+          }`}
+          title="Hybrid: satellite imagery with readable road & street labels"
+        >
+          <span>Hybrid</span>
         </button>
         <button
           type="button"
@@ -1430,7 +1739,30 @@ export function CorridorIntelligenceMap({
         </div>
       )}
 
-      <MapContainer
+      {googleMapsLoaded && useGoogleEngine ? (
+        <GoogleSatelliteMap
+          incidents={mergedIncidents}
+          selectedIncidentId={selectedIncidentId}
+          onSelectIncident={onSelectIncident}
+          focusCoords={effectiveFocus}
+          heightClass={heightClass}
+          isPlacementMode={isPlacementMode}
+          onPickLocation={(lat, lng) => setDraftIncidentCoords([lat, lng])}
+          draftIncidentCoords={draftIncidentCoords}
+          showVehicles={showVehicles}
+          vehicles={vehiclesRef.current}
+          showLandmarks={showLandmarks}
+          showLifelines={showLifelines}
+          onSelectHospital={(hosp) => setSelectedHospital(hosp)}
+          trafficSegments={trafficSegments}
+          showCongestionLayer={showCongestionLayer}
+          primaryRoute={primaryRoute}
+          alternativeRoutes={alternativeRoutes}
+          mapType={mapStyle === 'map' ? 'roadmap' : mapStyle === 'terrain' ? 'roadmap' : mapStyle}
+          onMapTypeChange={(t) => setMapStyle(t === 'roadmap' ? 'map' : t)}
+        />
+      ) : (
+        <MapContainer
         center={[12.96, 74.82]}
         zoom={10}
         className={`w-full ${heightClass} z-0 ${isPlacementMode ? 'cursor-crosshair' : ''}`}
@@ -1438,12 +1770,30 @@ export function CorridorIntelligenceMap({
       >
         <TileLayer
           key={mapStyle}
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url={tileUrl}
+          attribution='&copy; <a href="https://www.esri.com/">Esri</a>, Earthstar Geographics'
           eventHandlers={{
             tileerror: () => setTileError(true),
           }}
         />
+
+        {/* Hybrid Satellite Transportation & Street Label Overlays */}
+        {mapStyle === 'hybrid' && (
+          <TileLayer
+            key="hybrid-transportation-overlay"
+            url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"
+            opacity={0.88}
+            zIndex={20}
+          />
+        )}
+        {mapStyle === 'hybrid' && (
+          <TileLayer
+            key="hybrid-labels-overlay"
+            url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+            opacity={0.92}
+            zIndex={21}
+          />
+        )}
 
         <MapViewportController
           focusCoords={effectiveFocus}
@@ -1468,6 +1818,107 @@ export function CorridorIntelligenceMap({
               : ''
           }
         />
+
+        {/* Active Real-World Place Search Target Pin */}
+        {activeSearchPin && (
+          <Marker
+            position={[activeSearchPin.lat, activeSearchPin.lng]}
+            icon={L.divIcon({
+              className: 'search-target-pin',
+              html: `
+                <div style="position: relative; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                  <div style="position: absolute; inset: 0; border-radius: 9999px; background: rgba(6, 182, 212, 0.4); animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+                  <div style="width: 24px; height: 24px; border-radius: 9999px; background: #06b6d4; border: 2.5px solid #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: #ffffff; font-size: 11px; font-weight: bold;">
+                    📍
+                  </div>
+                </div>
+              `,
+              iconSize: [32, 32],
+              iconAnchor: [16, 16],
+            })}
+          >
+            <Tooltip permanent direction="top" offset={[0, -16]} opacity={0.98}>
+              <div className="p-1 font-bold text-xs text-slate-900">
+                <div>{activeSearchPin.label}</div>
+                <div className="text-[10px] font-mono text-cyan-700">
+                  {activeSearchPin.lat.toFixed(4)}, {activeSearchPin.lng.toFixed(4)}
+                </div>
+              </div>
+            </Tooltip>
+          </Marker>
+        )}
+
+        {/* Primary Route Layer (High-Contrast Cyan Casing on Satellite Imagery) */}
+        {primaryRoute?.points && primaryRoute.points.length > 1 && (
+          <>
+            <Polyline
+              positions={primaryRoute.points}
+              pathOptions={{
+                color: '#0f172a',
+                weight: 8,
+                opacity: 0.8,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            <Polyline
+              positions={primaryRoute.points}
+              pathOptions={{
+                color: '#06b6d4',
+                weight: 4.5,
+                opacity: 1,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            >
+              <Tooltip sticky direction="top" opacity={0.98}>
+                <div className="text-xs p-1 space-y-1">
+                  <div className="font-bold text-slate-900 flex items-center gap-1">
+                    <span>🛡️ Primary Emergency Route</span>
+                    {primaryRoute.roadClosureAvoided && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-800 font-bold">
+                        Closure Avoided
+                      </span>
+                    )}
+                  </div>
+                  {primaryRoute.summary && (
+                    <div className="text-[11px] text-slate-600">{primaryRoute.summary}</div>
+                  )}
+                  <div className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 p-1 rounded border border-emerald-200">
+                    ✓ Verified by RoadAlert Emergency Engine (avoids confirmed closures).
+                  </div>
+                </div>
+              </Tooltip>
+            </Polyline>
+          </>
+        )}
+
+        {/* Alternative Routes Layer (High-Contrast Amber) */}
+        {alternativeRoutes &&
+          alternativeRoutes.map((alt, idx) => {
+            if (!alt.points || alt.points.length < 2) return null;
+            return (
+              <Polyline
+                key={`alt-route-${idx}`}
+                positions={alt.points}
+                pathOptions={{
+                  color: '#f59e0b',
+                  weight: 4,
+                  opacity: 0.9,
+                  dashArray: '6, 6',
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              >
+                <Tooltip sticky direction="top" opacity={0.96}>
+                  <div className="text-xs p-1">
+                    <div className="font-bold text-amber-800">Alternative Route #{idx + 1}</div>
+                    {alt.summary && <div className="text-[11px] text-slate-600">{alt.summary}</div>}
+                  </div>
+                </Tooltip>
+              </Polyline>
+            );
+          })}
 
         {/* NH-66 Primary Coastal Highway Route Highlight */}
         {showCorridorLine && !showCongestionLayer && (
@@ -1621,6 +2072,64 @@ export function CorridorIntelligenceMap({
             );
           })}
 
+        {/* Simulated Disruption & Detour Overlays */}
+        {activeSimulation && (
+          <>
+            {activeSimulation.rippleEffects
+              .filter((r) => r.impactClass === 'DIRECTLY_DISRUPTED')
+              .map((r) => {
+                const edge = CORRIDOR_GRAPH_EDGES.find((e) => e.id === r.edgeId);
+                if (!edge || !edge.geometry || edge.geometry.length === 0) return null;
+                return (
+                  <Polyline
+                    key={`sim-dis-${r.edgeId}`}
+                    positions={edge.geometry}
+                    pathOptions={{
+                      color: '#dc2626',
+                      weight: 8,
+                      dashArray: '8, 8',
+                      opacity: 0.95,
+                      lineCap: 'round',
+                    }}
+                  >
+                    <Tooltip sticky direction="top" opacity={0.96}>
+                      <div className="text-xs p-1 space-y-0.5">
+                        <div className="font-bold text-rose-600">⚠️ HYPOTHETICAL DISRUPTION</div>
+                        <div className="font-semibold text-slate-900">{edge.roadName}</div>
+                        <div className="text-[11px] text-slate-600">
+                          Modeled Penalty: {r.delayDeltaMin >= 999 ? 'Complete Severance' : `+${r.delayDeltaMin}m`}
+                        </div>
+                      </div>
+                    </Tooltip>
+                  </Polyline>
+                );
+              })}
+            {activeSimulation.routeEvaluation?.disruptedRoute?.edgeIds?.map((edgeId) => {
+              const edge = CORRIDOR_GRAPH_EDGES.find((e) => e.id === edgeId);
+              if (!edge || !edge.geometry || edge.geometry.length === 0) return null;
+              return (
+                <Polyline
+                  key={`sim-detour-${edgeId}`}
+                  positions={edge.geometry}
+                  pathOptions={{
+                    color: '#10b981',
+                    weight: 6,
+                    opacity: 0.9,
+                    lineCap: 'round',
+                  }}
+                >
+                  <Tooltip sticky direction="top" opacity={0.96}>
+                    <div className="text-xs p-1">
+                      <div className="font-bold text-emerald-600">✓ MODELED DETOUR CORRIDOR</div>
+                      <div className="text-slate-800 font-semibold">{edge.roadName}</div>
+                    </div>
+                  </Tooltip>
+                </Polyline>
+              );
+            })}
+          </>
+        )}
+
         {/* Clustered Incident Markers */}
         {corridorDrawComplete &&
           clusters.map((cluster, idx) => (
@@ -1705,6 +2214,7 @@ export function CorridorIntelligenceMap({
             );
           })}
       </MapContainer>
+      )}
 
       {/* Bottom Compact Legend, Vehicle Category Filters & Simulation Controls */}
       <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
@@ -1772,6 +2282,16 @@ export function CorridorIntelligenceMap({
         hospital={selectedHospital}
         onClose={() => setSelectedHospital(null)}
         onSelectOrigin={(coords) => setInternalFocus(coords)}
+        onSimulateHospitalIsolation={() => setIsImpactSimulatorOpen(true)}
+      />
+
+      {/* RoadAlert Impact Simulator Decision Intelligence Modal */}
+      <RoadAlertImpactSimulatorModal
+        isOpen={isImpactSimulatorOpen}
+        onClose={() => setIsImpactSimulatorOpen(false)}
+        onApplyToMap={(sim) => setActiveSimulation(sim)}
+        activeSimulation={activeSimulation}
+        initialDisruptionEdgeId={simulatorInitialEdgeId}
       />
 
       {/* Corridor Fragility Analysis Modal */}
@@ -1782,6 +2302,17 @@ export function CorridorIntelligenceMap({
           if (seg.geometry && seg.geometry.length > 0) {
             setInternalFocus(seg.geometry[0]);
           }
+        }}
+      />
+
+      {/* Google Cloud Platform Setup & Diagnostics Modal */}
+      <GoogleCloudSetupModal
+        isOpen={isGoogleSetupOpen}
+        onClose={() => setIsGoogleSetupOpen(false)}
+        onKeyApplied={(_newKey) => {
+          setGoogleMapsConfig(getGoogleMapsConfig());
+          setGoogleMapsLoaded(true);
+          setUseGoogleEngine(true);
         }}
       />
 

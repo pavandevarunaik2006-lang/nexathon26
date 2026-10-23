@@ -21,7 +21,7 @@ export async function getDecisionCriticalVerificationQueue(): Promise<CriticalVe
             (SELECT COUNT(*) FROM incident_corroborations ic WHERE ic.incident_id = i.id AND ic.corroboration_type = 'DISPUTE') as disp_count,
             (SELECT COUNT(*) FROM incident_evidences ie WHERE ie.incident_id = i.id) as evid_count
      FROM incidents i
-     WHERE i.status NOT IN ('RESOLVED', 'REJECTED')
+     WHERE i.status NOT IN ('RESOLVED', 'REJECTED', 'VERIFIED')
      ORDER BY i.reported_at DESC`
   );
 

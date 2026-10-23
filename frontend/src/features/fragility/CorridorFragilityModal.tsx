@@ -46,7 +46,9 @@ export function CorridorFragilityModal({
 
   if (!isOpen) return null;
 
-  const overview = data?.data;
+  const overview: FragilityOverviewResponse | undefined = (data as any)?.segments
+    ? (data as any)
+    : data?.data;
   const segments = overview?.segments || [];
   const displaySegments =
     filterLevel === 'CRITICAL_ONLY'

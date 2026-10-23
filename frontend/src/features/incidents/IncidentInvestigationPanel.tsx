@@ -61,6 +61,10 @@ export function IncidentInvestigationPanel({
     enabled: Boolean(incidentId),
   });
 
+  const trustEval = (trustData as any)?.trustEvaluation
+    ? (trustData as any).trustEvaluation
+    : trustData?.data?.trustEvaluation;
+
   const corroborateMutation = useMutation({
     mutationFn: (corroborationType: 'CORROBORATE' | 'DISPUTE' | 'GPS_CONGESTION') =>
       apiRequest<any>(`/incidents/${incidentId}/corroborate`, {
@@ -408,7 +412,7 @@ export function IncidentInvestigationPanel({
                       Multi-Evidence Trust State
                     </span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-600 text-white shadow-xs">
-                      {trustData?.data?.trustEvaluation?.trustState || incident.trustState || 'UNVERIFIED'}
+                      {trustEval?.trustState || incident.trustState || 'UNVERIFIED'}
                     </span>
                   </div>
 
@@ -416,10 +420,10 @@ export function IncidentInvestigationPanel({
                     <div className="text-[10px] uppercase font-bold text-slate-500">Operational Routing Policy</div>
                     <div className="font-extrabold text-blue-900 mt-0.5 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-blue-600" />
-                      <span>{trustData?.data?.trustEvaluation?.routingPolicyLabel || 'Caution Advisory Only'}</span>
+                      <span>{trustEval?.routingPolicyLabel || 'Caution Advisory Only'}</span>
                     </div>
                     <p className="text-[11px] text-slate-600 mt-1 leading-snug">
-                      {trustData?.data?.trustEvaluation?.explanation || 'Unverified citizen submission. Road remains passable with caution halo.'}
+                      {trustEval?.explanation || 'Unverified citizen submission. Road remains passable with caution halo.'}
                     </p>
                   </div>
                 </div>
@@ -443,28 +447,28 @@ export function IncidentInvestigationPanel({
                     <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
                       <div className="text-[10px] text-slate-500 font-semibold">Commuters</div>
                       <div className="font-bold text-slate-900 mt-0.5">
-                        {trustData?.data?.trustEvaluation?.evidenceSignals?.distinctUserCount ?? 1} Distinct
+                        {trustEval?.evidenceSignals?.distinctUserCount ?? 1} Distinct
                       </div>
                     </div>
 
                     <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
                       <div className="text-[10px] text-slate-500 font-semibold">GPS Telemetry</div>
                       <div className="font-bold text-slate-900 mt-0.5">
-                        {trustData?.data?.trustEvaluation?.evidenceSignals?.gpsSlowdownConfirmed ? '✅ Corroborated' : '⏳ Awaiting Drop'}
+                        {trustEval?.evidenceSignals?.gpsSlowdownConfirmed ? '✅ Corroborated' : '⏳ Awaiting Drop'}
                       </div>
                     </div>
 
                     <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
                       <div className="text-[10px] text-slate-500 font-semibold">Scene Media</div>
                       <div className="font-bold text-slate-900 mt-0.5">
-                        {trustData?.data?.trustEvaluation?.evidenceSignals?.mediaEvidenceCount ?? 0} Files
+                        {trustEval?.evidenceSignals?.mediaEvidenceCount ?? 0} Files
                       </div>
                     </div>
 
                     <div className="p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
                       <div className="text-[10px] text-slate-500 font-semibold">Authority Desk</div>
                       <div className="font-bold text-slate-900 mt-0.5">
-                        {trustData?.data?.trustEvaluation?.evidenceSignals?.authorityConfirmed ? '✅ Confirmed' : '⏳ Pending'}
+                        {trustEval?.evidenceSignals?.authorityConfirmed ? '✅ Confirmed' : '⏳ Pending'}
                       </div>
                     </div>
                   </div>

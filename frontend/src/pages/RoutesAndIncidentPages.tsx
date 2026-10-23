@@ -248,6 +248,7 @@ export function RoutePlannerPage() {
   const [destError, setDestError] = useState<string | null>(null);
 
   const [avoidIncidentZones, setAvoidIncidentZones] = useState(true);
+  const [routeMapStyle, setRouteMapStyle] = useState<'satellite' | 'hybrid' | 'map'>('satellite');
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [routePinsReady, setRoutePinsReady] = useState<boolean>(prefersReducedMotion);
 
@@ -990,9 +991,30 @@ export function RoutePlannerPage() {
             className={`w-full h-[560px] z-0 ${mapPickMode ? 'cursor-crosshair' : ''}`}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              key={routeMapStyle}
+              attribution='&copy; <a href="https://www.esri.com/">Esri</a>, Earthstar Geographics'
+              url={
+                routeMapStyle === 'satellite' || routeMapStyle === 'hybrid'
+                  ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                  : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              }
             />
+            {routeMapStyle === 'hybrid' && (
+              <TileLayer
+                key="route-hybrid-transp"
+                url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"
+                opacity={0.88}
+                zIndex={20}
+              />
+            )}
+            {routeMapStyle === 'hybrid' && (
+              <TileLayer
+                key="route-hybrid-labels"
+                url="https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+                opacity={0.92}
+                zIndex={21}
+              />
+            )}
 
             <RouteMapPickListener
               activeMode={mapPickMode}
@@ -1105,6 +1127,43 @@ export function RoutePlannerPage() {
                   )
               )}
           </MapContainer>
+
+          {/* Bottom-Left Map Style Switcher */}
+          <div className="absolute bottom-4 left-4 z-[400] flex items-center gap-1 p-1 rounded-2xl glass-pill border-white/80 shadow-lg pointer-events-auto">
+            <button
+              type="button"
+              onClick={() => setRouteMapStyle('satellite')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                routeMapStyle === 'satellite'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              Satellite
+            </button>
+            <button
+              type="button"
+              onClick={() => setRouteMapStyle('hybrid')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                routeMapStyle === 'hybrid'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              Hybrid
+            </button>
+            <button
+              type="button"
+              onClick={() => setRouteMapStyle('map')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                routeMapStyle === 'map'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              Roadmap
+            </button>
+          </div>
         </div>
       </div>
     </div>

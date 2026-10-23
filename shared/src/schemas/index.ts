@@ -166,3 +166,36 @@ export const AdminCreateOrganizationSchema = z.object({
   name: z.string().min(3).max(150),
   organizationType: z.string().min(2).max(80),
 });
+
+
+export const HypotheticalDisruptionSchema = z.object({
+  id: z.string().optional(),
+  edgeId: z.string().min(1, 'Edge ID is required'),
+  roadName: z.string().min(1, 'Road name is required'),
+  disruptionType: z.enum([
+    'COMPLETE_CLOSURE',
+    'PARTIAL_RESTRICTION',
+    'CAPACITY_REDUCTION',
+    'TRAVEL_COST_PENALTY',
+  ]),
+  severity: z.enum(['CRITICAL', 'HIGH', 'MODERATE', 'LOW']),
+  delayPenaltyMinutes: z.number().min(0).max(1440),
+  verificationAssumption: z
+    .enum(['CONFIRMED_CLOSURE', 'UNVERIFIED_ASSUMPTION'])
+    .default('CONFIRMED_CLOSURE'),
+  associatedIncidentId: z.string().optional().nullable(),
+  notes: z.string().max(500).optional(),
+});
+
+export const RunImpactSimulationSchema = z.object({
+  scenarioId: z.string().optional(),
+  name: z.string().min(2).max(100).default('Hypothetical Disruption Simulation'),
+  description: z.string().max(500).optional().default('What-If Scenario Network Evaluation'),
+  disruptions: z
+    .array(HypotheticalDisruptionSchema)
+    .min(1, 'At least one disruption must be configured'),
+  focusHospitalId: z.string().optional(),
+  testOriginNodeId: z.string().optional(),
+  testDestinationNodeId: z.string().optional(),
+  alternateInterventionEdgeId: z.string().optional(),
+});

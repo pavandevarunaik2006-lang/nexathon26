@@ -100,7 +100,10 @@ export function DecisionCriticalQueueModal({
 
   if (!isOpen) return null;
 
-  const items = data?.data?.items || [];
+  const queuePayload = (data as any)?.items ? (data as any) : data?.data;
+  const items: CriticalVerificationItem[] = queuePayload?.items || [];
+  const urgentCount = queuePayload?.urgentCount ?? 0;
+  const highRiskCount = queuePayload?.highRiskCount ?? 0;
   const displayItems =
     filterBand === 'URGENT'
       ? items.filter((i) => i.priorityBand === 'URGENT_EMERGENCY_IMPACT')
@@ -126,7 +129,7 @@ export function DecisionCriticalQueueModal({
                   Feature 2: Decision-Critical Queue
                 </span>
                 <span className="text-xs text-slate-500 font-mono">
-                  {data?.data?.urgentCount ?? 0} Urgent Impact • {data?.data?.highRiskCount ?? 0} High Corridor Risk
+                  {urgentCount} Urgent Impact • {highRiskCount} High Corridor Risk
                 </span>
               </div>
               <h2 className="text-lg font-bold text-slate-900 mt-0.5">
@@ -167,7 +170,7 @@ export function DecisionCriticalQueueModal({
                 filterBand === 'URGENT' ? 'bg-red-600 text-white' : 'text-slate-600 hover:bg-slate-200'
               }`}
             >
-              Urgent Hospital Impact ({data?.data?.urgentCount ?? 0})
+              Urgent Hospital Impact ({urgentCount})
             </button>
             <button
               type="button"
@@ -176,7 +179,7 @@ export function DecisionCriticalQueueModal({
                 filterBand === 'HIGH_RISK' ? 'bg-amber-600 text-white' : 'text-slate-600 hover:bg-slate-200'
               }`}
             >
-              High Corridor Risk ({data?.data?.highRiskCount ?? 0})
+              High Corridor Risk ({highRiskCount})
             </button>
           </div>
 

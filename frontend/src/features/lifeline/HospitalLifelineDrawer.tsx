@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ExternalLink,
   ChevronRight,
+  FlaskConical,
 } from 'lucide-react';
 import { apiRequest } from '../../lib/api';
 import type { HospitalReachabilitySummary, LifelineHospital } from '@roadalert/shared';
@@ -18,12 +19,14 @@ interface HospitalLifelineDrawerProps {
   hospital: LifelineHospital | null;
   onClose: () => void;
   onSelectOrigin?: (coords: [number, number]) => void;
+  onSimulateHospitalIsolation?: (hospital: LifelineHospital) => void;
 }
 
 export function HospitalLifelineDrawer({
   hospital,
   onClose,
   onSelectOrigin,
+  onSimulateHospitalIsolation,
 }: HospitalLifelineDrawerProps) {
   const { data: reachabilityData, isLoading } = useQuery<{ success: boolean; data: HospitalReachabilitySummary }>({
     queryKey: ['hospital-reachability', hospital?.id],
@@ -34,7 +37,9 @@ export function HospitalLifelineDrawer({
 
   if (!hospital) return null;
 
-  const summary = reachabilityData?.data;
+  const summary: HospitalReachabilitySummary | undefined = (reachabilityData as any)?.originAssessments
+    ? (reachabilityData as any)
+    : reachabilityData?.data;
   const severedCount = summary?.severedOriginsCount ?? 0;
   const avgDelay = summary?.averageDelayDeltaMin ?? 0;
 
@@ -196,6 +201,20 @@ export function HospitalLifelineDrawer({
           <p className="text-xs text-slate-500 py-4 text-center">No reachability data evaluated</p>
         )}
       </div>
+
+      {/* Action button: Simulate Hospital Road Cut */}
+      {onSimulateHospitalIsolation && (
+        <div className="p-3 border-t border-slate-200 bg-white">
+          <button
+            type="button"
+            onClick={() => onSimulateHospitalIsolation(hospital)}
+            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all"
+          >
+            <FlaskConical className="w-3.5 h-3.5" />
+            <span>Simulate Road Cuts to {hospital.shortName || hospital.name}</span>
+          </button>
+        </div>
+      )}
 
       {/* Assumptions Footer */}
       <div className="p-3 border-t border-slate-200 bg-slate-50 text-[10px] text-slate-500 space-y-1">
