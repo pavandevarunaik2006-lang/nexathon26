@@ -1,14 +1,63 @@
 import { Router } from 'express';
-import { z } from 'zod';
 import { db } from '../db/index.js';
 import { REGIONAL_DESTINATIONS } from '@roadalert/shared';
+import { RoutePlanRequestSchema } from '../validators/index.js';
 import { calculateRoutesWithIncidents } from '../services/routingService.js';
+import {
+  searchLocations,
+  reverseGeocodeLocation,
+  resolveRouteEndpoint,
+} from '../services/geocodingService.js';
+import { haversineDistanceKm } from '../services/verificationEngine.js';
 import { ApiError } from '../middleware/errorHandler.js';
 
 export const mapAndRoutesRouter = Router();
 
 // In-memory store for recently planned routes so GET /api/v1/routes/:id works seamlessly
 const plannedRouteCache = new Map<string, any>();
+
+// GET /api/v1/locations/search — Debounced autocomplete search for presets, landmarks, roads & coordinates
+mapAndRoutesRouter.get('/locations/search', async (req, res, next) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q : '';
+    const limitRaw = req.query.limit ? Number(req.query.limit) : 8;
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(15, limitRaw)) : 8;
+
+    const suggestions = await searchLocations(q, limit);
+    res.json({
+      success: true,
+      data: {
+        query: q,
+        suggestions,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/v1/locations/reverse — Reverse geocode map-picked coordinates into a human-readable label
+mapAndRoutesRouter.get('/locations/reverse', async (req, res, next) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (req.query.lat === undefined || req.query.lng === undefined || Number.isNaN(lat) || Number.isNaN(lng)) {
+      throw new ApiError(
+        400,
+        'INVALID_COORDINATES',
+        'Valid numeric lat and lng query parameters are required.'
+      );
+    }
+
+    const resolved = await reverseGeocodeLocation(lat, lng);
+    res.json({
+      success: true,
+      data: resolved,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/v1/map/incidents — Optimized map incident feed with filters and lastUpdated timestamp
 mapAndRoutesRouter.get('/map/incidents', async (req, res, next) => {
@@ -98,50 +147,62 @@ mapAndRoutesRouter.get('/map/incidents', async (req, res, next) => {
 // POST /api/v1/routes/plan — Origin/Destination Route Planning with Incident Avoidance
 mapAndRoutesRouter.post('/routes/plan', async (req, res, next) => {
   try {
-    const PlanSchema = z.object({
-      origin: z.string().min(2),
-      destination: z.string().min(2),
-      originLat: z.number().min(-90).max(90).optional(),
-      originLng: z.number().min(-180).max(180).optional(),
-      destLat: z.number().min(-90).max(90).optional(),
-      destLng: z.number().min(-180).max(180).optional(),
-      avoidIncidentZones: z.boolean().optional().default(true),
-    });
+    const parsed = RoutePlanRequestSchema.parse(req.body);
 
-    const parsed = PlanSchema.parse(req.body);
-
-    // Resolve coordinates from REGIONAL_DESTINATIONS if not explicitly passed
-    const originMatch = REGIONAL_DESTINATIONS.find((d) =>
-      d.name.toLowerCase().includes(parsed.origin.toLowerCase())
-    );
-    const destMatch = REGIONAL_DESTINATIONS.find((d) =>
-      d.name.toLowerCase().includes(parsed.destination.toLowerCase())
+    const originResolved = await resolveRouteEndpoint(
+      {
+        text: parsed.origin,
+        lat: parsed.originLat,
+        lng: parsed.originLng,
+      },
+      'origin'
     );
 
-    const originCoords = {
-      lat: parsed.originLat ?? originMatch?.lat ?? 12.8669, // default Pumpwell Mangaluru
-      lng: parsed.originLng ?? originMatch?.lng ?? 74.8692,
-    };
-    const destCoords = {
-      lat: parsed.destLat ?? destMatch?.lat ?? 13.3409, // default Udupi Bypass
-      lng: parsed.destLng ?? destMatch?.lng ?? 74.7351,
-    };
+    const destResolved = await resolveRouteEndpoint(
+      {
+        text: parsed.destination,
+        lat: parsed.destLat,
+        lng: parsed.destLng,
+      },
+      'destination'
+    );
+
+    const endpointDistKm = haversineDistanceKm(
+      originResolved.lat,
+      originResolved.lng,
+      destResolved.lat,
+      destResolved.lng
+    );
+
+    if (endpointDistKm < 0.05) {
+      throw new ApiError(
+        400,
+        'SAME_ORIGIN_DESTINATION',
+        'Origin and destination resolve to the same location. Please choose two distinct points to calculate a route.'
+      );
+    }
 
     const activeIncidentsRes = await db.query<any>(
       `SELECT * FROM incidents WHERE status NOT IN ('RESOLVED', 'REJECTED')`
     );
 
     const result = await calculateRoutesWithIncidents(
-      parsed.origin,
-      parsed.destination,
-      originCoords,
-      destCoords,
+      originResolved.label,
+      destResolved.label,
+      { lat: originResolved.lat, lng: originResolved.lng },
+      { lat: destResolved.lat, lng: destResolved.lng },
       parsed.avoidIncidentZones,
       activeIncidentsRes.rows
     );
 
     const planId = `plan-${Date.now()}`;
-    const payload = { id: planId, createdAt: new Date().toISOString(), ...result };
+    const payload = {
+      id: planId,
+      createdAt: new Date().toISOString(),
+      originLocation: originResolved,
+      destinationLocation: destResolved,
+      ...result,
+    };
     plannedRouteCache.set(planId, payload);
 
     res.json({

@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .enterprise-card {
+    @apply bg-white border border-slate-200/90 rounded-xl shadow-card;
+  }
+  .enterprise-input {
+    @apply w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all;
+  }
+  .enterprise-select {
+    @apply px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-800 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 active:scale-[0.98] text-white font-semibold text-xs shadow-sm transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-white hover:bg-slate-50 active:bg-slate-100 active:scale-[0.98] text-slate-700 border border-slate-300 font-semibold text-xs shadow-sm transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+}
+
+.leaflet-container {
+  background-color: #e2e8f0 !important;
+  font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+/* Optional High-Contrast / Satellite-style Dark Map Tile Mode */
+.map-tiles-dark .leaflet-tile-pane {
+  filter: invert(100%) hue-rotate(180deg) brightness(94%) contrast(92%) saturate(115%);
+}
+
+/* Clean Enterprise Daylight Map Tile Polish */
+.map-tiles-light .leaflet-tile-pane {
+  filter: contrast(98%) saturate(92%) brightness(101%);
+}
+
+/* Custom Marker & Cluster Reset */
+.roadalert-custom-pin,
+.roadalert-cluster-pin {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Native SVG Corridor Route Drawing Animation */
+@keyframes route-draw-path {
+  0% {
+    stroke-dashoffset: 1400;
+    opacity: 0.25;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.85;
+  }
+}
+
+.corridor-route-path-draw {
+  stroke-dasharray: 1400;
+  stroke-dashoffset: 1400;
+  animation: route-draw-path 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Coordinated Pin Reveal Entrance Animation */
+@keyframes pin-pop-reveal {
+  0% {
+    transform: scale(0.35) translateY(6px);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.06) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.pin-reveal-enter {
+  animation: pin-pop-reveal 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes marker-pulse {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+.animate-marker-pulse {
+  animation: marker-pulse 2.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marker-pulse,
+  .corridor-route-path-draw,
+  .pin-reveal-enter,
+  .animate-pulse,
+  .animate-spin {
+    animation: none !important;
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Subtle enterprise scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+}

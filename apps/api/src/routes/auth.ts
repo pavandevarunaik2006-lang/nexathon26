@@ -1,9 +1,7 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
-import { z } from 'zod';
-import { db } from '../db/index.js';
+import { authenticate } from '../middleware/auth.js';
 import {
+<<<<<<< HEAD
   authenticate,
   signAccessToken,
   signRefreshToken,
@@ -518,3 +516,19 @@ authRouter.get('/me', authenticate, async (req, res, next) => {
     next(err);
   }
 });
+=======
+  handleRegister,
+  handleLogin,
+  handleRefresh,
+  handleLogout,
+  handleGetMe,
+} from '../controllers/authController.js';
+
+export const authRouter = Router();
+
+authRouter.post('/register', handleRegister);
+authRouter.post('/login', handleLogin);
+authRouter.post('/refresh', handleRefresh);
+authRouter.post('/logout', handleLogout);
+authRouter.get('/me', authenticate, handleGetMe);
+>>>>>>> 8b277dd32219585705eb00d708c24cf7e20a1d12

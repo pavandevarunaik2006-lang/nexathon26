@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { z } from 'zod';
 import { db } from '../db/index.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { ApiError } from '../middleware/errorHandler.js';
-import { StartJourneySchema, CheckpointSchema } from '@roadalert/shared';
+import {
+  StartJourneySchema,
+  CheckpointSchema,
+  CreateConsentSchema,
+} from '../validators/index.js';
 import { haversineDistanceKm } from '../services/verificationEngine.js';
+<<<<<<< HEAD
 import { evaluateJourneyDelay } from '../services/delayVerificationService.js';
+=======
+import { processGpsBatch } from '../services/gpsTrackingService.js';
+>>>>>>> 8b277dd32219585705eb00d708c24cf7e20a1d12
 
 export const journeysAndConsentsRouter = Router();
 
@@ -57,19 +64,7 @@ journeysAndConsentsRouter.get('/consents/me', authenticate, async (req, res, nex
 // POST /api/v1/consents — Explicitly grant commute session tracking consent
 journeysAndConsentsRouter.post('/consents', authenticate, async (req, res, next) => {
   try {
-    const ConsentCreateSchema = z.object({
-      organizationId: z.string().min(1).optional(),
-      policyVersion: z.string().default('v2026.1-PRIVACY-FIRST'),
-      purpose: z
-        .string()
-        .min(5)
-        .default(
-          'Explicit session-only commute delay verification along coastal Karnataka corridor'
-        ),
-      sharePreciseCoords: z.boolean().optional().default(false),
-    });
-
-    const parsed = ConsentCreateSchema.parse(req.body);
+    const parsed = CreateConsentSchema.parse(req.body);
 
     let organizationId = parsed.organizationId;
     if (!organizationId) {
@@ -354,14 +349,97 @@ journeysAndConsentsRouter.get('/journeys', authenticate, async (req, res, next) 
       });
     }
 
+    const totalJourneys = items.length;
+    const activeJourneys = items.filter((j) => ['ACTIVE', 'DELAYED'].includes(j.status)).length;
+    const completedJourneys = items.filter((j) => j.status === 'COMPLETED').length;
+    const totalEstimatedDelayMin = items.reduce((acc, j) => acc + (j.estimatedDelayMin || 0), 0);
+    const totalVerifiedDelayMin = items.reduce((acc, j) => acc + (j.verifiedDelayMin || 0), 0);
+    const avgVerifiedDelayMin =
+      totalJourneys > 0 ? Math.round(totalVerifiedDelayMin / totalJourneys) : 0;
+
+    const allSpeeds = items
+      .flatMap((j) => (j.checkpoints || []).map((cp: any) => cp.calculated_speed ?? cp.speed))
+      .filter((s) => s != null && s > 0);
+    const avgSpeedKmh =
+      allSpeeds.length > 0
+        ? Math.round((allSpeeds.reduce((a, b) => a + Number(b), 0) / allSpeeds.length) * 10) / 10
+        : null;
+
+    const summary = {
+      totalJourneys,
+      activeJourneys,
+      completedJourneys,
+      totalEstimatedDelayMin,
+      totalVerifiedDelayMin,
+      avgVerifiedDelayMin,
+      avgSpeedKmh,
+    };
+
     res.json({
       success: true,
       data: items,
+      metrics: summary,
     });
   } catch (err) {
     next(err);
   }
 });
+
+// GET /api/v1/journeys/metrics — Aggregated commute journey metrics for current user
+journeysAndConsentsRouter.get('/journeys/metrics', authenticate, async (req, res, next) => {
+  try {
+    const jRes = await db.query<any>(
+      `SELECT status, estimated_delay_min, verified_delay_min
+       FROM journeys WHERE employee_id = $1`,
+      [req.user!.userId]
+    );
+
+    const totalJourneys = jRes.rows.length;
+    const activeJourneys = jRes.rows.filter((j) => ['ACTIVE', 'DELAYED'].includes(j.status)).length;
+    const completedJourneys = jRes.rows.filter((j) => j.status === 'COMPLETED').length;
+    const totalEstimatedDelayMin = jRes.rows.reduce(
+      (acc, j) => acc + Number(j.estimated_delay_min || 0),
+      0
+    );
+    const totalVerifiedDelayMin = jRes.rows.reduce(
+      (acc, j) => acc + Number(j.verified_delay_min || 0),
+      0
+    );
+    const avgVerifiedDelayMin =
+      totalJourneys > 0 ? Math.round(totalVerifiedDelayMin / totalJourneys) : 0;
+
+    const cpSpeeds = await db.query<any>(
+      `SELECT calculated_speed, speed
+       FROM journey_checkpoints jc
+       JOIN journeys j ON j.id = jc.journey_id
+       WHERE j.employee_id = $1 AND jc.validation_status = 'VALID'`,
+      [req.user!.userId]
+    );
+    const speeds = cpSpeeds.rows
+      .map((r) => r.calculated_speed ?? r.speed)
+      .filter((s) => s != null && s > 0);
+    const avgSpeedKmh =
+      speeds.length > 0
+        ? Math.round((speeds.reduce((a, b) => a + Number(b), 0) / speeds.length) * 10) / 10
+        : null;
+
+    res.json({
+      success: true,
+      data: {
+        totalJourneys,
+        activeJourneys,
+        completedJourneys,
+        totalEstimatedDelayMin,
+        totalVerifiedDelayMin,
+        avgVerifiedDelayMin,
+        avgSpeedKmh,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 
 // GET /api/v1/journeys/:id
 journeysAndConsentsRouter.get('/journeys/:id', authenticate, async (req, res, next) => {
@@ -390,81 +468,50 @@ journeysAndConsentsRouter.get('/journeys/:id', authenticate, async (req, res, ne
   }
 });
 
-// POST /api/v1/journeys/:id/checkpoints — Record permitted checkpoint while session is active
+// POST /api/v1/journeys/:id/checkpoints — Record permitted checkpoint(s) / bounded batch while session is active
 journeysAndConsentsRouter.post('/journeys/:id/checkpoints', authenticate, async (req, res, next) => {
   try {
-    const journeyId = req.params.id;
-    const parsed = CheckpointSchema.parse(req.body);
+    const journeyId = String(req.params.id);
 
-    const jRes = await db.query<any>(`SELECT * FROM journeys WHERE id = $1`, [journeyId]);
-    if (jRes.rows.length === 0) {
-      throw new ApiError(404, 'JOURNEY_NOT_FOUND', 'Journey not found');
-    }
-    const journey = jRes.rows[0];
-    if (journey.employee_id !== req.user!.userId) {
-      throw new ApiError(403, 'FORBIDDEN', 'Only the session owner can record checkpoints');
-    }
-    if (journey.ended_at || ['COMPLETED', 'TERMINATED'].includes(journey.status)) {
-      throw new ApiError(
-        400,
-        'JOURNEY_ALREADY_ENDED',
-        'Cannot record checkpoints after the commute session has been stopped'
-      );
+    let observations: any[];
+    if (Array.isArray(req.body)) {
+      observations = req.body;
+    } else if (Array.isArray(req.body?.checkpoints)) {
+      observations = req.body.checkpoints;
+    } else {
+      observations = [req.body];
     }
 
-    const cpId = crypto.randomUUID();
-    await db.query(
-      `INSERT INTO journey_checkpoints (id, journey_id, latitude, longitude, speed, source_type, status_note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        cpId,
-        journeyId,
-        parsed.latitude,
-        parsed.longitude,
-        parsed.speed,
-        parsed.sourceType,
-        parsed.statusNote || null,
-      ]
-    );
-
-    // Check if checkpoint is near an active incident and speed < 15 km/h to auto-corroborate commute delay
-    const incidentsRes = await db.query<any>(
-      `SELECT * FROM incidents WHERE status NOT IN ('RESOLVED', 'REJECTED')`
-    );
-    let matchedDelay = journey.estimated_delay_min;
-    for (const inc of incidentsRes.rows) {
-      const dist = haversineDistanceKm(
-        parsed.latitude,
-        parsed.longitude,
-        Number(inc.latitude),
-        Number(inc.longitude)
-      );
-      if (dist <= 2.5 && parsed.speed <= 20) {
-        matchedDelay = Math.max(matchedDelay, Number(inc.estimated_delay_minutes || 15));
-      }
+    if (observations.length === 0) {
+      throw new ApiError(400, 'EMPTY_BATCH', 'At least one GPS observation must be provided');
+    }
+    if (observations.length > 100) {
+      throw new ApiError(400, 'BATCH_TOO_LARGE', 'Maximum batch size is 100 observations');
     }
 
-    await db.query(
-      `UPDATE journeys
-       SET estimated_delay_min = $1,
-           manual_self_reported = CASE WHEN $2 = 'MANUAL_SELF_REPORTED' THEN TRUE ELSE manual_self_reported END
-       WHERE id = $3`,
-      [matchedDelay, parsed.sourceType, journeyId]
-    );
+    const parsedObservations = observations.map((o) => CheckpointSchema.parse(o));
+    const result = await processGpsBatch(journeyId, req.user!.userId, parsedObservations);
 
+    const firstCp = result.checkpoints[0];
     res.status(201).json({
       success: true,
       data: {
-        checkpointId: cpId,
+        checkpointId: firstCp?.id,
         journeyId,
-        recordedAt: new Date().toISOString(),
-        sourceType: parsed.sourceType,
+        processedCount: result.processedCount,
+        validCount: result.validCount,
+        checkpoints: result.checkpoints,
+        journeyUpdated: result.journeyUpdated,
+        matchedIncidentId: result.matchedIncidentId,
+        recordedAt: firstCp?.recordedAt || new Date().toISOString(),
+        sourceType: firstCp?.sourceType || 'BROWSER_GPS',
       },
     });
   } catch (err) {
     next(err);
   }
 });
+
 
 // POST /api/v1/journeys/:id/stop — Explicitly stop an active commute session
 journeysAndConsentsRouter.post('/journeys/:id/stop', authenticate, async (req, res, next) => {

@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import { z } from 'zod';
 import { db } from '../db/index.js';
 import { authenticate, requireRoles } from '../middleware/auth.js';
 import { ApiError } from '../middleware/errorHandler.js';
-import { USER_ROLES } from '@roadalert/shared';
+import {
+  AdminUpdateUserSchema,
+  AdminCreateOrganizationSchema,
+} from '../validators/index.js';
 
 export const adminRouter = Router();
 
@@ -82,12 +84,7 @@ adminRouter.get('/users', async (req, res, next) => {
 adminRouter.patch('/users/:id', async (req, res, next) => {
   try {
     const targetId = req.params.id;
-    const UpdateUserSchema = z.object({
-      role: z.enum(USER_ROLES).optional(),
-      status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).optional(),
-      reason: z.string().min(3).optional(),
-    });
-    const parsed = UpdateUserSchema.parse(req.body);
+    const parsed = AdminUpdateUserSchema.parse(req.body);
 
     const existing = await db.query<any>(`SELECT * FROM users WHERE id = $1`, [targetId]);
     if (existing.rows.length === 0) {
@@ -158,11 +155,7 @@ adminRouter.get('/organizations', async (_req, res, next) => {
 // POST /api/v1/admin/organizations
 adminRouter.post('/organizations', async (req, res, next) => {
   try {
-    const OrgCreateSchema = z.object({
-      name: z.string().min(3).max(150),
-      organizationType: z.string().min(2).max(80),
-    });
-    const parsed = OrgCreateSchema.parse(req.body);
+    const parsed = AdminCreateOrganizationSchema.parse(req.body);
     const orgId = crypto.randomUUID();
 
     await db.query(
