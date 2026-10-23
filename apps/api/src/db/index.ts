@@ -65,18 +65,29 @@ class DatabaseManager {
   }
 
   public async runMigrations() {
-    const migrationPath = path.resolve(
+    const migrationsDir = path.resolve(
       __dirname,
-      '../../../../prisma/migrations/001_init/migration.sql'
+      '../../../../prisma/migrations'
     );
-    if (!fs.existsSync(migrationPath)) {
-      throw new Error(`Migration file not found at ${migrationPath}`);
+    if (!fs.existsSync(migrationsDir)) {
+      throw new Error(`Migrations directory not found at ${migrationsDir}`);
     }
-    const sql = fs.readFileSync(migrationPath, 'utf-8');
-    if (this.pgPool) {
-      await this.pgPool.query(sql);
-    } else if (this.pglite) {
-      await this.pglite.exec(sql);
+    const entries = fs.readdirSync(migrationsDir, { withFileTypes: true });
+    const migrationDirs = entries
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+
+    for (const dir of migrationDirs) {
+      const sqlFile = path.join(migrationsDir, dir, 'migration.sql');
+      if (fs.existsSync(sqlFile)) {
+        const sql = fs.readFileSync(sqlFile, 'utf-8');
+        if (this.pgPool) {
+          await this.pgPool.query(sql);
+        } else if (this.pglite) {
+          await this.pglite.exec(sql);
+        }
+      }
     }
   }
 

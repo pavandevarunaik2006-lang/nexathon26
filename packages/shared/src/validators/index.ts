@@ -79,12 +79,47 @@ export const StartJourneySchema = z.object({
 });
 
 export const CheckpointSchema = z.object({
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  speed: z.number().min(0).max(200).optional().default(0),
-  sourceType: z.enum(['BROWSER_GPS', 'MANUAL_SELF_REPORTED']).default('BROWSER_GPS'),
+  latitude: z
+    .number()
+    .min(-90, 'Latitude must be between -90 and 90')
+    .max(90, 'Latitude must be between -90 and 90'),
+  longitude: z
+    .number()
+    .min(-180, 'Longitude must be between -180 and 180')
+    .max(180, 'Longitude must be between -180 and 180'),
+  accuracy: z
+    .number()
+    .min(0, 'GPS accuracy must be non-negative')
+    .max(10000)
+    .nullable()
+    .optional(),
+  speed: z
+    .number()
+    .min(0, 'Device speed cannot be negative')
+    .max(250, 'Device speed exceeds plausible limit')
+    .nullable()
+    .optional(),
+  heading: z
+    .number()
+    .min(0, 'Heading must be between 0 and 360')
+    .max(360, 'Heading must be between 0 and 360')
+    .nullable()
+    .optional(),
+  recordedAt: z.string().optional(),
+  sourceType: z
+    .enum(['BROWSER_GPS', 'MOBILE_GPS', 'MANUAL_SELF_REPORTED'])
+    .default('BROWSER_GPS'),
   statusNote: z.string().max(300).optional(),
 });
+export type CheckpointInput = z.infer<typeof CheckpointSchema>;
+
+export const BatchCheckpointsSchema = z.object({
+  checkpoints: z
+    .array(CheckpointSchema)
+    .min(1, 'Batch must contain at least 1 checkpoint')
+    .max(100, 'Batch exceeds maximum limit of 100 checkpoints'),
+});
+export type BatchCheckpointsInput = z.infer<typeof BatchCheckpointsSchema>;
 
 export const CreateConsentSchema = z.object({
   organizationId: z.string().min(1).optional(),

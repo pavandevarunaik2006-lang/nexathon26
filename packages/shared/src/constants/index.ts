@@ -35,6 +35,16 @@ export const INCIDENT_STATUSES = [
   'RESOLVED',
 ] as const;
 
+export const GPS_VALIDATION_STATUSES = [
+  'VALID',
+  'INACCURATE',
+  'STALE',
+  'IMPLAUSIBLE_JUMP',
+  'DUPLICATE',
+  'OUT_OF_ORDER',
+  'SUSPICIOUS',
+] as const;
+
 export const VERIFICATION_LEVELS = {
   1: 'Level 1: User reported',
   2: 'Level 2: Location corroborated',

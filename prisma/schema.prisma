@@ -167,18 +167,25 @@ model Journey {
 }
 
 model JourneyCheckpoint {
-  id         String   @id @default(uuid())
-  journeyId  String   @map("journey_id")
-  latitude   Float
-  longitude  Float
-  recordedAt DateTime @default(now()) @map("recorded_at")
-  speed      Float    @default(0)
-  sourceType String   @default("BROWSER_GPS") @map("source_type")
-  statusNote String?  @map("status_note")
+  id               String   @id @default(uuid())
+  journeyId        String   @map("journey_id")
+  latitude         Float
+  longitude        Float
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+  receivedAt       DateTime @default(now()) @map("received_at")
+  accuracy         Float?
+  speed            Float?
+  calculatedSpeed  Float?   @map("calculated_speed")
+  heading          Float?
+  sourceType       String   @default("BROWSER_GPS") @map("source_type")
+  validationStatus String   @default("VALID") @map("validation_status")
+  statusNote       String?  @map("status_note")
 
   journey Journey @relation(fields: [journeyId], references: [id], onDelete: Cascade)
 
   @@index([journeyId])
+  @@index([recordedAt])
+  @@index([validationStatus])
   @@map("journey_checkpoints")
 }
 

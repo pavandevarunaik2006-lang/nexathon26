@@ -3,12 +3,14 @@ import {
   INCIDENT_CATEGORIES,
   INCIDENT_SEVERITIES,
   INCIDENT_STATUSES,
+  GPS_VALIDATION_STATUSES,
 } from '../constants/index.js';
 
 export type UserRole = (typeof USER_ROLES)[number];
 export type IncidentCategory = (typeof INCIDENT_CATEGORIES)[number];
 export type IncidentSeverity = (typeof INCIDENT_SEVERITIES)[number];
 export type IncidentStatus = (typeof INCIDENT_STATUSES)[number];
+export type GpsValidationStatus = (typeof GPS_VALIDATION_STATUSES)[number];
 
 export interface ConfidenceBreakdown {
   totalScore: number;
