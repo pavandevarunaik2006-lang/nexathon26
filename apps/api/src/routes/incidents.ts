@@ -172,6 +172,7 @@ incidentsRouter.get('/:id/gps-evidence', authenticate, async (req, res, next) =>
   }
 });
 
+// PATCH /api/v1/incidents/:id — Update severity or status by authorized users
 incidentsRouter.patch(
   '/:id',
   authenticate,
