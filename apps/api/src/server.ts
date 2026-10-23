@@ -1,24 +1,31 @@
-import dotenv from 'dotenv';
+import { env } from './config/env.js';
 import { createApp } from './app.js';
 import { db } from './db/index.js';
 import { seedDatabase } from './db/seedData.js';
 
-dotenv.config();
-
-const PORT = Number(process.env.PORT || 4000);
+const PORT = env.PORT;
 
 async function bootstrap() {
   await db.init();
   await seedDatabase({ force: false });
 
   const app = createApp();
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`==================================================================`);
     console.log(`  RoadAlert API Server listening on http://localhost:${PORT}/api/v1`);
     console.log(`  OpenAPI Docs:  http://localhost:${PORT}/api/v1/docs`);
     console.log(`  DB Engine:     ${db.getEngineType()}`);
     console.log(`==================================================================`);
   });
+
+  const shutdown = async () => {
+    server.close();
+    await db.close();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 bootstrap().catch((err) => {

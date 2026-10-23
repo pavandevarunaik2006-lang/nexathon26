@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+import { APP_CONFIG } from '../config';
+
+export const API_BASE = APP_CONFIG.apiBaseUrl;
 
 export function getStoredToken(): string | null {
   return localStorage.getItem('roadalert_access_token');

@@ -1,14 +1,28 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
 dist/
 build/
+*.tsbuildinfo
+
+# Environment variables & secrets (Never commit real .env files)
 .env
 .env.local
-uploads/*
-!uploads/.gitkeep
-data/
-coverage/
-*.log
-.DS_Store
+.env.development.local
+.env.test.local
+.env.production.local
 
-.env.*
-!.env.example
+# Local embedded database & uploaded evidence files
+apps/api/data/
+apps/api/uploads/
+.pglite-data/
+
+# Logs & OS files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db

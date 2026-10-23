@@ -3,26 +3,25 @@ import crypto from 'crypto';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { z } from 'zod';
-import { db } from '../db/index.js';
+import { env } from '../config/env.js';
 import { authenticate, requireRoles } from '../middleware/auth.js';
 import { ApiError } from '../middleware/errorHandler.js';
 import {
-  CreateIncidentSchema,
-  CorroborateIncidentSchema,
-  ReviewIncidentSchema,
-  INCIDENT_SEVERITIES,
-  INCIDENT_STATUSES,
-} from '@roadalert/shared';
-import {
-  recalculateIncidentConfidence,
-  haversineDistanceKm,
-} from '../services/verificationEngine.js';
-import { analyzeIncidentTextHeuristic } from '../services/aiAssistantService.js';
+  handleAiAssist,
+  handleListIncidents,
+  handleCreateIncident,
+  handleGetIncidentDetail,
+  handlePatchIncident,
+  handleAttachEvidence,
+  handleCorroborateIncident,
+  handleFlagIncident,
+  handleReviewIncident,
+  handleResolveIncident,
+} from '../controllers/incidentController.js';
 
 export const incidentsRouter = Router();
 
-const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || './uploads');
+const uploadDir = path.resolve(process.cwd(), env.UPLOAD_DIR);
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const ALLOWED_MIME_TYPES = [
@@ -49,7 +48,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10 MB max
+    fileSize: env.MAX_UPLOAD_SIZE_MB * 1024 * 1024,
   },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
@@ -553,438 +552,25 @@ incidentsRouter.patch(
   '/:id',
   authenticate,
   requireRoles('TRAFFIC_AUTHORITY', 'ADMIN'),
-  async (req, res, next) => {
-    try {
-      const incidentId = String(req.params.id);
-      const PatchSchema = z.object({
-        severity: z.enum(INCIDENT_SEVERITIES).optional(),
-        status: z.enum(INCIDENT_STATUSES).optional(),
-        estimatedDelayMinutes: z.number().min(0).max(720).optional(),
-        roadClosed: z.boolean().optional(),
-        reason: z.string().min(3).max(500).optional(),
-      });
-      const parsed = PatchSchema.parse(req.body);
-
-      const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-      if (incRes.rows.length === 0) {
-        throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
-      }
-      const current = incRes.rows[0];
-
-      await db.query(
-        `UPDATE incidents
-         SET severity = $1,
-             status = $2,
-             estimated_delay_minutes = $3,
-             road_closed = $4,
-             updated_at = NOW()
-         WHERE id = $5`,
-        [
-          parsed.severity ?? current.severity,
-          parsed.status ?? current.status,
-          parsed.estimatedDelayMinutes ?? current.estimated_delay_minutes,
-          parsed.roadClosed ?? current.road_closed,
-          incidentId,
-        ]
-      );
-
-      await db.query(
-        `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
-         VALUES ($1, $2, 'INCIDENT_PATCHED', 'INCIDENT', $3, $4)`,
-        [
-          crypto.randomUUID(),
-          req.user!.userId,
-          incidentId,
-          JSON.stringify(parsed),
-        ]
-      );
-
-      const breakdown = await recalculateIncidentConfidence(
-        incidentId,
-        req.user!.userId,
-        'INCIDENT_PATCHED'
-      );
-      const updated = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-
-      res.json({
-        success: true,
-        data: {
-          incident: formatIncidentRow(updated.rows[0]),
-          confidenceBreakdown: breakdown,
-        },
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
+  handlePatchIncident
 );
-
-// POST /api/v1/incidents/:id/evidence — Attach photo/video or telemetry evidence
 incidentsRouter.post(
   '/:id/evidence',
   authenticate,
   upload.single('file'),
-  async (req, res, next) => {
-    try {
-      const incidentId = String(req.params.id);
-      const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-      if (incRes.rows.length === 0) {
-        throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
-      }
-
-      const evidenceType = req.file
-        ? req.file.mimetype.startsWith('video/')
-          ? 'VIDEO'
-          : 'PHOTO'
-        : req.body?.evidenceType || 'PHOTO';
-
-      if (!['PHOTO', 'VIDEO', 'GPS_TELEMETRY', 'LOCATION_PROXIMITY'].includes(evidenceType)) {
-        throw new ApiError(400, 'INVALID_EVIDENCE_TYPE', 'Invalid evidence type');
-      }
-
-      const storageKey = req.file ? req.file.filename : req.body?.storageKey || 'uploaded-evidence.jpg';
-      const metadata = {
-        originalName: req.file?.originalname || req.body?.caption || 'Scene evidence',
-        mimeType: req.file?.mimetype || 'image/jpeg',
-        sizeBytes: req.file?.size || 0,
-        caption: req.body?.caption || 'User submitted verification evidence',
-        latitude: req.body?.latitude ? Number(req.body.latitude) : undefined,
-        longitude: req.body?.longitude ? Number(req.body.longitude) : undefined,
-      };
-
-      const evidenceId = crypto.randomUUID();
-      await db.query(
-        `INSERT INTO incident_evidences (id, incident_id, submitted_by, evidence_type, storage_key, metadata, validation_status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'VALIDATED')`,
-        [
-          evidenceId,
-          incidentId,
-          req.user!.userId,
-          evidenceType,
-          storageKey,
-          JSON.stringify(metadata),
-        ]
-      );
-
-      await db.query(
-        `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
-         VALUES ($1, $2, 'EVIDENCE_SUBMITTED', 'INCIDENT', $3, $4)`,
-        [
-          crypto.randomUUID(),
-          req.user!.userId,
-          incidentId,
-          JSON.stringify({ evidenceId, evidenceType, storageKey }),
-        ]
-      );
-
-      const breakdown = await recalculateIncidentConfidence(
-        incidentId,
-        req.user!.userId,
-        'EVIDENCE_ATTACHED'
-      );
-
-      res.status(201).json({
-        success: true,
-        data: {
-          evidenceId,
-          evidenceType,
-          storageKey,
-          confidenceBreakdown: breakdown,
-        },
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
+  handleAttachEvidence
 );
-
-// POST /api/v1/incidents/:id/corroborate — Submit independent corroboration, dispute, or GPS speed corroboration
-incidentsRouter.post('/:id/corroborate', authenticate, async (req, res, next) => {
-  try {
-    const incidentId = String(req.params.id);
-    const parsed = CorroborateIncidentSchema.parse(req.body);
-
-    const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-    if (incRes.rows.length === 0) {
-      throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
-    }
-    const inc = incRes.rows[0];
-
-    // Check if this user already submitted this corroborationType for this incident
-    const dupRes = await db.query<any>(
-      `SELECT id FROM incident_corroborations
-       WHERE incident_id = $1 AND user_id = $2 AND corroboration_type = $3`,
-      [incidentId, req.user!.userId, parsed.corroborationType]
-    );
-
-    const isSameAsOriginalReporter =
-      inc.reporter_id === req.user!.userId && parsed.corroborationType === 'CORROBORATE';
-
-    let duplicateIgnored = false;
-    if (dupRes.rows.length === 0 && !isSameAsOriginalReporter) {
-      await db.query(
-        `INSERT INTO incident_corroborations (id, incident_id, user_id, corroboration_type, latitude, longitude, speed_kmh, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          crypto.randomUUID(),
-          incidentId,
-          req.user!.userId,
-          parsed.corroborationType,
-          parsed.latitude ?? inc.latitude,
-          parsed.longitude ?? inc.longitude,
-          parsed.speedKmh ?? null,
-          parsed.notes ?? null,
-        ]
-      );
-    } else {
-      duplicateIgnored = true;
-    }
-
-    const breakdown = await recalculateIncidentConfidence(
-      incidentId,
-      req.user!.userId,
-      `CORROBORATION_${parsed.corroborationType}`
-    );
-
-    // Notify reporter when their incident receives meaningful corroboration
-    if (!duplicateIgnored && inc.reporter_id !== req.user!.userId) {
-      await db.query(
-        `INSERT INTO notifications (id, user_id, type, title, message, incident_id)
-         VALUES ($1, $2, 'CORROBORATION', $3, $4, $5)`,
-        [
-          crypto.randomUUID(),
-          inc.reporter_id,
-          `Incident Corroborated (${breakdown.totalScore}/100)`,
-          `Your report "${inc.title}" received ${parsed.corroborationType.toLowerCase()} feedback. Current confidence: ${breakdown.totalScore}/100 (${breakdown.band}).`,
-          incidentId,
-        ]
-      );
-    }
-
-    res.json({
-      success: true,
-      data: {
-        duplicateIgnored,
-        isSameAsOriginalReporter,
-        confidenceBreakdown: breakdown,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/v1/incidents/:id/flag — Flag suspicious or duplicate report (creates complaint & audit log)
-incidentsRouter.post('/:id/flag', authenticate, async (req, res, next) => {
-  try {
-    const incidentId = String(req.params.id);
-    const FlagSchema = z.object({
-      reason: z.string().min(5, 'Reason must be at least 5 characters').max(500),
-    });
-    const parsed = FlagSchema.parse(req.body);
-
-    const incRes = await db.query<any>(`SELECT id FROM incidents WHERE id = $1`, [incidentId]);
-    if (incRes.rows.length === 0) {
-      throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
-    }
-
-    const complaintId = crypto.randomUUID();
-    await db.query(
-      `INSERT INTO complaints (id, reporter_id, incident_id, reason, status)
-       VALUES ($1, $2, $3, $4, 'OPEN')`,
-      [complaintId, req.user!.userId, incidentId, parsed.reason.trim()]
-    );
-
-    await db.query(
-      `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
-       VALUES ($1, $2, 'INCIDENT_FLAGGED_COMPLAINT', 'INCIDENT', $3, $4)`,
-      [
-        crypto.randomUUID(),
-        req.user!.userId,
-        incidentId,
-        JSON.stringify({ complaintId, reason: parsed.reason }),
-      ]
-    );
-
-    res.status(201).json({
-      success: true,
-      data: {
-        complaintId,
-        status: 'OPEN',
-        message: 'Report flagged for Traffic Authority and Admin review',
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// POST /api/v1/incidents/:id/review — Traffic Authority / Admin formal review & decision
+incidentsRouter.post('/:id/corroborate', authenticate, handleCorroborateIncident);
+incidentsRouter.post('/:id/flag', authenticate, handleFlagIncident);
 incidentsRouter.post(
   '/:id/review',
   authenticate,
   requireRoles('TRAFFIC_AUTHORITY', 'ADMIN'),
-  async (req, res, next) => {
-    try {
-      const incidentId = String(req.params.id);
-      const parsed = ReviewIncidentSchema.parse(req.body);
-
-      const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-      if (incRes.rows.length === 0) {
-        throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
-      }
-      const inc = incRes.rows[0];
-
-      const reviewId = crypto.randomUUID();
-      await db.query(
-        `INSERT INTO incident_reviews (id, incident_id, reviewer_id, decision, reason)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [reviewId, incidentId, req.user!.userId, parsed.decision, parsed.reason.trim()]
-      );
-
-      let newSeverity = parsed.newSeverity || inc.severity;
-      let newStatus = parsed.newStatus || inc.status;
-      let authorityConfirmed = Boolean(inc.authority_confirmed);
-      let roadClosed = Boolean(inc.road_closed);
-
-      if (parsed.decision === 'CONFIRM') {
-        authorityConfirmed = true;
-        newStatus = 'VERIFIED';
-      } else if (parsed.decision === 'REJECT') {
-        authorityConfirmed = false;
-        newStatus = 'REJECTED';
-      } else if (parsed.decision === 'MARK_ROAD_CLOSED') {
-        authorityConfirmed = true;
-        roadClosed = true;
-        newStatus = 'VERIFIED';
-        newSeverity = 'CRITICAL';
-      } else if (parsed.decision === 'RESOLVE') {
-        newStatus = 'RESOLVED';
-        roadClosed = false;
-      }
-
-      await db.query(
-        `UPDATE incidents
-         SET severity = $1,
-             status = $2,
-             authority_confirmed = $3,
-             road_closed = $4,
-             updated_at = NOW()
-         WHERE id = $5`,
-        [newSeverity, newStatus, authorityConfirmed, roadClosed, incidentId]
-      );
-
-      await db.query(
-        `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
-         VALUES ($1, $2, $3, 'INCIDENT', $4, $5)`,
-        [
-          crypto.randomUUID(),
-          req.user!.userId,
-          `AUTHORITY_REVIEW:${parsed.decision}`,
-          incidentId,
-          JSON.stringify({
-            reviewId,
-            decision: parsed.decision,
-            reason: parsed.reason,
-            newSeverity,
-            newStatus,
-            roadClosed,
-          }),
-        ]
-      );
-
-      const breakdown = await recalculateIncidentConfidence(
-        incidentId,
-        req.user!.userId,
-        `AUTHORITY_REVIEW_${parsed.decision}`
-      );
-
-      // Notify original reporter of status change
-      await db.query(
-        `INSERT INTO notifications (id, user_id, type, title, message, incident_id)
-         VALUES ($1, $2, 'STATUS_CHANGE', $3, $4, $5)`,
-        [
-          crypto.randomUUID(),
-          inc.reporter_id,
-          `Traffic Authority Review: ${parsed.decision}`,
-          `Your report "${inc.title}" at ${inc.road_name} was reviewed (${parsed.decision}): ${parsed.reason}`,
-          incidentId,
-        ]
-      );
-
-      const updatedRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-
-      res.json({
-        success: true,
-        data: {
-          reviewId,
-          incident: formatIncidentRow(updatedRes.rows[0]),
-          confidenceBreakdown: breakdown,
-        },
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
+  handleReviewIncident
 );
-
-// POST /api/v1/incidents/:id/resolve — Mark incident resolved
 incidentsRouter.post(
   '/:id/resolve',
   authenticate,
   requireRoles('TRAFFIC_AUTHORITY', 'ADMIN'),
-  async (req, res, next) => {
-    try {
-      const incidentId = String(req.params.id);
-      const reason =
-        req.body?.reason && String(req.body.reason).trim().length >= 3
-          ? String(req.body.reason).trim()
-          : 'Roadway cleared and normal traffic flow restored.';
-
-      const incRes = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-      if (incRes.rows.length === 0) {
-        throw new ApiError(404, 'INCIDENT_NOT_FOUND', 'Incident not found');
-      }
-      const inc = incRes.rows[0];
-
-      await db.query(
-        `UPDATE incidents SET status = 'RESOLVED', road_closed = FALSE, updated_at = NOW() WHERE id = $1`,
-        [incidentId]
-      );
-
-      await db.query(
-        `INSERT INTO incident_reviews (id, incident_id, reviewer_id, decision, reason)
-         VALUES ($1, $2, $3, 'RESOLVE', $4)`,
-        [crypto.randomUUID(), incidentId, req.user!.userId, reason]
-      );
-
-      await db.query(
-        `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
-         VALUES ($1, $2, 'INCIDENT_RESOLVED', 'INCIDENT', $3, $4)`,
-        [crypto.randomUUID(), req.user!.userId, incidentId, JSON.stringify({ reason })]
-      );
-
-      await db.query(
-        `INSERT INTO notifications (id, user_id, type, title, message, incident_id)
-         VALUES ($1, $2, 'STATUS_CHANGE', $3, $4, $5)`,
-        [
-          crypto.randomUUID(),
-          inc.reporter_id,
-          `Incident Resolved: ${inc.road_name}`,
-          `Traffic Authority marked "${inc.title}" as RESOLVED: ${reason}`,
-          incidentId,
-        ]
-      );
-
-      const updated = await db.query<any>(`SELECT * FROM incidents WHERE id = $1`, [incidentId]);
-      res.json({
-        success: true,
-        data: {
-          incident: formatIncidentRow(updated.rows[0]),
-        },
-      });
-    } catch (err) {
-      next(err);
-    }
-  }
+  handleResolveIncident
 );

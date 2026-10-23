@@ -275,37 +275,39 @@ export function PassengerDashboardPage() {
 
       {/* Row 1: Compact 6-Card Enterprise KPI Row */}
       <StaggerGrid className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StaggerItem>
+        <StaggerItem className="h-full">
           <button
             type="button"
             onClick={() => {
               setCategoryFilter('ALL');
               setSeverityFilter('ALL');
             }}
-            className={`w-full h-full text-left p-3.5 enterprise-card transition-all active:scale-[0.99] flex flex-col justify-between ${
+            className={`w-full min-h-[88px] h-full text-left p-3.5 enterprise-card transition-all duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 active:scale-[0.985] flex flex-col justify-between ${
               categoryFilter === 'ALL' && severityFilter === 'ALL'
                 ? 'ring-2 ring-blue-600/20 border-blue-500'
                 : 'hover:border-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Active Incidents</span>
-              <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-xs font-medium text-slate-500 whitespace-nowrap truncate">
+                Active Incidents
+              </span>
+              <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600 shrink-0">
                 <Activity className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-bold text-slate-900">
+            <div className="mt-2 flex items-baseline justify-between gap-1.5 min-w-0">
+              <span className="text-xl xl:text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none">
                 <AnimatedNumber value={activeIncidents.length} />
               </span>
-              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded whitespace-nowrap truncate">
                 {verifiedCount} verified
               </span>
             </div>
           </button>
         </StaggerItem>
 
-        <StaggerItem>
+        <StaggerItem className="h-full">
           <button
             type="button"
             onClick={() =>
@@ -313,28 +315,32 @@ export function PassengerDashboardPage() {
                 prev === 'ACCIDENTS_GROUP' ? 'ALL' : 'ACCIDENTS_GROUP'
               )
             }
-            className={`w-full h-full text-left p-3.5 enterprise-card transition-all active:scale-[0.99] flex flex-col justify-between ${
+            className={`w-full min-h-[88px] h-full text-left p-3.5 enterprise-card transition-all duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 active:scale-[0.985] flex flex-col justify-between ${
               categoryFilter === 'ACCIDENTS_GROUP'
                 ? 'ring-2 ring-red-600/20 border-red-500'
                 : 'hover:border-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Accidents</span>
-              <span className="p-1.5 rounded-lg bg-red-50 text-red-600">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-xs font-medium text-slate-500 whitespace-nowrap truncate">
+                Accidents
+              </span>
+              <span className="p-1.5 rounded-lg bg-red-50 text-red-600 shrink-0">
                 <AlertTriangle className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-bold text-slate-900">
+            <div className="mt-2 flex items-baseline justify-between gap-1.5 min-w-0">
+              <span className="text-xl xl:text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none">
                 <AnimatedNumber value={accidentsCount} />
               </span>
-              <span className="text-[11px] text-slate-500">Collisions / stalls</span>
+              <span className="text-[11px] text-slate-500 whitespace-nowrap truncate">
+                Collisions / stalls
+              </span>
             </div>
           </button>
         </StaggerItem>
 
-        <StaggerItem>
+        <StaggerItem className="h-full">
           <button
             type="button"
             onClick={() =>
@@ -342,28 +348,32 @@ export function PassengerDashboardPage() {
                 prev === 'ROADWORKS_GROUP' ? 'ALL' : 'ROADWORKS_GROUP'
               )
             }
-            className={`w-full h-full text-left p-3.5 enterprise-card transition-all active:scale-[0.99] flex flex-col justify-between ${
+            className={`w-full min-h-[88px] h-full text-left p-3.5 enterprise-card transition-all duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 active:scale-[0.985] flex flex-col justify-between ${
               categoryFilter === 'ROADWORKS_GROUP'
                 ? 'ring-2 ring-amber-500/20 border-amber-500'
                 : 'hover:border-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Roadworks</span>
-              <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-xs font-medium text-slate-500 whitespace-nowrap truncate">
+                Roadworks
+              </span>
+              <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600 shrink-0">
                 <Wrench className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-bold text-slate-900">
+            <div className="mt-2 flex items-baseline justify-between gap-1.5 min-w-0">
+              <span className="text-xl xl:text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none">
                 <AnimatedNumber value={roadworksCount} />
               </span>
-              <span className="text-[11px] text-slate-500">Closures / repair</span>
+              <span className="text-[11px] text-slate-500 whitespace-nowrap truncate">
+                Closures / repair
+              </span>
             </div>
           </button>
         </StaggerItem>
 
-        <StaggerItem>
+        <StaggerItem className="h-full">
           <button
             type="button"
             onClick={() =>
@@ -371,45 +381,53 @@ export function PassengerDashboardPage() {
                 prev === 'SLOWDOWNS_GROUP' ? 'ALL' : 'SLOWDOWNS_GROUP'
               )
             }
-            className={`w-full h-full text-left p-3.5 enterprise-card transition-all active:scale-[0.99] flex flex-col justify-between ${
+            className={`w-full min-h-[88px] h-full text-left p-3.5 enterprise-card transition-all duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/30 active:scale-[0.985] flex flex-col justify-between ${
               categoryFilter === 'SLOWDOWNS_GROUP'
                 ? 'ring-2 ring-sky-500/20 border-sky-500'
                 : 'hover:border-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Slowdowns</span>
-              <span className="p-1.5 rounded-lg bg-sky-50 text-sky-600">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-xs font-medium text-slate-500 whitespace-nowrap truncate">
+                Slowdowns
+              </span>
+              <span className="p-1.5 rounded-lg bg-sky-50 text-sky-600 shrink-0">
                 <Radio className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-bold text-slate-900">
+            <div className="mt-2 flex items-baseline justify-between gap-1.5 min-w-0">
+              <span className="text-xl xl:text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none">
                 <AnimatedNumber value={slowdownsCount} />
               </span>
-              <span className="text-[11px] text-slate-500">Congestion / signals</span>
+              <span className="text-[11px] text-slate-500 whitespace-nowrap truncate">
+                Congestion / signals
+              </span>
             </div>
           </button>
         </StaggerItem>
 
-        <StaggerItem>
-          <div className="w-full h-full p-3.5 enterprise-card flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Est. Avg Delay</span>
-              <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
+        <StaggerItem className="h-full">
+          <div className="w-full min-h-[88px] h-full p-3.5 enterprise-card flex flex-col justify-between transition-all duration-150 hover:border-slate-300 hover:shadow-md">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-xs font-medium text-slate-500 whitespace-nowrap truncate">
+                Est. Avg Delay
+              </span>
+              <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600 shrink-0">
                 <Clock className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-bold text-slate-900">
+            <div className="mt-2 flex items-baseline justify-between gap-1.5 min-w-0">
+              <span className="text-xl xl:text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none">
                 <AnimatedNumber value={avgDelayMinutes} prefix="+" suffix=" min" />
               </span>
-              <span className="text-[11px] text-slate-500">Corridor mean</span>
+              <span className="text-[11px] text-slate-500 whitespace-nowrap truncate">
+                Corridor mean
+              </span>
             </div>
           </div>
         </StaggerItem>
 
-        <StaggerItem>
+        <StaggerItem className="h-full">
           <button
             type="button"
             onClick={() =>
@@ -417,23 +435,27 @@ export function PassengerDashboardPage() {
                 prev === 'WEATHER_GROUP' ? 'ALL' : 'WEATHER_GROUP'
               )
             }
-            className={`w-full h-full text-left p-3.5 enterprise-card transition-all active:scale-[0.99] flex flex-col justify-between ${
+            className={`w-full min-h-[88px] h-full text-left p-3.5 enterprise-card transition-all duration-150 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 active:scale-[0.985] flex flex-col justify-between ${
               categoryFilter === 'WEATHER_GROUP'
                 ? 'ring-2 ring-blue-600/20 border-blue-500'
                 : 'hover:border-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Weather Impact</span>
-              <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="text-xs font-medium text-slate-500 whitespace-nowrap truncate">
+                Weather Impact
+              </span>
+              <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600 shrink-0">
                 <CloudRain className="w-3.5 h-3.5" />
               </span>
             </div>
-            <div className="mt-2 flex items-baseline justify-between gap-2">
-              <span className="text-2xl font-bold text-slate-900">
+            <div className="mt-2 flex items-baseline justify-between gap-1.5 min-w-0">
+              <span className="text-xl xl:text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none">
                 <AnimatedNumber value={weatherIncidentsCount} />
               </span>
-              <span className="text-[11px] text-slate-500">Rain / flood reports</span>
+              <span className="text-[11px] text-slate-500 whitespace-nowrap truncate">
+                Rain / flood reports
+              </span>
             </div>
           </button>
         </StaggerItem>

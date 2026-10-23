@@ -74,35 +74,44 @@ function buildIncidentDivIcon(
     ? '#2563eb'
     : '#475569';
 
-  const size = isSelected ? 36 : 30;
+  const size = isSelected ? 38 : 30;
   const svgGlyph = getCategorySvgGlyph(incident.category || '');
-  const delayMs = prefersReducedMotion ? 0 : 140 + Math.min(staggerIndex * 30, 260);
+  const delayMs = prefersReducedMotion ? 0 : 120 + Math.min(staggerIndex * 28, 240);
 
   const pulseRingHtml =
     !prefersReducedMotion && isCritical
-      ? `<span class="animate-marker-pulse" style="position:absolute;inset:-5px;border-radius:9999px;border:2px solid ${bgHex};pointer-events:none;"></span>`
+      ? `<span class="animate-marker-pulse" style="position:absolute;inset:-6px;border-radius:9999px;border:2px solid ${bgHex};pointer-events:none;"></span>`
       : '';
 
+  const selectedHaloHtml = isSelected
+    ? `<span style="position:absolute;inset:-4px;border-radius:9999px;border:2px solid #2563eb;background:rgba(37,99,235,0.12);pointer-events:none;"></span>`
+    : '';
+
   const enterClass = prefersReducedMotion ? '' : 'pin-reveal-enter';
+  const boxShadow = isSelected
+    ? '0 0 0 3px rgba(37, 99, 235, 0.28), 0 4px 12px rgba(15, 23, 42, 0.42)'
+    : '0 2px 6px rgba(15, 23, 42, 0.28)';
 
   const html = `
     <div class="${enterClass}" style="animation-delay:${delayMs}ms;position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
       ${pulseRingHtml}
+      ${selectedHaloHtml}
       <div style="
         width:${size}px;
         height:${size}px;
         border-radius:9999px;
         background:${bgHex};
         border:${isSelected ? '3px' : '2.5px'} solid #ffffff;
-        box-shadow:0 2px 8px rgba(15, 23, 42, 0.35);
+        box-shadow:${boxShadow};
         display:flex;
         align-items:center;
         justify-content:center;
         color:#ffffff;
-        transition:all 0.15s ease;
+        transform:${isSelected ? 'scale(1.05)' : 'scale(1)'};
+        transition:transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease;
       ">
-        <svg viewBox="0 0 24 24" width="${isSelected ? 17 : 14}" height="${
-    isSelected ? 17 : 14
+        <svg viewBox="0 0 24 24" width="${isSelected ? 18 : 14}" height="${
+    isSelected ? 18 : 14
   }" fill="none" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
           ${svgGlyph}
         </svg>
@@ -134,9 +143,12 @@ function buildClusterDivIcon(
       ? '#f59e0b'
       : '#2563eb';
 
-  const size = 36;
-  const delayMs = prefersReducedMotion ? 0 : Math.min(staggerIndex * 40, 240);
+  const size = cluster.hasSelected ? 38 : 36;
+  const delayMs = prefersReducedMotion ? 0 : Math.min(staggerIndex * 35, 220);
   const enterClass = prefersReducedMotion ? '' : 'pin-reveal-enter';
+  const boxShadow = cluster.hasSelected
+    ? '0 0 0 3px rgba(37, 99, 235, 0.32), 0 4px 12px rgba(15, 23, 42, 0.36)'
+    : '0 3px 10px rgba(15, 23, 42, 0.3)';
 
   const html = `
     <div class="${enterClass}" style="
@@ -146,7 +158,7 @@ function buildClusterDivIcon(
       border-radius:9999px;
       background:${bgHex};
       border:3px solid #ffffff;
-      box-shadow:0 3px 10px rgba(15, 23, 42, 0.3);
+      box-shadow:${boxShadow};
       display:flex;
       flex-direction:column;
       align-items:center;
@@ -154,6 +166,7 @@ function buildClusterDivIcon(
       color:#ffffff;
       font-weight:700;
       font-size:12px;
+      transition:transform 0.18s ease, box-shadow 0.18s ease;
     ">
       <span>${cluster.count}</span>
     </div>
@@ -256,15 +269,29 @@ function AnimatedCorridorPolyline({
   }, [prefersReducedMotion, onDrawComplete]);
 
   return (
-    <Polyline
-      ref={polylineRef}
-      positions={positions}
-      pathOptions={{
-        color: '#0284c7',
-        weight: 4,
-        opacity: 0.8,
-      }}
-    />
+    <>
+      <Polyline
+        positions={positions}
+        pathOptions={{
+          color: '#ffffff',
+          weight: 7,
+          opacity: 0.75,
+          lineCap: 'round',
+          lineJoin: 'round',
+        }}
+      />
+      <Polyline
+        ref={polylineRef}
+        positions={positions}
+        pathOptions={{
+          color: '#0284c7',
+          weight: 4.5,
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+        }}
+      />
+    </>
   );
 }
 
@@ -418,7 +445,7 @@ export function CorridorIntelligenceMap({
             }}
             defaultValue=""
             aria-label="Jump to corridor checkpoint"
-            className="px-2.5 py-1.5 rounded-lg bg-white/95 backdrop-blur-xs border border-slate-200 text-xs font-medium text-slate-700 shadow-sm focus:outline-none focus:border-blue-600"
+            className="px-2.5 py-1.5 rounded-lg bg-white/95 backdrop-blur-xs border border-slate-200 hover:border-slate-300 text-xs font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all"
           >
             <option value="" disabled>
               Jump to Location...
@@ -441,9 +468,9 @@ export function CorridorIntelligenceMap({
                 return next;
               });
             }}
-            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
               showCorridorLine
-                ? 'bg-blue-600 border-blue-600 text-white'
+                ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
                 : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
             title="Toggle NH-66 Corridor Route Highlight"
@@ -454,9 +481,9 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setEnableClustering((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
               enableClustering
-                ? 'bg-blue-600 border-blue-600 text-white'
+                ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
                 : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
             title="Toggle Spatial Marker Clustering"
@@ -467,7 +494,7 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setDarkTacticalTiles((v) => !v)}
-            className="px-2.5 py-1.5 rounded-lg bg-white/95 border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm flex items-center gap-1"
+            className="px-2.5 py-1.5 rounded-lg bg-white/95 border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 shadow-sm flex items-center gap-1 transition-all"
             title="Switch Daylight / Dark Map Style"
           >
             <Compass className="w-3.5 h-3.5 text-blue-600" />
@@ -482,7 +509,7 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setZoomAction('in')}
-            className="p-2 text-slate-700 hover:bg-slate-100 border-b border-slate-200"
+            className="p-2 text-slate-700 hover:bg-slate-100 active:bg-slate-200 focus-visible:outline-none focus-visible:bg-slate-100 border-b border-slate-200 transition-colors"
             title="Zoom in"
             aria-label="Zoom in"
           >
@@ -491,7 +518,7 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setZoomAction('out')}
-            className="p-2 text-slate-700 hover:bg-slate-100"
+            className="p-2 text-slate-700 hover:bg-slate-100 active:bg-slate-200 focus-visible:outline-none focus-visible:bg-slate-100 transition-colors"
             title="Zoom out"
             aria-label="Zoom out"
           >
@@ -501,7 +528,7 @@ export function CorridorIntelligenceMap({
         <button
           type="button"
           onClick={handleLocateMe}
-          className="p-2 rounded-lg bg-white/95 border border-slate-200 text-blue-600 hover:bg-slate-100 shadow-sm"
+          className="p-2 rounded-lg bg-white/95 border border-slate-200 text-blue-600 hover:bg-slate-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 shadow-sm transition-all"
           title="Center on my location"
           aria-label="Center on my location"
         >
@@ -622,8 +649,8 @@ export function CorridorIntelligenceMap({
                   },
                 }}
               >
-                <Tooltip direction="top" offset={[0, -16]} opacity={0.98}>
-                  <div className="p-1 max-w-xs space-y-0.5 text-slate-900">
+                <Tooltip direction="top" offset={[0, -18]} opacity={0.98}>
+                  <div className="p-1 max-w-xs space-y-1 text-slate-900">
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-900 text-white">
                         {inc.severity}
@@ -631,11 +658,23 @@ export function CorridorIntelligenceMap({
                       <span className="text-[10px] font-semibold text-blue-700">
                         {inc.category}
                       </span>
+                      {isSelected && (
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-600 text-white">
+                          Selected
+                        </span>
+                      )}
                     </div>
                     <div className="font-bold text-xs leading-tight">{inc.title}</div>
-                    <div className="text-[10px] text-slate-600">
-                      {inc.roadName} • Confidence: <strong>{inc.confidenceScore}%</strong> • Delay:{' '}
-                      <strong>+{inc.estimatedDelayMinutes}m</strong>
+                    <div className="text-[10px] text-slate-600 flex items-center gap-1.5">
+                      <span>{inc.roadName}</span>
+                      <span>•</span>
+                      <span>
+                        Confidence: <strong className="text-slate-900">{inc.confidenceScore}%</strong>
+                      </span>
+                      <span>•</span>
+                      <span className="text-amber-700 font-semibold">
+                        +{inc.estimatedDelayMinutes}m
+                      </span>
                     </div>
                   </div>
                 </Tooltip>

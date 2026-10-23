@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import path from 'path';
+import { env } from './config/env.js';
 import { db } from './db/index.js';
 import { authRouter } from './routes/auth.js';
 import { incidentsRouter } from './routes/incidents.js';
@@ -26,14 +27,12 @@ export function createApp() {
     })
   );
 
-  const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173')
-    .split(',')
-    .map((o) => o.trim());
+  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
 
   app.use(
     cors({
       origin: (origin, cb) => {
-        if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        if (!origin || allowedOrigins.includes(origin) || env.NODE_ENV !== 'production') {
           cb(null, true);
         } else {
           cb(new Error('Origin not allowed by CORS'));
@@ -48,7 +47,7 @@ export function createApp() {
   app.use(cookieParser());
 
   // Rate limiting for auth and incident submissions (relaxed during automated test runs)
-  const isTest = process.env.NODE_ENV === 'test';
+  const isTest = process.env.NODE_ENV === 'test' || env.NODE_ENV === 'test';
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: isTest ? 5000 : 400,
@@ -58,7 +57,7 @@ export function createApp() {
   app.use('/api/v1', apiLimiter);
 
   // Serve static uploaded evidence safely without execution
-  const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || './uploads');
+  const uploadDir = path.resolve(process.cwd(), env.UPLOAD_DIR);
   app.use(
     '/uploads',
     (_req, res, next) => {
