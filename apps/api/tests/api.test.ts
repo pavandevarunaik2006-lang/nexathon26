@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
+import {
+  createInitialSimulatedVehicles,
+  stepSimulatedVehicle,
+  evaluateVehiclesForIncident,
+} from '@roadalert/shared';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/index.js';
 import { seedDatabase, DEMO_IDS } from '../src/db/seedData.js';
@@ -523,5 +528,166 @@ describe('RoadAlert API — Acceptance Criteria & Security Suite (15 Criteria)',
     });
     expect(sameRes.status).toBe(400);
     expect(sameRes.body.error.code).toBe('SAME_ORIGIN_DESTINATION');
+  });
+
+  it('24. Moves simulated vehicles smoothly along valid road geometry and updates directional heading', () => {
+    const fleet = createInitialSimulatedVehicles();
+    expect(fleet.length).toBe(10);
+
+    for (const v of fleet) {
+      expect(v.telemetryMode).toBe('SIMULATION_MODE');
+      expect(['CAR', 'BUS', 'TRUCK']).toContain(v.vehicleType);
+      expect(v.waypoints.length).toBeGreaterThan(10);
+      expect(v.headingDeg).toBeGreaterThanOrEqual(0);
+      expect(v.headingDeg).toBeLessThan(360);
+    }
+
+    const v0 = fleet[0];
+    const startLat = v0.lat;
+    const startLng = v0.lng;
+
+    // Advance 3 seconds along road geometry
+    stepSimulatedVehicle(v0, 3.0, 18);
+
+    expect(v0.lat).not.toBe(startLat);
+    expect(v0.lng).not.toBe(startLng);
+    expect(v0.headingDeg).toBeGreaterThanOrEqual(0);
+    expect(v0.headingDeg).toBeLessThan(360);
+  });
+
+  it('25. Supports map-based incident reporting with idempotency, validation, and honest initial confidence', async () => {
+    const pinnedLat = 12.9261;
+    const pinnedLng = 74.8267;
+
+    // Reverse geocode clicked map coordinate
+    const revRes = await request(app).get(
+      `/api/v1/locations/reverse?lat=${pinnedLat}&lng=${pinnedLng}`
+    );
+    expect(revRes.status).toBe(200);
+    expect(revRes.body.data.label).toContain('Kuloor');
+
+    // Failed submission with too-short description does not create a persistent incident
+    const countBeforeRes = await request(app).get('/api/v1/map/incidents');
+    const countBefore = countBeforeRes.body.data.totalCount;
+
+    const invalidMapReport = await request(app)
+      .post('/api/v1/incidents')
+      .set('Authorization', `Bearer ${passengerToken}`)
+      .send({
+        title: 'Short',
+        description: 'Too short',
+        category: 'Accident',
+        severity: 'CRITICAL',
+        latitude: pinnedLat,
+        longitude: pinnedLng,
+        roadName: revRes.body.data.roadName,
+      });
+    expect(invalidMapReport.status).toBe(400);
+
+    const countAfterFailRes = await request(app).get('/api/v1/map/incidents');
+    expect(countAfterFailRes.body.data.totalCount).toBe(countBefore);
+
+    // Valid map-pinned incident submission with idempotency key
+    const idemKey = `map-pin-test-${Date.now()}`;
+    const validMapReport = await request(app)
+      .post('/api/v1/incidents')
+      .set('Authorization', `Bearer ${passengerToken}`)
+      .set('X-Idempotency-Key', idemKey)
+      .send({
+        title: 'Multi-vehicle collision at Kuloor Bridge',
+        description: 'Northbound lanes obstructed on Kuloor Bridge approach; heavy congestion forming.',
+        category: 'Accident',
+        severity: 'CRITICAL',
+        latitude: pinnedLat,
+        longitude: pinnedLng,
+        roadName: revRes.body.data.roadName,
+        estimatedDelayMinutes: 35,
+        idempotencyKey: idemKey,
+      });
+
+    expect(validMapReport.status).toBe(201);
+    const createdInc = validMapReport.body.data.incident;
+    expect(createdInc.latitude).toBeCloseTo(pinnedLat, 4);
+    expect(createdInc.longitude).toBeCloseTo(pinnedLng, 4);
+    // Must not falsely claim authority confirmation or independent multi-user verification on initial submit
+    expect(createdInc.authorityConfirmed).toBe(false);
+    expect(createdInc.verificationLevel).toBeLessThanOrEqual(2);
+
+    // Duplicate click with same idempotency key returns existing incident without creating duplicate
+    const dupMapReport = await request(app)
+      .post('/api/v1/incidents')
+      .set('Authorization', `Bearer ${passengerToken}`)
+      .set('X-Idempotency-Key', idemKey)
+      .send({
+        title: 'Multi-vehicle collision at Kuloor Bridge',
+        description: 'Northbound lanes obstructed on Kuloor Bridge approach; heavy congestion forming.',
+        category: 'Accident',
+        severity: 'CRITICAL',
+        latitude: pinnedLat,
+        longitude: pinnedLng,
+        roadName: revRes.body.data.roadName,
+        estimatedDelayMinutes: 35,
+        idempotencyKey: idemKey,
+      });
+    expect(dupMapReport.body.data.incident.id).toBe(createdInc.id);
+  });
+
+  it('26. Dynamically reroutes only affected simulated vehicles without teleporting or looping', () => {
+    const fleet = createInitialSimulatedVehicles();
+    const nh66Vehicle = fleet.find((v) => v.id === 'sim-veh-1')!; // At Pumpwell -> Nanthoor heading North toward Kuloor/Surathkal
+    const nh75Vehicle = fleet.find((v) => v.id === 'sim-veh-9')!; // On NH-75 Eastbound toward BC Road
+
+    const prevLat = nh66Vehicle.lat;
+    const prevLng = nh66Vehicle.lng;
+    const prevNh75Route = nh75Vehicle.routeId;
+
+    // 1. Report a CRITICAL Accident ahead on NH-66 at Kuloor Bridge (12.9261, 74.8267)
+    const criticalIncident = {
+      id: 'inc-sim-kuloor-crit',
+      title: 'Critical blockage on NH-66 Kuloor Bridge',
+      category: 'Accident',
+      severity: 'CRITICAL',
+      latitude: 12.9261,
+      longitude: 74.8267,
+      roadName: 'NH-66 Kuloor Bridge',
+      roadClosed: true,
+      confidenceScore: 75,
+    };
+
+    const impact1 = evaluateVehiclesForIncident(fleet, criticalIncident);
+    expect(impact1.reroutedVehicleIds).toContain(nh66Vehicle.id);
+    expect(impact1.unaffectedVehicleIds).toContain(nh75Vehicle.id);
+
+    // Verify smooth handoff: rerouted vehicle starts from its exact current [lat, lng] (no teleporting!)
+    expect(nh66Vehicle.status).toBe('REROUTED');
+    expect(nh66Vehicle.waypoints[0][0]).toBeCloseTo(prevLat, 4);
+    expect(nh66Vehicle.waypoints[0][1]).toBeCloseTo(prevLng, 4);
+    expect(nh66Vehicle.rerouteReason).toContain('NH-66 Kuloor Bridge');
+
+    // Unaffected NH-75 vehicle preserves its route
+    expect(nh75Vehicle.status).toBe('CRUISING');
+    expect(nh75Vehicle.routeId).toBe(prevNh75Route);
+
+    // 2. Re-evaluating the same incident ID must not trigger a rerouting loop
+    const impactLoopCheck = evaluateVehiclesForIncident(fleet, criticalIncident);
+    expect(impactLoopCheck.affectedVehicleIds.length).toBe(0);
+
+    // 3. Unverified MEDIUM slowdown on NH-75 triggers CAUTION_SLOWDOWN rather than forced detour
+    const unverifiedSlowdown = {
+      id: 'inc-sim-nh75-minor',
+      title: 'Slow traffic near Farangipete',
+      category: 'Heavy traffic',
+      severity: 'MEDIUM',
+      latitude: 12.8795,
+      longitude: 74.9782,
+      roadName: 'NH-75 Farangipete',
+      roadClosed: false,
+      confidenceScore: 25,
+    };
+
+    const impact2 = evaluateVehiclesForIncident(fleet, unverifiedSlowdown);
+    expect(impact2.slowedVehicleIds).toContain(nh75Vehicle.id);
+    expect(nh75Vehicle.status).toBe('CAUTION_SLOWDOWN');
+    expect(nh75Vehicle.currentSpeedKmh).toBeLessThan(nh75Vehicle.baseSpeedKmh);
   });
 });

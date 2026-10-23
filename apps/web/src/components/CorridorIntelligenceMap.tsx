@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -18,8 +18,26 @@ import {
   Route,
   Plus,
   Minus,
+  Navigation,
+  MapPinPlus,
+  Eye,
+  EyeOff,
+  GitBranch,
+  X,
 } from 'lucide-react';
-import { REGIONAL_DESTINATIONS } from '@roadalert/shared';
+import {
+  REGIONAL_DESTINATIONS,
+  createInitialSimulatedVehicles,
+  evaluateVehiclesForIncident,
+  type SimulatedVehicle,
+} from '@roadalert/shared';
+import { useToast } from '../context/ToastContext';
+import { SimulatedVehicleLayer } from './SimulatedVehicleLayer';
+import {
+  MapIncidentPlacementListener,
+  DraftIncidentMapMarker,
+  MapIncidentReportOverlay,
+} from './MapIncidentReportOverlay';
 
 // Coastal NH-66 Backbone Polyline (Thokkottu -> Pumpwell -> Nanthoor -> KPT -> Kuloor -> Baikampady -> Surathkal -> Mulki -> Padubidri -> Kaup -> Udupi -> Manipal)
 const NH66_CORRIDOR_POLYLINE: [number, number][] = [
@@ -312,18 +330,45 @@ export function CorridorIntelligenceMap({
   onFocusCoordsChange,
   heightClass = 'h-[520px]',
 }: CorridorIntelligenceMapProps) {
+  const { showToast } = useToast();
   const prefersReducedMotion = Boolean(useReducedMotion());
+
   const [darkTacticalTiles, setDarkTacticalTiles] = useState(false);
   const [showCorridorLine, setShowCorridorLine] = useState(true);
   const [showLandmarks, setShowLandmarks] = useState(true);
+  const [showIncidents, setShowIncidents] = useState(true);
+  const [showVehicles, setShowVehicles] = useState(true);
+  const [simulationSpeed, setSimulationSpeed] = useState<number>(1);
   const [enableClustering, setEnableClustering] = useState(true);
+
   const [zoom, setZoom] = useState(10);
   const [zoomAction, setZoomAction] = useState<'in' | 'out' | null>(null);
   const [tileError, setTileError] = useState(false);
   const [internalFocus, setInternalFocus] = useState<[number, number] | null>(null);
   const [corridorDrawComplete, setCorridorDrawComplete] = useState(prefersReducedMotion);
 
+  // Map-based incident placement state
+  const [isPlacementMode, setIsPlacementMode] = useState(false);
+  const [draftIncidentCoords, setDraftIncidentCoords] = useState<[number, number] | null>(null);
+  const [localReportedIncidents, setLocalReportedIncidents] = useState<any[]>([]);
+
+  // Simulated vehicle fleet state (kept in ref for 60fps imperative DOM updates, revision triggers icon/detour sync)
+  const vehiclesRef = useRef<SimulatedVehicle[]>(createInitialSimulatedVehicles());
+  const [vehicleRevision, setVehicleRevision] = useState(0);
+  const [rerouteNotification, setRerouteNotification] = useState<{
+    summaryMessage: string;
+    reroutedCount: number;
+    slowedCount: number;
+  } | null>(null);
+
   const effectiveFocus = focusCoords || internalFocus;
+
+  // Merge newly reported incidents immediately while React Query re-fetches
+  const mergedIncidents = useMemo(() => {
+    const idSet = new Set(incidents.map((i) => i.id));
+    const extras = localReportedIncidents.filter((i) => !idSet.has(i.id));
+    return [...extras, ...incidents];
+  }, [incidents, localReportedIncidents]);
 
   useEffect(() => {
     if (!showCorridorLine || prefersReducedMotion) {
@@ -331,9 +376,28 @@ export function CorridorIntelligenceMap({
     }
   }, [showCorridorLine, prefersReducedMotion]);
 
+  // Evaluate initial road closures against simulated traffic once without looping
+  useEffect(() => {
+    let anyChanged = false;
+    for (const inc of mergedIncidents) {
+      if (inc.roadClosed || inc.severity === 'CRITICAL') {
+        const res = evaluateVehiclesForIncident(vehiclesRef.current, inc);
+        if (res.affectedVehicleIds.length > 0) {
+          anyChanged = true;
+        }
+      }
+    }
+    if (anyChanged) {
+      setVehicleRevision((r) => r + 1);
+    }
+  }, [mergedIncidents]);
+
   const { singleMarkers, clusters } = useMemo(() => {
+    if (!showIncidents) {
+      return { singleMarkers: [], clusters: [] };
+    }
     if (!enableClustering || zoom >= 11) {
-      return { singleMarkers: incidents, clusters: [] };
+      return { singleMarkers: mergedIncidents, clusters: [] };
     }
 
     const thresholdDeg = zoom <= 9 ? 0.06 : 0.032;
@@ -343,7 +407,7 @@ export function CorridorIntelligenceMap({
       items: any[];
     }[] = [];
 
-    for (const inc of incidents) {
+    for (const inc of mergedIncidents) {
       const lat = Number(inc.latitude);
       const lng = Number(inc.longitude);
       const existing = grouped.find(
@@ -400,7 +464,7 @@ export function CorridorIntelligenceMap({
     }
 
     return { singleMarkers: singles, clusters: multiClusters };
-  }, [incidents, zoom, enableClustering, selectedIncidentId]);
+  }, [mergedIncidents, zoom, enableClustering, selectedIncidentId, showIncidents]);
 
   const handleLocateMe = () => {
     if (!navigator.geolocation) return;
@@ -418,6 +482,55 @@ export function CorridorIntelligenceMap({
     );
   };
 
+  const handleCancelPlacement = useCallback(() => {
+    setIsPlacementMode(false);
+    setDraftIncidentCoords(null);
+  }, []);
+
+  const handleIncidentCreatedOnMap = useCallback(
+    (createdIncident: any) => {
+      setIsPlacementMode(false);
+      setDraftIncidentCoords(null);
+      setShowIncidents(true);
+      setLocalReportedIncidents((prev) => [createdIncident, ...prev]);
+
+      // Dynamically evaluate simulated vehicles against the newly reported incident
+      const impact = evaluateVehiclesForIncident(vehiclesRef.current, createdIncident);
+      setVehicleRevision((r) => r + 1);
+
+      if (impact.reroutedVehicleIds.length > 0 || impact.slowedVehicleIds.length > 0) {
+        setRerouteNotification({
+          summaryMessage: impact.summaryMessage,
+          reroutedCount: impact.reroutedVehicleIds.length,
+          slowedCount: impact.slowedVehicleIds.length,
+        });
+      }
+
+      showToast({
+        type: 'success',
+        title: 'Incident Reported & Traffic Reassessed',
+        message: impact.summaryMessage,
+      });
+
+      const coords: [number, number] = [
+        Number(createdIncident.latitude),
+        Number(createdIncident.longitude),
+      ];
+      setInternalFocus(coords);
+      onFocusCoordsChange?.(coords);
+      onSelectIncident(createdIncident);
+    },
+    [onFocusCoordsChange, onSelectIncident, showToast]
+  );
+
+  const totalVehiclesCount = vehiclesRef.current.length;
+  const reroutedVehiclesCount = vehiclesRef.current.filter(
+    (v) => v.status === 'REROUTED'
+  ).length;
+  const slowedVehiclesCount = vehiclesRef.current.filter(
+    (v) => v.status === 'CAUTION_SLOWDOWN'
+  ).length;
+
   return (
     <div
       className={`relative rounded-xl overflow-hidden border border-slate-200 bg-white shadow-card ${
@@ -426,14 +539,86 @@ export function CorridorIntelligenceMap({
     >
       {/* Top Floating Geospatial Controls */}
       <div className="absolute top-3 left-3 right-3 z-[400] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/95 backdrop-blur-xs border border-slate-200 text-xs font-semibold text-slate-800 shadow-sm">
+        {/* Left Telemetry & Simulation Mode Status Pill */}
+        <div
+          data-testid="map-simulation-status-pill"
+          className="pointer-events-auto flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-white/95 backdrop-blur-xs border border-slate-200 text-xs font-semibold text-slate-800 shadow-sm"
+        >
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>NH-66 / NH-75 Corridor Map</span>
+          <span>NH-66 Corridor</span>
           <span className="text-slate-300">|</span>
-          <span className="text-blue-600 font-bold">{incidents.length} Active</span>
+          <span className="text-blue-600 font-bold">{mergedIncidents.length} Incidents</span>
+          <span className="text-slate-300">|</span>
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 border border-sky-200 text-sky-700 text-[10px] font-bold uppercase tracking-wide"
+            title="Deterministic road-following vehicle simulation (never claimed as live GPS)"
+          >
+            Simulation Mode • {showVehicles ? totalVehiclesCount : 0} Vehicles
+          </span>
+          {reroutedVehiclesCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-bold">
+              <GitBranch className="w-3 h-3" /> {reroutedVehiclesCount} Rerouted
+            </span>
+          )}
         </div>
 
+        {/* Right Compact Map & Incident Controls */}
         <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+          {/* Report Incident Directly on Map Toggle */}
+          <button
+            type="button"
+            data-testid="toggle-map-report-btn"
+            onClick={() => {
+              if (isPlacementMode) {
+                handleCancelPlacement();
+              } else {
+                setIsPlacementMode(true);
+                setDraftIncidentCoords(null);
+              }
+            }}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
+              isPlacementMode
+                ? 'bg-red-600 border-red-600 text-white hover:bg-red-700'
+                : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+            }`}
+            title="Pin and report a new road incident directly on the map"
+          >
+            <MapPinPlus className="w-3.5 h-3.5" />
+            <span>{isPlacementMode ? 'Cancel Pin' : 'Pin Incident'}</span>
+          </button>
+
+          {/* Show / Hide Simulated Vehicles Toggle */}
+          <button
+            type="button"
+            data-testid="toggle-vehicles-btn"
+            onClick={() => setShowVehicles((v) => !v)}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
+              showVehicles
+                ? 'bg-sky-600 border-sky-600 text-white hover:bg-sky-700'
+                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-50'
+            }`}
+            title="Show or hide simulated corridor vehicles"
+          >
+            <Navigation className="w-3.5 h-3.5" />
+            <span>Vehicles ({totalVehiclesCount})</span>
+          </button>
+
+          {/* Show / Hide Incident Markers Toggle */}
+          <button
+            type="button"
+            data-testid="toggle-incidents-btn"
+            onClick={() => setShowIncidents((v) => !v)}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
+              showIncidents
+                ? 'bg-white/95 border-blue-500 text-blue-700 hover:bg-blue-50'
+                : 'bg-white/95 border-slate-200 text-slate-500 hover:bg-slate-50'
+            }`}
+            title="Show or hide incident markers on the map"
+          >
+            {showIncidents ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            <span>Incidents</span>
+          </button>
+
           <select
             onChange={(e) => {
               const found = REGIONAL_DESTINATIONS.find((d) => d.name === e.target.value);
@@ -503,6 +688,39 @@ export function CorridorIntelligenceMap({
         </div>
       </div>
 
+      {/* Dynamic Vehicle Rerouting Notification Banner */}
+      {rerouteNotification && !isPlacementMode && (
+        <div
+          data-testid="vehicle-reroute-banner"
+          className="absolute top-14 left-3 right-3 z-[410] px-3.5 py-2 rounded-xl bg-purple-950/95 text-white border border-purple-700 shadow-lg flex items-center justify-between gap-2 text-xs"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="p-1 rounded-lg bg-purple-600 text-white shrink-0">
+              <GitBranch className="w-3.5 h-3.5" />
+            </span>
+            <span className="truncate font-medium">
+              {rerouteNotification.summaryMessage}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRerouteNotification(null)}
+            className="p-1 rounded hover:bg-purple-800 text-purple-200 shrink-0"
+            aria-label="Dismiss reroute notification"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Map-Based Incident Reporting Overlay (Banner or Compact Prefilled Form) */}
+      <MapIncidentReportOverlay
+        isPlacementMode={isPlacementMode}
+        draftCoords={draftIncidentCoords}
+        onCancelPlacement={handleCancelPlacement}
+        onIncidentCreated={handleIncidentCreatedOnMap}
+      />
+
       {/* Right-Side Compact Zoom & Locate Controls */}
       <div className="absolute bottom-14 right-3 z-[400] flex flex-col gap-1 pointer-events-auto">
         <div className="flex flex-col rounded-lg bg-white/95 border border-slate-200 shadow-sm overflow-hidden">
@@ -545,7 +763,7 @@ export function CorridorIntelligenceMap({
       <MapContainer
         center={[12.96, 74.82]}
         zoom={10}
-        className={`w-full ${heightClass} z-0`}
+        className={`w-full ${heightClass} z-0 ${isPlacementMode ? 'cursor-crosshair' : ''}`}
         zoomControl={false}
       >
         <TileLayer
@@ -567,6 +785,22 @@ export function CorridorIntelligenceMap({
           prefersReducedMotion={prefersReducedMotion}
         />
 
+        {/* Map Click Listener for Direct Incident Placement */}
+        <MapIncidentPlacementListener
+          enabled={isPlacementMode}
+          onPickLocation={(lat, lng) => setDraftIncidentCoords([lat, lng])}
+        />
+
+        {/* Temporary Draft Pin while reporting an incident */}
+        <DraftIncidentMapMarker
+          coords={draftIncidentCoords}
+          roadName={
+            draftIncidentCoords
+              ? `${draftIncidentCoords[0].toFixed(4)}, ${draftIncidentCoords[1].toFixed(4)}`
+              : ''
+          }
+        />
+
         {/* NH-66 Primary Coastal Highway Route Highlight with Coordinated Draw Completion */}
         {showCorridorLine && (
           <AnimatedCorridorPolyline
@@ -575,6 +809,15 @@ export function CorridorIntelligenceMap({
             onDrawComplete={() => setCorridorDrawComplete(true)}
           />
         )}
+
+        {/* Road-Following Animated Simulated Vehicles Layer */}
+        <SimulatedVehicleLayer
+          vehiclesRef={vehiclesRef}
+          visible={showVehicles}
+          speedMultiplier={simulationSpeed}
+          prefersReducedMotion={prefersReducedMotion}
+          revision={vehicleRevision}
+        />
 
         {/* Regional Checkpoint Nodes */}
         {showLandmarks &&
@@ -616,6 +859,7 @@ export function CorridorIntelligenceMap({
               )}
               eventHandlers={{
                 click: () => {
+                  if (isPlacementMode) return;
                   setInternalFocus([cluster.lat, cluster.lng]);
                   onSelectIncident(cluster.items[0]);
                 },
@@ -644,6 +888,7 @@ export function CorridorIntelligenceMap({
                 zIndexOffset={isSelected ? 1000 : inc.severity === 'CRITICAL' ? 500 : 100}
                 eventHandlers={{
                   click: () => {
+                    if (isPlacementMode) return;
                     onSelectIncident(inc);
                     setInternalFocus([Number(inc.latitude), Number(inc.longitude)]);
                   },
@@ -683,9 +928,9 @@ export function CorridorIntelligenceMap({
           })}
       </MapContainer>
 
-      {/* Bottom Compact Legend & Layer Controls */}
+      {/* Bottom Compact Legend & Simulation Controls */}
       <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3.5">
           <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
             <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" /> Critical / Closure
           </span>
@@ -693,8 +938,18 @@ export function CorridorIntelligenceMap({
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Warning / High
           </span>
           <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" /> Medium / Active
+            <span className="w-2.5 h-2.5 rounded-full bg-sky-600 inline-block" /> Sim Vehicles ({totalVehiclesCount})
           </span>
+          {reroutedVehiclesCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-purple-700">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" /> Bypass Rerouted ({reroutedVehiclesCount})
+            </span>
+          )}
+          {slowedVehiclesCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 font-semibold text-amber-700">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-600 inline-block" /> Caution Slow ({slowedVehiclesCount})
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setShowLandmarks((v) => !v)}
@@ -703,8 +958,23 @@ export function CorridorIntelligenceMap({
             {showLandmarks ? 'Hide Checkpoints' : 'Show Checkpoints'}
           </button>
         </div>
-        <div className="text-[11px] text-slate-500">
-          Coastal Corridor: Mangaluru – Surathkal – Mulki – Udupi (NH-66)
+
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className="text-slate-500 font-medium">Sim Speed:</span>
+          {([1, 2, 0] as const).map((spd) => (
+            <button
+              key={spd}
+              type="button"
+              onClick={() => setSimulationSpeed(spd)}
+              className={`px-2 py-0.5 rounded font-semibold transition-colors ${
+                simulationSpeed === spd
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {spd === 0 ? 'Pause' : `${spd}x`}
+            </button>
+          ))}
         </div>
       </div>
     </div>
