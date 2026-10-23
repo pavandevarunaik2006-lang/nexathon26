@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -21,6 +21,11 @@ import {
   Check,
   X,
   Loader2,
+  Copy,
+  Image as ImageIcon,
+  Trash2,
+  ExternalLink,
+  AlertCircle,
 } from 'lucide-react';
 import {
   MapContainer,
@@ -37,7 +42,7 @@ import {
   INCIDENT_SEVERITIES,
   REGIONAL_DESTINATIONS,
 } from '@roadalert/shared';
-import { apiRequest, API_BASE } from '../lib/api';
+import { apiRequest, API_BASE, getEvidenceFileUrl } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import {
@@ -57,6 +62,15 @@ import {
   parseClientCoordinateString,
   type LocationEndpointValue,
 } from '../features/routes/RouteLocationInput';
+import { useNavigationTracking } from '../hooks';
+import { ActiveNavigationPanel } from '../features/routes';
+import { CarNavigationMarker } from '../features/maps';
+import {
+  normalizePolylineGeometry,
+  normalizeCoordinateToLatLng,
+  isValidCoordinate,
+  calculateForwardBearingDeg,
+} from '../services/navigationTrackingService';
 
 function RoutePolylineWithDraw({
   route,
@@ -106,11 +120,13 @@ function RoutePolylineWithDraw({
     };
   }, [isSelected, route.id, prefersReducedMotion, onDrawComplete]);
 
+  const normalizedGeometry = normalizePolylineGeometry(route.geometry);
+
   return (
     <>
       {isSelected && (
         <Polyline
-          positions={route.geometry}
+          positions={normalizedGeometry}
           pathOptions={{
             color: '#ffffff',
             weight: 9,
@@ -122,7 +138,7 @@ function RoutePolylineWithDraw({
       )}
       <Polyline
         ref={polylineRef}
-        positions={route.geometry}
+        positions={normalizedGeometry}
         pathOptions={{
           color: strokeColor,
           weight: isSelected ? 6 : 3.5,
@@ -173,37 +189,39 @@ function RouteMapPickListener({
 }
 
 /**
- * Fits map bounds cleanly when a new route plan is calculated
+ * Fits map bounds cleanly when a new route plan is calculated or corridor is switched
  */
 function RouteMapBoundsController({
   planId,
+  selectedRouteId,
   originCoords,
   destCoords,
   selectedGeometry,
   prefersReducedMotion,
+  isNavigating,
 }: {
   planId?: string;
+  selectedRouteId?: string | null;
   originCoords?: { lat: number; lng: number } | null;
   destCoords?: { lat: number; lng: number } | null;
   selectedGeometry?: [number, number][];
   prefersReducedMotion: boolean;
+  isNavigating?: boolean;
 }) {
   const map = useMap();
 
   useEffect(() => {
-    if (!planId) return;
+    if (!planId || isNavigating) return;
+    const normalized = normalizePolylineGeometry(selectedGeometry);
     const points: [number, number][] = [];
-    if (Array.isArray(selectedGeometry) && selectedGeometry.length >= 2) {
-      for (const pt of selectedGeometry) {
-        if (Array.isArray(pt) && Number.isFinite(pt[0]) && Number.isFinite(pt[1])) {
-          points.push([pt[0], pt[1]]);
-        }
-      }
+
+    if (normalized.length >= 2) {
+      points.push(...normalized);
     } else {
-      if (originCoords && Number.isFinite(originCoords.lat) && Number.isFinite(originCoords.lng)) {
+      if (originCoords && isValidCoordinate(originCoords.lat, originCoords.lng)) {
         points.push([originCoords.lat, originCoords.lng]);
       }
-      if (destCoords && Number.isFinite(destCoords.lat) && Number.isFinite(destCoords.lng)) {
+      if (destCoords && isValidCoordinate(destCoords.lat, destCoords.lng)) {
         points.push([destCoords.lat, destCoords.lng]);
       }
     }
@@ -219,7 +237,7 @@ function RouteMapBoundsController({
         // Ignore bounds error if map container is hidden/unmounted
       }
     }
-  }, [planId, map, originCoords, destCoords, selectedGeometry, prefersReducedMotion]);
+  }, [planId, selectedRouteId, isNavigating, map, originCoords, destCoords, selectedGeometry, prefersReducedMotion]);
 
   return null;
 }
@@ -571,6 +589,101 @@ export function RoutePlannerPage() {
       ? { lat: destState.lat, lng: destState.lng }
       : planMutation.data?.destCoords || null;
 
+  const {
+    isNavigating,
+    followVehicle,
+    setFollowVehicle,
+    toggleFollowVehicle,
+    recenterTrigger,
+    triggerRecenter,
+    coords: navCoords,
+    gpsStatus: navGpsStatus,
+    gpsError: navGpsError,
+    isSimulated: isNavSimulated,
+    toggleSimulationMode,
+    simulateNextStep,
+    progress: navProgress,
+    dynamicEta: navDynamicEta,
+    resolvedSpeedKmh,
+    resolvedHeading,
+    distanceTravelledKm,
+    originMismatch,
+    diagnostics: navDiagnostics,
+    startNavigation,
+    confirmStartNavigation,
+    dismissOriginMismatchPrompt,
+    stopNavigation,
+    recalculateFromCurrentLocation,
+  } = useNavigationTracking({
+    selectedRoute,
+    originCoords: activeOriginCoords,
+    onUpdateOriginToGps: (newOrigin) => {
+      const updatedValue: LocationEndpointValue = {
+        text: newOrigin.label,
+        lat: newOrigin.lat,
+        lng: newOrigin.lng,
+        roadName: 'Current GPS Location',
+        source: 'MANUAL',
+      };
+      setOriginState(updatedValue);
+      validateAndSubmitRoutePlan(updatedValue, destState);
+    },
+    onRecalculatePlan: () => {
+      validateAndSubmitRoutePlan();
+    },
+  });
+
+  const normalizedSelectedGeometry = selectedRoute?.geometry
+    ? normalizePolylineGeometry(selectedRoute.geometry)
+    : [];
+
+  // Align Marker A & B with the actual geometry endpoints of the selected route
+  const markerAPosition: [number, number] | null =
+    normalizedSelectedGeometry.length >= 2
+      ? normalizedSelectedGeometry[0]
+      : activeOriginCoords && isValidCoordinate(activeOriginCoords.lat, activeOriginCoords.lng)
+      ? [activeOriginCoords.lat, activeOriginCoords.lng]
+      : null;
+
+  const markerBPosition: [number, number] | null =
+    normalizedSelectedGeometry.length >= 2
+      ? normalizedSelectedGeometry[normalizedSelectedGeometry.length - 1]
+      : activeDestCoords && isValidCoordinate(activeDestCoords.lat, activeDestCoords.lng)
+      ? [activeDestCoords.lat, activeDestCoords.lng]
+      : null;
+
+  // Initial road heading at the origin pointing towards the first corridor vertex
+  const initialRoadBearing = useMemo(() => {
+    if (normalizedSelectedGeometry.length >= 2) {
+      return calculateForwardBearingDeg(
+        normalizedSelectedGeometry[0][0],
+        normalizedSelectedGeometry[0][1],
+        normalizedSelectedGeometry[1][0],
+        normalizedSelectedGeometry[1][1]
+      );
+    }
+    return null;
+  }, [normalizedSelectedGeometry]);
+
+  // Initial vehicle coordinates placed directly at the planned origin on the route
+  const plannedOriginCoords = useMemo(() => {
+    if (!markerAPosition) return null;
+    return {
+      latitude: markerAPosition[0],
+      longitude: markerAPosition[1],
+      accuracy: 5,
+      speed: 0,
+      heading: initialRoadBearing,
+      altitude: null,
+      timestamp: Date.now(),
+    };
+  }, [markerAPosition, initialRoadBearing]);
+
+  const activeClosureCount =
+    selectedRoute?.affectingIncidents?.filter(
+      (inc: any) => inc.roadClosed
+    )?.length || 0;
+
   return (
     <div className="space-y-5">
       <div className="p-5 neu-card rounded-2xl space-y-4">
@@ -733,6 +846,12 @@ export function RoutePlannerPage() {
                 <span className="px-1.5 py-0.5 rounded bg-white/80 border border-black/10 text-[10px] font-bold">
                   {planMutation.data.triggeringIncident.verificationState}
                 </span>
+                <Link
+                  to={`/app/map?incidentId=${encodeURIComponent(planMutation.data.triggeringIncident.id)}&lat=${planMutation.data.triggeringIncident.latitude}&lng=${planMutation.data.triggeringIncident.longitude}`}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-white/90 border border-black/10 hover:bg-white text-blue-700"
+                >
+                  <MapPin className="w-3 h-3 text-blue-600" /> View on Map
+                </Link>
               </div>
             )}
 
@@ -782,6 +901,101 @@ export function RoutePlannerPage() {
           </div>
         )}
       </div>
+
+      {/* Origin Mismatch Explanation & Action Modal */}
+      {originMismatch && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn"
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 border border-slate-200">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
+                <Navigation className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Your current location differs from the selected origin
+                </h3>
+                <p className="text-xs text-slate-500">
+                  GPS position differs from planned route origin
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2 text-slate-700">
+              <div>
+                Your actual GPS position is{' '}
+                <strong className="text-blue-700 font-bold">
+                  {originMismatch.distanceKm} km
+                </strong>{' '}
+                away from the selected origin:
+              </div>
+              <div className="font-semibold text-slate-900 pl-2.5 py-1 border-l-2 border-blue-500 bg-white rounded-r">
+                {originState.text}
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Would you like to recalculate and navigate directly from your current location, or keep the selected origin?
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                type="button"
+                data-testid="start-from-my-location-btn"
+                onClick={() => confirmStartNavigation(true)}
+                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-md transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Navigation className="w-3.5 h-3.5" />
+                <span>Start from My Location ({originMismatch.distanceKm} km away)</span>
+              </button>
+              <button
+                type="button"
+                data-testid="keep-selected-origin-btn"
+                onClick={() => confirmStartNavigation(false)}
+                className="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs border border-slate-200 transition-colors"
+              >
+                Keep Selected Origin
+              </button>
+              <button
+                type="button"
+                data-testid="cancel-origin-mismatch-btn"
+                onClick={dismissOriginMismatchPrompt}
+                className="w-full py-1.5 px-4 text-xs font-medium text-slate-500 hover:text-slate-700 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Navigation HUD Panel */}
+      {isNavigating && (
+        <ActiveNavigationPanel
+          routeName={selectedRoute?.name || 'Selected Corridor'}
+          coords={navCoords}
+          gpsStatus={navGpsStatus}
+          gpsError={navGpsError}
+          isSimulated={isNavSimulated}
+          progress={navProgress}
+          dynamicEta={navDynamicEta}
+          resolvedSpeedKmh={resolvedSpeedKmh}
+          resolvedHeading={resolvedHeading}
+          distanceTravelledKm={distanceTravelledKm}
+          followVehicle={followVehicle}
+          onToggleFollowVehicle={toggleFollowVehicle}
+          onRecenter={triggerRecenter}
+          onStopNavigation={stopNavigation}
+          onRecalculateRoute={recalculateFromCurrentLocation}
+          isRecalculating={planMutation.isPending}
+          activeClosureCount={activeClosureCount}
+          onToggleSimulation={toggleSimulationMode}
+          onSimulateStep={simulateNextStep}
+          diagnostics={navDiagnostics}
+        />
+      )}
 
       {/* Route Comparison Cards + Map */}
       <div className="grid lg:grid-cols-12 gap-5">
@@ -910,14 +1124,60 @@ export function RoutePlannerPage() {
                             : '[VERIFIED] '}
                           {inc.title}
                         </span>
-                        <Link
-                          to={`/app/incidents/${inc.id}`}
-                          className="text-blue-600 hover:underline font-semibold shrink-0 ml-2"
-                        >
-                          +{inc.estimatedDelayMinutes}m ({inc.confidenceScore}%)
-                        </Link>
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          <Link
+                            to={`/app/map?incidentId=${encodeURIComponent(inc.id)}&lat=${inc.latitude}&lng=${inc.longitude}`}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 hover:bg-blue-100"
+                            title="View on Map"
+                          >
+                            <MapPin className="w-2.5 h-2.5 text-blue-600" /> Map
+                          </Link>
+                          <Link
+                            to={`/app/incidents/${inc.id}`}
+                            className="text-blue-600 hover:underline font-semibold"
+                          >
+                            +{inc.estimatedDelayMinutes}m ({inc.confidenceScore}%)
+                          </Link>
+                        </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Live Navigation Launch Control */}
+                {isSelected && (
+                  <div className="pt-2.5 border-t border-slate-100">
+                    {isNavigating ? (
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-blue-50 border border-blue-200">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-blue-900">
+                          <Navigation className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
+                          Navigating Active Corridor
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            stopNavigation();
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-sm"
+                        >
+                          Stop Navigation
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startNavigation();
+                        }}
+                        data-testid="start-navigation-btn"
+                        className="w-full py-2.5 px-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all active:scale-[0.99]"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span>Start Live GPS Navigation</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -1023,10 +1283,12 @@ export function RoutePlannerPage() {
 
             <RouteMapBoundsController
               planId={planMutation.data?.id}
+              selectedRouteId={selectedRoute?.id}
               originCoords={activeOriginCoords}
               destCoords={activeDestCoords}
               selectedGeometry={selectedRoute?.geometry}
               prefersReducedMotion={prefersReducedMotion}
+              isNavigating={isNavigating}
             />
 
             {routes.map((route: any) => {
@@ -1037,6 +1299,52 @@ export function RoutePlannerPage() {
                 ? '#16a34a'
                 : '#2563eb';
 
+              // If active live navigation is running on the selected route and progress is available:
+              if (isNavigating && isSelected && navProgress) {
+                const normTravelled = normalizePolylineGeometry(navProgress.travelledPolyline);
+                const normRemaining = normalizePolylineGeometry(navProgress.remainingPolyline);
+
+                return (
+                  <React.Fragment key={`nav-split-polyline-${route.id}`}>
+                    {/* Travelled portion (muted slate dashed line) */}
+                    {normTravelled.length >= 2 && (
+                      <Polyline
+                        positions={normTravelled}
+                        pathOptions={{
+                          color: '#64748b',
+                          weight: 5,
+                          opacity: 0.75,
+                          dashArray: '4, 4',
+                        }}
+                      >
+                        <LeafletTooltip direction="top" offset={[0, -4]} opacity={0.9}>
+                          <span className="text-[10px] font-sans">
+                            Travelled: {distanceTravelledKm.toFixed(1)} km
+                          </span>
+                        </LeafletTooltip>
+                      </Polyline>
+                    )}
+                    {/* Remaining portion (vibrant blue or closure red line) */}
+                    {normRemaining.length >= 2 && (
+                      <Polyline
+                        positions={normRemaining}
+                        pathOptions={{
+                          color: route.hasRoadClosureWarning ? '#dc2626' : '#2563eb',
+                          weight: 6,
+                          opacity: 0.95,
+                        }}
+                      >
+                        <LeafletTooltip direction="top" offset={[0, -4]} opacity={0.9}>
+                          <span className="text-[10px] font-sans font-semibold">
+                            Remaining: {navProgress.remainingDistanceKm} km
+                          </span>
+                        </LeafletTooltip>
+                      </Polyline>
+                    )}
+                  </React.Fragment>
+                );
+              }
+
               return (
                 <RoutePolylineWithDraw
                   key={route.id}
@@ -1045,7 +1353,7 @@ export function RoutePlannerPage() {
                   strokeColor={strokeColor}
                   prefersReducedMotion={prefersReducedMotion}
                   onSelect={() => {
-                    if (mapPickMode) return;
+                    if (mapPickMode || isNavigating) return;
                     if (selectedRouteId !== route.id) {
                       setRoutePinsReady(prefersReducedMotion);
                       setSelectedRouteId(route.id);
@@ -1056,49 +1364,60 @@ export function RoutePlannerPage() {
               );
             })}
 
-            {/* Origin Marker (A) */}
-            {activeOriginCoords &&
-              Number.isFinite(activeOriginCoords.lat) &&
-              Number.isFinite(activeOriginCoords.lng) && (
-                <CircleMarker
-                  center={[activeOriginCoords.lat, activeOriginCoords.lng]}
-                  radius={9}
-                  pathOptions={{
-                    color: '#ffffff',
-                    fillColor: '#2563eb',
-                    fillOpacity: 1,
-                    weight: 3,
-                  }}
-                >
-                  <LeafletTooltip direction="top" offset={[0, -8]} opacity={0.96}>
-                    <div className="text-[11px] font-sans">
-                      <strong>Origin (A):</strong> {originState.text}
-                    </div>
-                  </LeafletTooltip>
-                </CircleMarker>
-              )}
+            {/* Oriented Vehicle Marker: Placed at Selected Origin Upon Route Calculation & Tracks GPS Live During Navigation */}
+            {(isNavigating || plannedOriginCoords) && (
+              <CarNavigationMarker
+                coords={isNavigating ? navCoords : plannedOriginCoords}
+                progress={isNavigating ? navProgress : null}
+                resolvedSpeedKmh={isNavigating ? resolvedSpeedKmh : 0}
+                resolvedHeading={isNavigating ? resolvedHeading : (initialRoadBearing ?? null)}
+                followVehicle={isNavigating ? followVehicle : false}
+                recenterTrigger={recenterTrigger}
+                isSimulated={isNavSimulated}
+                onUserPanned={() => setFollowVehicle(false)}
+                isPlannedOrigin={!isNavigating}
+              />
+            )}
 
-            {/* Destination Marker (B) */}
-            {activeDestCoords &&
-              Number.isFinite(activeDestCoords.lat) &&
-              Number.isFinite(activeDestCoords.lng) && (
-                <CircleMarker
-                  center={[activeDestCoords.lat, activeDestCoords.lng]}
-                  radius={9}
-                  pathOptions={{
-                    color: '#ffffff',
-                    fillColor: '#059669',
-                    fillOpacity: 1,
-                    weight: 3,
-                  }}
-                >
-                  <LeafletTooltip direction="top" offset={[0, -8]} opacity={0.96}>
-                    <div className="text-[11px] font-sans">
-                      <strong>Destination (B):</strong> {destState.text}
-                    </div>
-                  </LeafletTooltip>
-                </CircleMarker>
-              )}
+            {/* Origin Marker (A) - Synchronized with actual Route Geometry Origin */}
+            {markerAPosition && (
+              <CircleMarker
+                center={markerAPosition}
+                radius={9}
+                pathOptions={{
+                  color: '#ffffff',
+                  fillColor: '#2563eb',
+                  fillOpacity: 1,
+                  weight: 3,
+                }}
+              >
+                <LeafletTooltip direction="top" offset={[0, -8]} opacity={0.96}>
+                  <div className="text-[11px] font-sans">
+                    <strong>Origin (A):</strong> {originState.text}
+                  </div>
+                </LeafletTooltip>
+              </CircleMarker>
+            )}
+
+            {/* Destination Marker (B) - Synchronized with actual Route Geometry Destination */}
+            {markerBPosition && (
+              <CircleMarker
+                center={markerBPosition}
+                radius={9}
+                pathOptions={{
+                  color: '#ffffff',
+                  fillColor: '#059669',
+                  fillOpacity: 1,
+                  weight: 3,
+                }}
+              >
+                <LeafletTooltip direction="top" offset={[0, -8]} opacity={0.96}>
+                  <div className="text-[11px] font-sans">
+                    <strong>Destination (B):</strong> {destState.text}
+                  </div>
+                </LeafletTooltip>
+              </CircleMarker>
+            )}
 
             {/* Intersecting Incident Markers Along Selected Route */}
             {routePinsReady &&
@@ -1200,8 +1519,54 @@ export function ReportIncidentPage() {
   const [estimatedDelayMinutes, setEstimatedDelayMinutes] = useState<number>(20);
   const [anonymousPublicDisplay, setAnonymousPublicDisplay] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [aiSuggestion, setAiSuggestion] = useState<any | null>(null);
   const [submittedRecord, setSubmittedRecord] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (!evidenceFile) {
+      setFilePreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(evidenceFile);
+    setFilePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [evidenceFile]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError(null);
+    const file = e.target.files?.[0];
+    if (!file) {
+      setEvidenceFile(null);
+      return;
+    }
+    const validMimes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'video/mp4',
+      'video/webm',
+    ];
+    if (!validMimes.includes(file.type)) {
+      setFileError('Unsupported file type. Allowed: JPEG, PNG, WEBP, MP4, WEBM.');
+      setEvidenceFile(null);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError(`File exceeds 10MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB).`);
+      setEvidenceFile(null);
+      return;
+    }
+    setEvidenceFile(file);
+  };
+
+  const handleRemoveFile = () => {
+    setEvidenceFile(null);
+    setFilePreview(null);
+    setFileError(null);
+  };
 
   const aiAssistMutation = useMutation({
     mutationFn: () =>
@@ -1223,6 +1588,7 @@ export function ReportIncidentPage() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
+      setUploadStatus('Persisting incident details in database...');
       const idempotencyKey = `report-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       const res = await apiRequest<any>('/incidents', {
         method: 'POST',
@@ -1240,29 +1606,67 @@ export function ReportIncidentPage() {
         }),
       });
 
+      let evidenceUploaded = false;
+      let evidenceError: string | null = null;
+      let uploadedEvidenceData: any = null;
+
       if (evidenceFile && res.incident?.id) {
-        const formData = new FormData();
-        formData.append('file', evidenceFile);
-        formData.append('caption', `Reporter attached scene photo for ${title}`);
-        await apiRequest(`/incidents/${res.incident.id}/evidence`, {
-          method: 'POST',
-          body: formData,
-        });
+        setUploadStatus('Uploading and verifying scene photo...');
+        try {
+          const formData = new FormData();
+          formData.append('file', evidenceFile);
+          formData.append('caption', `Reporter scene photo for ${title}`);
+          formData.append(
+            'evidenceType',
+            evidenceFile.type.startsWith('video/') ? 'VIDEO' : 'PHOTO'
+          );
+          uploadedEvidenceData = await apiRequest(`/incidents/${res.incident.id}/evidence`, {
+            method: 'POST',
+            body: formData,
+          });
+          evidenceUploaded = true;
+          if (uploadedEvidenceData?.confidenceBreakdown) {
+            res.confidenceBreakdown = uploadedEvidenceData.confidenceBreakdown;
+          }
+        } catch (err: any) {
+          evidenceError = err?.message || 'Evidence upload failed';
+        }
       }
 
-      return res;
+      return {
+        ...res,
+        evidenceUploaded,
+        evidenceError,
+        uploadedEvidenceData,
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['incidents-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['map-incidents'] });
       setSubmittedRecord(data);
-      showToast({
-        type: 'success',
-        title: 'Incident Report Persisted & Scored',
-        message: `Assigned ID ${data.incident.id.slice(0, 8)} with initial confidence ${data.confidenceBreakdown.totalScore}%.`,
-      });
+      setUploadStatus(null);
+      if (data.evidenceError) {
+        showToast({
+          type: 'warning',
+          title: 'Incident Created (Photo Failed)',
+          message: `Incident created with ID ${data.incident.id}, but evidence upload failed: ${data.evidenceError}. You can retry attaching evidence from the incident details.`,
+        });
+      } else if (data.evidenceUploaded) {
+        showToast({
+          type: 'success',
+          title: 'Incident & Photo Persisted',
+          message: `Incident ID ${data.incident.id} created with photo evidence permanently saved. Initial confidence: ${data.confidenceBreakdown.totalScore}%.`,
+        });
+      } else {
+        showToast({
+          type: 'success',
+          title: 'Incident Report Persisted & Scored',
+          message: `Assigned ID ${data.incident.id} with initial confidence ${data.confidenceBreakdown.totalScore}%.`,
+        });
+      }
     },
     onError: (err: any) => {
+      setUploadStatus(null);
       showToast({
         type: 'error',
         title: 'Submission Failed',
@@ -1296,22 +1700,45 @@ export function ReportIncidentPage() {
   if (submittedRecord) {
     return (
       <div className="max-w-2xl mx-auto p-6 enterprise-card space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
             <CheckCircle2 className="w-6 h-6" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold text-slate-900">
               Incident Report Saved &amp; Initial Verification Calculated
             </h1>
-            <p className="text-xs text-slate-500">
-              Incident ID: <span className="font-mono text-blue-600">{submittedRecord.incident.id}</span>
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+              <span className="text-xs text-slate-500 font-semibold">Incident ID:</span>
+              <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded select-all break-all">
+                {submittedRecord.incident.id}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(submittedRecord.incident.id);
+                  showToast({
+                    type: 'info',
+                    title: 'Copied',
+                    message: 'Unique Incident ID copied to clipboard.',
+                  });
+                }}
+                className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                title="Copy Incident ID"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
-          <p className="text-sm font-bold text-slate-900">{submittedRecord.incident.title}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-slate-900">{submittedRecord.incident.title}</p>
+            <span className="text-xs text-slate-500 font-mono">
+              {Number(submittedRecord.incident.latitude).toFixed(4)}, {Number(submittedRecord.incident.longitude).toFixed(4)}
+            </span>
+          </div>
           <p className="text-xs text-slate-600">{submittedRecord.incident.roadName}</p>
           <ConfidenceMeter
             score={submittedRecord.confidenceBreakdown.totalScore}
@@ -1322,20 +1749,41 @@ export function ReportIncidentPage() {
               <li key={idx}>{line}</li>
             ))}
           </ul>
+          {submittedRecord.evidenceUploaded && (
+            <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Photo evidence permanently stored and attached (+15 pts calculated).</span>
+            </div>
+          )}
+          {submittedRecord.evidenceError && (
+            <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Photo upload warning: {submittedRecord.evidenceError}. Incident record is preserved.</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           <Link
-            to={`/app/incidents/${submittedRecord.incident.id}`}
-            className="btn-primary"
+            to={`/app/map?incidentId=${encodeURIComponent(submittedRecord.incident.id)}&lat=${submittedRecord.incident.latitude}&lng=${submittedRecord.incident.longitude}`}
+            className="btn-primary inline-flex items-center gap-1.5"
           >
-            Inspect Live Incident &amp; Verification Page
+            <MapPin className="w-4 h-4" /> View on Map
+          </Link>
+          <Link
+            to={`/app/incidents/${submittedRecord.incident.id}`}
+            className="btn-secondary"
+          >
+            Inspect Incident Dossier
           </Link>
           <button
             onClick={() => {
               setSubmittedRecord(null);
               setTitle('');
               setDescription('');
+              setEvidenceFile(null);
+              setFilePreview(null);
+              setFileError(null);
             }}
             className="btn-secondary"
           >
@@ -1487,16 +1935,56 @@ export function ReportIncidentPage() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold text-slate-700">
               Optional Photo / Video Evidence (JPEG, PNG, WEBP, MP4 — max 10MB)
             </label>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
-              onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
-              className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
+            {!evidenceFile ? (
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+                onChange={handleFileChange}
+                className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+              />
+            ) : (
+              <div className="p-3 rounded-xl border border-blue-200 bg-blue-50/50 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {filePreview && evidenceFile.type.startsWith('image/') ? (
+                    <img
+                      src={filePreview}
+                      alt="Upload preview"
+                      className="w-14 h-14 object-cover rounded-lg border border-blue-200 shrink-0 shadow-xs"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                      <ImageIcon className="w-6 h-6" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">{evidenceFile.name}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {(evidenceFile.size / 1024).toFixed(1)} KB • {evidenceFile.type || 'Media'}
+                    </p>
+                    <span className="inline-block mt-0.5 text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                      Ready to upload
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+                  title="Remove selected photo"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {fileError && (
+              <p className="text-xs text-red-600 flex items-center gap-1 font-medium">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {fileError}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2 pt-1">
@@ -1515,9 +2003,16 @@ export function ReportIncidentPage() {
           <button
             type="submit"
             disabled={submitMutation.isPending}
-            className="btn-primary w-full py-2.5 text-sm"
+            className="btn-primary w-full py-2.5 text-sm flex items-center justify-center gap-2"
           >
-            {submitMutation.isPending ? 'Submitting & Calculating Score...' : 'Submit Verified Incident Report'}
+            {submitMutation.isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {uploadStatus || 'Submitting Verified Report...'}
+              </>
+            ) : (
+              'Submit Verified Incident Report'
+            )}
           </button>
         </div>
 
@@ -1622,6 +2117,7 @@ export function IncidentDetailPage() {
   const [authorityDecision, setAuthorityDecision] = useState('CONFIRM');
   const [authorityReason, setAuthorityReason] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [activeImageModal, setActiveImageModal] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['incident-detail', id],
@@ -1798,19 +2294,80 @@ export function IncidentDetailPage() {
             )}
             <DemoDataBadge isDemo={incident.demoData} />
           </div>
-          <span className="text-xs text-slate-500 font-mono">ID: {incident.id}</span>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 font-mono">
+              <span className="text-slate-400 font-sans text-[11px] font-semibold">Incident ID:</span>
+              <span className="font-semibold text-slate-800 select-all">{incident.id}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(incident.id);
+                  showToast({
+                    type: 'info',
+                    title: 'Copied',
+                    message: 'Incident ID copied to clipboard.',
+                  });
+                }}
+                className="p-0.5 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                title="Copy Incident ID"
+              >
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {Number.isFinite(incident.latitude) &&
+            Number.isFinite(incident.longitude) &&
+            !(incident.latitude === 0 && incident.longitude === 0) ? (
+              <Link
+                to={`/app/map?incidentId=${encodeURIComponent(incident.id)}&lat=${incident.latitude}&lng=${incident.longitude}`}
+                className="btn-primary py-1 px-3 text-xs inline-flex items-center gap-1.5 shadow-xs"
+                title="View on Map"
+              >
+                <MapPin className="w-3.5 h-3.5" /> View on Map
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  showToast({
+                    type: 'warning',
+                    title: 'Exact GPS Unavailable',
+                    message:
+                      'Exact map navigation requires valid GPS coordinates for this incident.',
+                  })
+                }
+                className="btn-secondary py-1 px-2.5 text-xs inline-flex items-center gap-1 opacity-60"
+              >
+                <MapPin className="w-3.5 h-3.5" /> Coordinates Missing
+              </button>
+            )}
+          </div>
         </div>
 
         <h1 className="text-xl font-bold text-slate-900">{incident.title}</h1>
         <p className="text-sm text-slate-600 leading-relaxed">{incident.description}</p>
 
         <div className="grid sm:grid-cols-4 gap-3 pt-2 text-xs">
-          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
-            <span className="text-slate-500 block">Location / Corridor</span>
-            <span className="font-bold text-slate-900">{incident.roadName}</span>
-            <span className="block text-[10px] text-slate-500 mt-0.5">
-              {incident.latitude.toFixed(4)}, {incident.longitude.toFixed(4)}
-            </span>
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div>
+              <span className="text-slate-500 block">Location / Corridor</span>
+              <span className="font-bold text-slate-900">{incident.roadName}</span>
+              <span className="block text-[10px] text-slate-500 mt-0.5 font-mono">
+                {Number.isFinite(incident.latitude) ? incident.latitude.toFixed(4) : 'N/A'},{' '}
+                {Number.isFinite(incident.longitude) ? incident.longitude.toFixed(4) : 'N/A'}
+              </span>
+            </div>
+            {Number.isFinite(incident.latitude) &&
+              Number.isFinite(incident.longitude) &&
+              !(incident.latitude === 0 && incident.longitude === 0) && (
+                <Link
+                  to={`/app/map?incidentId=${encodeURIComponent(incident.id)}&lat=${incident.latitude}&lng=${incident.longitude}`}
+                  className="mt-2 text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
+                >
+                  <MapPin className="w-3 h-3" /> View on Live Map →
+                </Link>
+              )}
           </div>
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
             <span className="text-slate-500 block">Estimated Delay</span>
@@ -1908,31 +2465,81 @@ export function IncidentDetailPage() {
             <h2 className="text-sm font-bold text-slate-900">
               Attached Evidence Records ({evidences.length})
             </h2>
-            <div className="space-y-2.5">
-              {evidences.map((ev: any) => (
-                <div
-                  key={ev.id}
-                  className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
-                        {ev.evidence_type}
+            <div className="space-y-3">
+              {evidences.map((ev: any) => {
+                const evidenceUrl = getEvidenceFileUrl(ev.url || ev.storage_key);
+                const isPhoto = ev.evidence_type === 'PHOTO';
+                const isVideo = ev.evidence_type === 'VIDEO';
+
+                return (
+                  <div
+                    key={ev.id}
+                    className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
+                          {ev.evidence_type}
+                        </span>
+                        <span className="font-semibold text-slate-900">
+                          {ev.metadata?.caption || ev.storage_key || 'Validated Evidence Record'}
+                        </span>
+                        {ev.metadata?.simulatedDemoEvidence && <DemoDataBadge />}
+                      </div>
+                      <span className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        {ev.validation_status}
                       </span>
-                      <span className="font-semibold text-slate-900">
-                        {ev.metadata?.caption || ev.storage_key || 'Validated Evidence Record'}
-                      </span>
-                      {ev.metadata?.simulatedDemoEvidence && <DemoDataBadge />}
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Submitted by {ev.submitter_name || 'Commuter'} • Status: {ev.validation_status}
-                    </p>
+
+                    {isPhoto && evidenceUrl && (
+                      <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-900/5 max-w-md">
+                        <img
+                          src={evidenceUrl}
+                          alt={ev.metadata?.caption || 'Incident evidence photo'}
+                          className="w-full max-h-64 object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                          loading="lazy"
+                          onError={(e) => {
+                            const el = e.target as HTMLImageElement;
+                            el.style.display = 'none';
+                            const fallback = el.parentElement?.querySelector('.img-error-fallback');
+                            if (fallback) fallback.classList.remove('hidden');
+                          }}
+                          onClick={() => setActiveImageModal(evidenceUrl)}
+                        />
+                        <div className="img-error-fallback hidden p-4 text-center text-slate-500 bg-slate-100">
+                          <p className="font-semibold text-xs text-slate-700">Image Preview Unavailable</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5 font-mono">
+                            File: {ev.storage_key || 'attached-photo.jpg'} ({ev.validation_status})
+                          </p>
+                        </div>
+                        <div className="p-2 bg-white/80 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                          <span>Click photo to expand</span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveImageModal(evidenceUrl)}
+                            className="text-blue-600 font-semibold hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="w-3 h-3" /> Full View
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {isVideo && evidenceUrl && (
+                      <div className="rounded-xl overflow-hidden border border-slate-200 max-w-md">
+                        <video controls src={evidenceUrl} className="w-full max-h-64 bg-black" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                      <span>
+                        Submitted by {ev.submitter_name || 'Commuter'} ({ev.submitter_role || 'CITIZEN'})
+                      </span>
+                      <span>{new Date(ev.created_at).toLocaleString()}</span>
+                    </div>
                   </div>
-                  <span className="text-[11px] text-slate-500 shrink-0">
-                    {new Date(ev.created_at).toLocaleTimeString()}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="pt-4 border-t border-slate-200 space-y-2.5">
@@ -2001,25 +2608,67 @@ export function IncidentDetailPage() {
               </button>
             </div>
 
-            <div className="pt-3 border-t border-slate-200 space-y-2">
+            <div className="pt-3 border-t border-slate-200 space-y-2.5">
               <label className="block text-xs font-semibold text-slate-700">
                 Attach On-Scene Photo/Video Evidence (+15 pts)
               </label>
-              <div className="flex items-center gap-2">
+
+              {!evidenceFile ? (
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,video/mp4"
-                  onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
-                  className="flex-1 text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-2.5 file:rounded-lg file:border-0 file:bg-slate-100 file:text-slate-700 file:font-semibold"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    if (f && f.size > 10 * 1024 * 1024) {
+                      showToast({
+                        type: 'error',
+                        title: 'File Too Large',
+                        message: 'Maximum allowed upload size is 10MB.',
+                      });
+                      return;
+                    }
+                    setEvidenceFile(f);
+                  }}
+                  className="w-full text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-2.5 file:rounded-lg file:border-0 file:bg-slate-100 file:text-slate-700 file:font-semibold cursor-pointer"
                 />
-                <button
-                  onClick={() => uploadEvidenceMutation.mutate()}
-                  disabled={uploadEvidenceMutation.isPending}
-                  className="btn-primary py-1.5 px-3 shrink-0"
-                >
-                  Add Proof
-                </button>
-              </div>
+              ) : (
+                <div className="p-2.5 rounded-lg border border-blue-200 bg-blue-50/50 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-8 h-8 rounded bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                      <ImageIcon className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 truncate">{evidenceFile.name}</p>
+                      <p className="text-[10px] text-slate-500">
+                        {(evidenceFile.size / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setEvidenceFile(null)}
+                      className="p-1 text-slate-400 hover:text-red-600 rounded"
+                      title="Remove file"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => uploadEvidenceMutation.mutate()}
+                      disabled={uploadEvidenceMutation.isPending}
+                      className="btn-primary py-1 px-2.5 text-xs inline-flex items-center gap-1"
+                    >
+                      {uploadEvidenceMutation.isPending ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" /> Uploading...
+                        </>
+                      ) : (
+                        'Upload'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2110,6 +2759,48 @@ export function IncidentDetailPage() {
           )}
         </div>
       </div>
+
+      {activeImageModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setActiveImageModal(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl p-2 border border-slate-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800 text-slate-300 text-xs">
+              <span className="font-semibold flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-blue-400" /> Attached Scene Evidence
+              </span>
+              <button
+                onClick={() => setActiveImageModal(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                title="Close lightbox"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-2 flex items-center justify-center max-h-[75vh] overflow-hidden bg-black/40">
+              <img
+                src={activeImageModal}
+                alt="Expanded evidence preview"
+                className="max-h-[72vh] w-auto max-w-full object-contain rounded-lg"
+              />
+            </div>
+            <div className="px-3 py-2 text-right">
+              <a
+                href={activeImageModal}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-blue-400 hover:underline font-semibold inline-flex items-center gap-1"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open full image in new tab
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -75,3 +75,31 @@ export async function downloadAuthenticatedCsv(endpoint: string, filename: strin
   a.remove();
   window.URL.revokeObjectURL(url);
 }
+
+/**
+ * Resolves an evidence storage key or path to an absolute/relative accessible URL.
+ * Works seamlessly in localhost development (Vite proxy) and deployed production environments.
+ */
+export function getEvidenceFileUrl(pathOrUrl?: string | null): string {
+  if (!pathOrUrl) return '';
+  if (
+    pathOrUrl.startsWith('http://') ||
+    pathOrUrl.startsWith('https://') ||
+    pathOrUrl.startsWith('blob:') ||
+    pathOrUrl.startsWith('data:')
+  ) {
+    return pathOrUrl;
+  }
+  const cleanPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`;
+  const uploadPath = cleanPath.startsWith('/uploads') ? cleanPath : `/uploads${cleanPath}`;
+
+  if (API_BASE.startsWith('http://') || API_BASE.startsWith('https://')) {
+    try {
+      const u = new URL(API_BASE);
+      return `${u.origin}${uploadPath}`;
+    } catch {
+      // Fallback to relative URL
+    }
+  }
+  return uploadPath;
+}

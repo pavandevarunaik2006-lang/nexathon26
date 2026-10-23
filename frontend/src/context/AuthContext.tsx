@@ -84,6 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore logout network error
     }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('roadalert:logout'));
+    }
     setStoredToken(null);
     setUser(null);
   };

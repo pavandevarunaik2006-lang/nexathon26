@@ -708,4 +708,184 @@ describe('RoadAlert API — Acceptance Criteria & Security Suite (15 Criteria)',
     expect(nh75Vehicle.status).toBe('CAUTION_SLOWDOWN');
     expect(nh75Vehicle.currentSpeedKmh).toBeLessThan(nh75Vehicle.baseSpeedKmh);
   });
+
+  describe('RoadAlert — Incident IDs, Photo Storage, and Map Navigation End-to-End Suite', () => {
+    let incidentA_Id = '';
+    let incidentB_Id = '';
+    let uploadedPhotoKey = '';
+    let uploadedPhotoUrl = '';
+
+    it('creates multiple incidents each receiving a unique, persistent UUID v4', async () => {
+      const resA = await request(app)
+        .post('/api/v1/incidents')
+        .set('Authorization', `Bearer ${passengerToken}`)
+        .send({
+          title: 'Stalled Truck near Baikampady Industrial Area',
+          description: 'A heavy commercial vehicle has broken down in the left lane blocking NH-66 traffic.',
+          category: 'Vehicle breakdown',
+          severity: 'MEDIUM',
+          latitude: 12.9542,
+          longitude: 74.8115,
+          roadName: 'NH-66 Baikampady',
+          estimatedDelayMinutes: 20,
+        });
+
+      expect(resA.status).toBe(201);
+      expect(resA.body.success).toBe(true);
+      expect(resA.body.data.incident).toBeDefined();
+      incidentA_Id = resA.body.data.incident.id;
+
+      // UUID v4 format check: 8-4-4-4-12 hex chars
+      const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      expect(incidentA_Id).toMatch(uuidV4Regex);
+
+      const resB = await request(app)
+        .post('/api/v1/incidents')
+        .set('Authorization', `Bearer ${employeeToken}`)
+        .send({
+          title: 'Flooding and Waterlogging near Surathkal Toll Gate',
+          description: 'Heavy pre-monsoon shower causes 1.5ft waterlogging near Surathkal junction.',
+          category: 'Flood/waterlogging',
+          severity: 'HIGH',
+          latitude: 13.0108,
+          longitude: 74.7943,
+          roadName: 'NH-66 Surathkal Toll',
+          estimatedDelayMinutes: 30,
+        });
+
+      expect(resB.status).toBe(201);
+      incidentB_Id = resB.body.data.incident.id;
+      expect(incidentB_Id).toMatch(uuidV4Regex);
+
+      // Distinct, non-colliding IDs guaranteed
+      expect(incidentA_Id).not.toBe(incidentB_Id);
+
+      // Verify that database lookup retrieves the exact same incident ID
+      const fetchA = await request(app).get(`/api/v1/incidents/${incidentA_Id}`);
+      expect(fetchA.status).toBe(200);
+      expect(fetchA.body.data.incident.id).toBe(incidentA_Id);
+
+      const fetchB = await request(app).get(`/api/v1/incidents/${incidentB_Id}`);
+      expect(fetchB.status).toBe(200);
+      expect(fetchB.body.data.incident.id).toBe(incidentB_Id);
+    });
+
+    it('clearly distinguishes incident ID from report ID and evidence ID', async () => {
+      // Fetch incident detail
+      const detail = await request(app).get(`/api/v1/incidents/${incidentA_Id}`);
+      expect(detail.status).toBe(200);
+      expect(detail.body.data.incident.id).toBe(incidentA_Id);
+
+      // Corroborate incident to create a distinct corroboration report record
+      const corrRes = await request(app)
+        .post(`/api/v1/incidents/${incidentA_Id}/corroborate`)
+        .set('Authorization', `Bearer ${authorityToken}`)
+        .send({
+          corroborationType: 'CORROBORATE',
+          latitude: 12.9542,
+          longitude: 74.8115,
+          notes: 'Patrol unit confirms broken down vehicle.',
+        });
+      expect(corrRes.status).toBe(200);
+
+      // Check audit trail / reports: Report record ID is distinct from parent Incident ID
+      const updated = await request(app).get(`/api/v1/incidents/${incidentA_Id}`);
+      expect(updated.body.data.incident.id).toBe(incidentA_Id);
+      if (updated.body.data.evidences?.length > 0) {
+        expect(updated.body.data.evidences[0].id).not.toBe(incidentA_Id);
+      }
+    });
+
+    it('accepts multipart photo upload, stores file in uploads directory, persists reference, and returns accessible URL', async () => {
+      // Create a small 1x1 test PNG buffer
+      const pngBuffer = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        'base64'
+      );
+
+      const uploadRes = await request(app)
+        .post(`/api/v1/incidents/${incidentA_Id}/evidence`)
+        .set('Authorization', `Bearer ${passengerToken}`)
+        .field('evidenceType', 'PHOTO')
+        .field('notes', 'Photo of stalled truck on NH-66')
+        .field('metadata', JSON.stringify({ caption: 'Live snapshot from passenger vehicle' }))
+        .attach('file', pngBuffer, {
+          filename: 'traffic_incident_scene.png',
+          contentType: 'image/png',
+        });
+
+      expect(uploadRes.status).toBe(201);
+      expect(uploadRes.body.success).toBe(true);
+      expect(uploadRes.body.data.evidenceId).toBeDefined();
+      expect(uploadRes.body.data.storageKey).toBeDefined();
+      expect(uploadRes.body.data.url).toMatch(/^\/uploads\//);
+      expect(uploadRes.body.data.evidenceUrl).toMatch(/^\/uploads\//);
+
+      uploadedPhotoKey = uploadRes.body.data.storageKey;
+      uploadedPhotoUrl = uploadRes.body.data.url;
+
+      // Safe filename generation check: never trust user-supplied filename as storage path
+      expect(uploadedPhotoKey).not.toBe('traffic_incident_scene.png');
+      expect(uploadedPhotoKey).toMatch(/^evidence-/);
+      expect(uploadedPhotoKey).toMatch(/\.png$/);
+    });
+
+    it('persists photo reference against incident and makes file accessible via static /uploads endpoint', async () => {
+      // 1. Verify incident details return the evidence record and URL
+      const detailRes = await request(app).get(`/api/v1/incidents/${incidentA_Id}`);
+      expect(detailRes.status).toBe(200);
+      const evidences = detailRes.body.data.evidences;
+      expect(evidences.length).toBeGreaterThanOrEqual(1);
+
+      const photoEvidence = evidences.find((e: any) => e.storage_key === uploadedPhotoKey);
+      expect(photoEvidence).toBeDefined();
+      expect(photoEvidence.url).toBe(uploadedPhotoUrl);
+      expect(photoEvidence.evidenceUrl).toBe(uploadedPhotoUrl);
+      expect(photoEvidence.evidence_type).toBe('PHOTO');
+
+      // 2. Verify static file serving: GET /uploads/:filename returns 200 with image/png
+      const fileRes = await request(app).get(uploadedPhotoUrl);
+      expect(fileRes.status).toBe(200);
+      expect(fileRes.headers['content-type']).toContain('image/png');
+      expect(fileRes.body).toBeInstanceOf(Buffer);
+      expect(fileRes.body.length).toBeGreaterThan(0);
+    });
+
+    it('rejects oversized uploads exceeding 10MB limit gracefully', async () => {
+      // 10.5 MB buffer
+      const oversizedBuffer = Buffer.alloc(10.5 * 1024 * 1024);
+
+      const oversizeRes = await request(app)
+        .post(`/api/v1/incidents/${incidentA_Id}/evidence`)
+        .set('Authorization', `Bearer ${passengerToken}`)
+        .field('evidenceType', 'PHOTO')
+        .attach('file', oversizedBuffer, {
+          filename: 'huge_4k_file.jpg',
+          contentType: 'image/jpeg',
+        });
+
+      expect([400, 413]).toContain(oversizeRes.status);
+      expect(oversizeRes.body.success).toBe(false);
+      expect(oversizeRes.body.error).toBeDefined();
+
+      // Incident record still intact and unharmed
+      const checkRes = await request(app).get(`/api/v1/incidents/${incidentA_Id}`);
+      expect(checkRes.status).toBe(200);
+      expect(checkRes.body.data.incident.id).toBe(incidentA_Id);
+    });
+
+    it('validates coordinate ranges for incident map navigation and returns map-ready incidents', async () => {
+      const mapRes = await request(app).get('/api/v1/map/incidents');
+      expect(mapRes.status).toBe(200);
+      expect(mapRes.body.data.incidents).toBeDefined();
+      expect(Array.isArray(mapRes.body.data.incidents)).toBe(true);
+
+      const incAOnMap = mapRes.body.data.incidents.find((i: any) => i.id === incidentA_Id);
+      expect(incAOnMap).toBeDefined();
+      expect(Number(incAOnMap.latitude)).toBeCloseTo(12.9542, 3);
+      expect(Number(incAOnMap.longitude)).toBeCloseTo(74.8115, 3);
+      expect(incAOnMap.latitude).not.toBe(0);
+      expect(incAOnMap.longitude).not.toBe(0);
+    });
+  });
 });

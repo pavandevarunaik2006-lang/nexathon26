@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion, useReducedMotion } from 'framer-motion';
 import {
@@ -52,7 +52,13 @@ import {
   StaggerItem,
   SPRING_SNAPPY,
 } from '../components/MotionPrimitives';
-import { CorridorIntelligenceMap } from '../features/maps/CorridorIntelligenceMap';
+import {
+  CorridorIntelligenceMap,
+  LiveRouteNavigationOverlay,
+  type RouteEndpoint,
+  type PlannedRouteDetails,
+} from '../features/maps';
+import { useLiveGeolocation } from '../hooks/useLiveGeolocation';
 import { IncidentInvestigationPanel } from '../features/incidents/IncidentInvestigationPanel';
 
 function MiniSparkline({
@@ -79,6 +85,9 @@ function MiniSparkline({
 export function PassengerDashboardPage() {
   const { user } = useAuth();
   const prefersReducedMotion = useReducedMotion();
+  const { coords: liveUserCoords, isSimulated: isLiveSimulated } = useLiveGeolocation({
+    autoStart: false,
+  });
 
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [severityFilter, setSeverityFilter] = useState('ALL');
@@ -601,6 +610,8 @@ export function PassengerDashboardPage() {
             onFocusCoordsChange={setMapFocusCoords}
             heightClass="h-[510px]"
             externalIncidentEvent={externalIncidentEvent}
+            userCoords={liveUserCoords}
+            isSimulatedUser={isLiveSimulated}
           />
         </div>
 
@@ -660,7 +671,8 @@ export function PassengerDashboardPage() {
                     <th className="py-2.5 px-3 font-semibold">Category</th>
                     <th className="py-2.5 px-3 font-semibold">Severity</th>
                     <th className="py-2.5 px-3 font-semibold">Delay</th>
-                    <th className="py-2.5 px-4 font-semibold text-right">Confidence</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Confidence</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Map View</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/40">
@@ -677,11 +689,14 @@ export function PassengerDashboardPage() {
                         }`}
                       >
                         <td className="py-2.5 px-4">
-                          <div className="font-semibold text-slate-900 truncate max-w-[230px]">
+                          <div className="font-semibold text-slate-900 truncate max-w-[210px]">
                             {inc.title}
                           </div>
-                          <div className="text-[11px] text-slate-500 truncate max-w-[230px]">
+                          <div className="text-[11px] text-slate-500 truncate max-w-[210px]">
                             {inc.roadName}
+                          </div>
+                          <div className="font-mono text-[9.5px] text-slate-400">
+                            ID: {inc.id.slice(0, 8)}...
                           </div>
                         </td>
                         <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
@@ -693,12 +708,22 @@ export function PassengerDashboardPage() {
                         <td className="py-2.5 px-3 font-semibold text-amber-700 whitespace-nowrap">
                           +{inc.estimatedDelayMinutes}m
                         </td>
-                        <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
                           <ConfidenceMeter
                             score={inc.confidenceScore}
                             authorityConfirmed={inc.authorityConfirmed}
                             compact
                           />
+                        </td>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                          <Link
+                            to={`/app/map?incidentId=${encodeURIComponent(inc.id)}&lat=${inc.latitude}&lng=${inc.longitude}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold border border-blue-200 transition-colors shadow-2xs text-[11px]"
+                            title="Center and view on Live Map"
+                          >
+                            <MapPin className="w-3 h-3 text-blue-600" /> Map
+                          </Link>
                         </td>
                       </tr>
                     );
@@ -840,6 +865,7 @@ export function PassengerDashboardPage() {
 }
 
 export function InteractiveMapPage() {
+  const [searchParams] = useSearchParams();
   const [category, setCategory] = useState('ALL');
   const [severity, setSeverity] = useState('ALL');
   const [verificationStatus, setVerificationStatus] = useState('ALL');
@@ -851,6 +877,178 @@ export function InteractiveMapPage() {
     decision: string;
     timestamp: number;
   } | null>(null);
+
+  // Deep-link handling: Support ?incidentId=...&lat=...&lng=... from "View on Map" buttons
+  useEffect(() => {
+    const incId = searchParams.get('incidentId');
+    const latStr = searchParams.get('lat');
+    const lngStr = searchParams.get('lng');
+
+    if (incId) {
+      setSelectedIncidentId(incId);
+      // Ensure category/severity filters don't hide the deep-linked incident
+      setCategory('ALL');
+      setSeverity('ALL');
+      setVerificationStatus('ALL');
+    }
+
+    if (latStr && lngStr) {
+      const lat = parseFloat(latStr);
+      const lng = parseFloat(lngStr);
+      // Graceful validation: Ensure coordinates are finite, within geographic bounds, and NOT 0,0
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180 &&
+        (Math.abs(lat) > 0.0001 || Math.abs(lng) > 0.0001)
+      ) {
+        setMapFocus([lat, lng]);
+      }
+    }
+  }, [searchParams]);
+
+  // Live Geolocation Tracking Hook (default autoStart: false for opt-in privacy)
+  const {
+    coords: userCoords,
+    status: gpsStatus,
+    errorMessage: gpsErrorMessage,
+    accuracyMeters,
+    lastUpdatedText,
+    isSimulated,
+    isWatching,
+    startWatching,
+    stopWatching,
+    toggleLiveLocation,
+    recenterTrigger,
+    triggerRecenter,
+    toggleSimulationMode,
+    setSimulatedLocation,
+  } = useLiveGeolocation({
+    autoStart: false,
+    enableHighAccuracy: true,
+  });
+
+  // Dynamic Route Destination & Planning State
+  const [destination, setDestination] = useState<RouteEndpoint | null>(null);
+  const [activeRoute, setActiveRoute] = useState<PlannedRouteDetails | null>(null);
+  const [allRoutes, setAllRoutes] = useState<PlannedRouteDetails[]>([]);
+  const [isPlanningRoute, setIsPlanningRoute] = useState(false);
+  const [routePlanError, setRoutePlanError] = useState<string | null>(null);
+
+  // Fetch active user journeys to check for running commute sessions
+  const { data: journeysData } = useQuery({
+    queryKey: ['my-journeys'],
+    queryFn: () => apiRequest<any[]>('/journeys'),
+    refetchInterval: 15000,
+  });
+
+  const activeJourney = useMemo(
+    () => journeysData?.find((j) => ['ACTIVE', 'DELAYED'].includes(j.status)),
+    [journeysData]
+  );
+
+  // Throttled GPS checkpoint submission to backend
+  const lastLoggedCoordsRef = useRef<{ lat: number; lng: number; time: number } | null>(null);
+  useEffect(() => {
+    // Privacy Safeguard: Never submit checkpoints without an active commute session,
+    // and NEVER submit simulated/demo coordinates to employee commute tracking.
+    if (!activeJourney || !userCoords || isSimulated) {
+      if (!activeJourney) {
+        lastLoggedCoordsRef.current = null;
+      }
+      return;
+    }
+
+    const now = Date.now();
+    const last = lastLoggedCoordsRef.current;
+    const MIN_INTERVAL_MS = 25000; // 25 seconds throttle
+    const MIN_DISTANCE_KM = 0.03; // 30 meters displacement
+
+    if (last) {
+      const timeDiff = now - last.time;
+      const distKm = Math.hypot(
+        (userCoords.latitude - last.lat) * 111,
+        (userCoords.longitude - last.lng) * 111 * Math.cos((last.lat * Math.PI) / 180)
+      );
+      if (timeDiff < MIN_INTERVAL_MS && distKm < MIN_DISTANCE_KM) {
+        return;
+      }
+    }
+
+    lastLoggedCoordsRef.current = {
+      lat: userCoords.latitude,
+      lng: userCoords.longitude,
+      time: now,
+    };
+
+    apiRequest(`/journeys/${activeJourney.id}/checkpoints`, {
+      method: 'POST',
+      body: JSON.stringify({
+        latitude: userCoords.latitude,
+        longitude: userCoords.longitude,
+        speed: userCoords.speed ?? 0,
+        sourceType: 'BROWSER_GPS',
+        statusNote: `Interactive map GPS sync (${new Date().toLocaleTimeString()})`,
+      }),
+    }).catch(() => {
+      // Ignore background logging errors gracefully
+    });
+  }, [activeJourney, userCoords, isSimulated]);
+
+  // Compute live dynamic route whenever destination is selected or origin moves significantly
+  useEffect(() => {
+    if (!destination) {
+      setActiveRoute(null);
+      setAllRoutes([]);
+      setRoutePlanError(null);
+      return;
+    }
+
+    const originLat = userCoords?.latitude ?? 12.8669;
+    const originLng = userCoords?.longitude ?? 74.8692;
+
+    let isCancelled = false;
+    setIsPlanningRoute(true);
+    setRoutePlanError(null);
+
+    apiRequest<any>('/routes/plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        origin: userCoords ? 'My Current Location' : 'Mangaluru Pumpwell',
+        originLat,
+        originLng,
+        destination: destination.name,
+        destLat: destination.lat,
+        destLng: destination.lng,
+        avoidIncidentZones: true,
+      }),
+    })
+      .then((data) => {
+        if (isCancelled) return;
+        if (data?.routes && Array.isArray(data.routes) && data.routes.length > 0) {
+          setAllRoutes(data.routes);
+          const recommended =
+            data.routes.find((r: any) => r.recommended) || data.routes[0];
+          setActiveRoute(recommended);
+        } else {
+          setRoutePlanError('No viable highway route could be computed for this destination.');
+        }
+      })
+      .catch((err: any) => {
+        if (isCancelled) return;
+        setRoutePlanError(err?.message || 'Failed to calculate optimal route.');
+      })
+      .finally(() => {
+        if (!isCancelled) setIsPlanningRoute(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [destination, userCoords?.latitude, userCoords?.longitude]);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['map-incidents', category, severity, verificationStatus],
@@ -877,15 +1075,47 @@ export function InteractiveMapPage() {
     );
   }, [rawIncidents, searchQuery]);
 
+  // Sync map center to selected incident if rawIncidents loads or selection changes without explicit URL coordinates
+  useEffect(() => {
+    if (selectedIncidentId && rawIncidents.length > 0) {
+      const match = rawIncidents.find((i: any) => i.id === selectedIncidentId);
+      if (match && match.latitude != null && match.longitude != null) {
+        const lat = Number(match.latitude);
+        const lng = Number(match.longitude);
+        if (
+          Number.isFinite(lat) &&
+          Number.isFinite(lng) &&
+          lat >= -90 &&
+          lat <= 90 &&
+          lng >= -180 &&
+          lng <= 180 &&
+          (Math.abs(lat) > 0.0001 || Math.abs(lng) > 0.0001)
+        ) {
+          setMapFocus([lat, lng]);
+        }
+      }
+    }
+  }, [selectedIncidentId, rawIncidents]);
+
   const effectiveSelectedId =
-    selectedIncidentId && incidents.some((i) => i.id === selectedIncidentId)
-      ? selectedIncidentId
-      : incidents[0]?.id || null;
+    selectedIncidentId || (incidents[0]?.id || null);
 
   const handleSelectIncident = (inc: any) => {
     setSelectedIncidentId(inc.id);
     if (inc.latitude != null && inc.longitude != null) {
-      setMapFocus([Number(inc.latitude), Number(inc.longitude)]);
+      const lat = Number(inc.latitude);
+      const lng = Number(inc.longitude);
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180 &&
+        (Math.abs(lat) > 0.0001 || Math.abs(lng) > 0.0001)
+      ) {
+        setMapFocus([lat, lng]);
+      }
     }
   };
 
@@ -967,7 +1197,30 @@ export function InteractiveMapPage() {
 
       {/* Full-Height Interactive Map + Synchronized Investigation Drawer */}
       <div className="grid lg:grid-cols-12 gap-4 items-start">
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-8 relative">
+          <LiveRouteNavigationOverlay
+            userCoords={userCoords}
+            gpsStatus={gpsStatus}
+            gpsErrorMessage={gpsErrorMessage}
+            accuracyMeters={accuracyMeters}
+            lastUpdatedText={lastUpdatedText}
+            isSimulated={isSimulated}
+            isWatching={isWatching}
+            onToggleLiveLocation={toggleLiveLocation}
+            onTriggerRecenter={triggerRecenter}
+            onToggleSimulation={toggleSimulationMode}
+            onSetSimulatedLocation={setSimulatedLocation}
+            destination={destination}
+            onSelectDestination={setDestination}
+            activeRoute={activeRoute}
+            allRoutes={allRoutes}
+            onSelectRouteOption={setActiveRoute}
+            isPlanningRoute={isPlanningRoute}
+            routePlanError={routePlanError}
+            onSelectIncident={handleSelectIncident}
+            activeJourney={activeJourney}
+          />
+
           <CorridorIntelligenceMap
             incidents={incidents}
             selectedIncidentId={effectiveSelectedId}
@@ -976,6 +1229,15 @@ export function InteractiveMapPage() {
             onFocusCoordsChange={setMapFocus}
             heightClass="h-[620px]"
             externalIncidentEvent={mapIncidentEvent}
+            userCoords={userCoords}
+            recenterTrigger={recenterTrigger}
+            isSimulatedUser={isSimulated}
+            destinationCoords={destination ? [destination.lat, destination.lng] : null}
+            destinationLabel={destination ? destination.name : null}
+            activeRouteGeometry={activeRoute?.geometry || null}
+            alternateRouteGeometry={
+              allRoutes.find((r) => r.id !== activeRoute?.id)?.geometry || null
+            }
           />
         </div>
 

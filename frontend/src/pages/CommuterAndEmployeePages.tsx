@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   Sliders,
+  MapPin,
 } from 'lucide-react';
 import { REGIONAL_DESTINATIONS, VERIFICATION_LEVELS } from '@roadalert/shared';
 import { apiRequest } from '../lib/api';
@@ -114,12 +115,21 @@ export function AlertsPage() {
 
               <div className="flex items-center gap-2 shrink-0">
                 {n.incidentId && (
-                  <Link
-                    to={`/app/incidents/${n.incidentId}`}
-                    className="btn-secondary py-1.5 px-3"
-                  >
-                    Inspect Incident
-                  </Link>
+                  <>
+                    <Link
+                      to={`/app/map?incidentId=${encodeURIComponent(n.incidentId)}`}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold border border-blue-200 transition-colors shadow-2xs text-xs"
+                      title="View incident on Live Map"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-blue-600" /> View on Map
+                    </Link>
+                    <Link
+                      to={`/app/incidents/${n.incidentId}`}
+                      className="btn-secondary py-1.5 px-3"
+                    >
+                      Inspect Incident
+                    </Link>
+                  </>
                 )}
                 {!n.readAt && (
                   <button
@@ -629,7 +639,10 @@ export function VerificationCenterPage() {
               >
                 {inc.title}
               </Link>
-              <p className="text-xs text-slate-500">{inc.roadName}</p>
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>{inc.roadName}</span>
+                <span className="font-mono text-[10px] text-slate-400">ID: {inc.id.slice(0, 8)}...</span>
+              </div>
             </div>
 
             <div className="space-y-3 pt-2 border-t border-slate-200">
@@ -637,16 +650,25 @@ export function VerificationCenterPage() {
                 score={inc.confidenceScore}
                 authorityConfirmed={inc.authorityConfirmed}
               />
-              <div className="flex items-center justify-between text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span className="text-slate-500">
                   {1 + inc.corroborationCount} reporter(s) • {inc.evidenceCount} evidence item(s)
                 </span>
-                <Link
-                  to={`/app/incidents/${inc.id}`}
-                  className="btn-secondary py-1.5 px-3"
-                >
-                  Corroborate / Inspect Breakdown →
-                </Link>
+                <div className="flex items-center gap-1.5">
+                  <Link
+                    to={`/app/map?incidentId=${encodeURIComponent(inc.id)}&lat=${inc.latitude}&lng=${inc.longitude}`}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold border border-blue-200 transition-colors shadow-2xs text-xs"
+                    title="View on Live Map"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" /> View on Map
+                  </Link>
+                  <Link
+                    to={`/app/incidents/${inc.id}`}
+                    className="btn-secondary py-1.5 px-3"
+                  >
+                    Inspect Breakdown →
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

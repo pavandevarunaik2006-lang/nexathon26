@@ -1,6 +1,11 @@
 import {
   classifyIncidentVerificationState,
+<<<<<<< Updated upstream
   LIFELINE_HOSPITALS,
+=======
+  normalizePolylineGeometry,
+  normalizeCoordinateToLatLng,
+>>>>>>> Stashed changes
   type ExplicitRouteState,
   type IncidentVerificationState,
 } from '@roadalert/shared';
@@ -449,6 +454,7 @@ export async function calculateRoutesWithIncidents(
 
     return {
       ...r,
+      geometry: normalizePolylineGeometry(r.geometry),
       recommended: isBest && !r.hasRoadClosureWarning,
       recommendationReason: reason,
     };

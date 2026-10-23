@@ -36,8 +36,9 @@ export async function fetchOsrmPrimaryRoute(
       const data: any = await res.json();
       if (data?.routes?.length > 0) {
         const r0 = data.routes[0];
+        const coords = r0.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]] as [number, number]);
         return {
-          geometry: r0.geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]),
+          geometry: coords.filter((c: [number, number]) => Number.isFinite(c[0]) && Number.isFinite(c[1])),
           distanceKm: Math.round((r0.distance / 1000) * 10) / 10,
           baseDurationMin: Math.max(8, Math.round(r0.duration / 60)),
         };

@@ -294,6 +294,19 @@ export async function getIncidentDetailById(incidentId: string) {
       'Low/moderate confidence report. Commuters on scene are encouraged to submit safe corroboration or photo evidence.';
   }
 
+  const formattedEvidences = evidRes.rows.map((e: any) => {
+    const url = e.storage_key
+      ? e.storage_key.startsWith('http://') || e.storage_key.startsWith('https://')
+        ? e.storage_key
+        : `/uploads/${e.storage_key}`
+      : null;
+    return {
+      ...e,
+      url,
+      evidenceUrl: url,
+    };
+  });
+
   return {
     incident: {
       ...formatIncidentRow(inc),
@@ -304,7 +317,7 @@ export async function getIncidentDetailById(incidentId: string) {
       recommendedAction,
     },
     confidenceBreakdown: breakdown,
-    evidences: evidRes.rows,
+    evidences: formattedEvidences,
     corroborations: corrRes.rows,
     reviews: revRes.rows,
     auditTrail: auditRes.rows,
@@ -424,10 +437,16 @@ export async function attachIncidentEvidence(
     'EVIDENCE_ATTACHED'
   );
 
+  const evidenceUrl = storageKey.startsWith('http://') || storageKey.startsWith('https://')
+    ? storageKey
+    : `/uploads/${storageKey}`;
+
   return {
     evidenceId,
     evidenceType,
     storageKey,
+    url: evidenceUrl,
+    evidenceUrl,
     confidenceBreakdown: breakdown,
   };
 }

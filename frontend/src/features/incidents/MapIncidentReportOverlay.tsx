@@ -11,6 +11,9 @@ import {
   Loader2,
   AlertCircle,
   Crosshair,
+  Camera,
+  Trash2,
+  ImageIcon,
 } from 'lucide-react';
 import { INCIDENT_CATEGORIES, INCIDENT_SEVERITIES } from '@roadalert/shared';
 import { apiRequest, API_BASE } from '../../services/apiClient';
@@ -122,6 +125,9 @@ export function MapIncidentReportOverlay({
   const [roadName, setRoadName] = useState<string>('');
   const [estimatedDelayMinutes, setEstimatedDelayMinutes] = useState<number>(20);
   const [anonymousPublicDisplay, setAnonymousPublicDisplay] = useState<boolean>(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [isResolvingLocation, setIsResolvingLocation] = useState<boolean>(false);
   const [isAiAssisting, setIsAiAssisting] = useState<boolean>(false);
@@ -130,6 +136,38 @@ export function MapIncidentReportOverlay({
 
   const idempotencyKeyRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setSubmitError('Invalid file format. Please upload an image (JPEG, PNG, or WEBP).');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setSubmitError(`File size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds maximum allowed limit of 10 MB.`);
+      return;
+    }
+
+    setSubmitError(null);
+    setSelectedFile(file);
+    if (filePreview) URL.revokeObjectURL(filePreview);
+    setFilePreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    if (filePreview) URL.revokeObjectURL(filePreview);
+    setFilePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  useEffect(() => {
+    return () => {
+      if (filePreview) URL.revokeObjectURL(filePreview);
+    };
+  }, [filePreview]);
 
   // Reverse-geocode clicked map coordinates to prefill roadName & generate a fresh idempotencyKey
   useEffect(() => {
@@ -295,10 +333,49 @@ export function MapIncidentReportOverlay({
         }),
       });
 
+      // If a photo was selected, upload it immediately attached to the new incident
+      let evidenceUploaded = false;
+      if (selectedFile && res?.incident?.id) {
+        try {
+          const formData = new FormData();
+          formData.append('file', selectedFile);
+          formData.append('evidenceType', 'PHOTO');
+          formData.append('notes', 'Photo attached via map placement report');
+          formData.append('metadata', JSON.stringify({
+            originalName: selectedFile.name,
+            size: selectedFile.size,
+            mimeType: selectedFile.type,
+            caption: `Photo evidence for ${trimmedTitle}`,
+          }));
+
+          await apiRequest<any>(`/incidents/${res.incident.id}/evidence`, {
+            method: 'POST',
+            body: formData,
+          });
+          evidenceUploaded = true;
+        } catch (uploadErr: any) {
+          showToast({
+            type: 'warning',
+            title: 'Photo Upload Warning',
+            message: uploadErr?.message || 'Incident created, but photo evidence failed to upload.',
+          });
+        }
+      }
+
+      handleRemoveFile();
+
       // Reset form state only after backend confirms 201 Created
       setTitle('');
       setDescription('');
       setSubmitError(null);
+
+      showToast({
+        type: 'success',
+        title: 'Incident Reported',
+        message: evidenceUploaded
+          ? `Report saved with photo! ID: ${res.incident.id}`
+          : `Report saved! ID: ${res.incident.id}`,
+      });
 
       // Refresh map & dashboard queries
       await Promise.all([
@@ -454,6 +531,62 @@ export function MapIncidentReportOverlay({
             placeholder="Describe affected lanes, traffic flow impact, or hazards (min 10 chars)..."
             className="enterprise-input w-full py-1.5 text-xs"
           />
+        </div>
+
+        {/* Photo Upload with Preview */}
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+            Incident Photo Evidence (Optional)
+          </label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={handleFileChange}
+            className="hidden"
+            id="map-incident-file-input"
+          />
+
+          {!selectedFile ? (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-2 px-3 border border-dashed border-slate-300 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center gap-2 transition-colors text-xs"
+            >
+              <Camera className="w-4 h-4 text-blue-600" />
+              <span>Attach Scene Photo (Max 10MB)</span>
+            </button>
+          ) : (
+            <div className="relative rounded-lg border border-slate-200 bg-slate-50 p-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {filePreview ? (
+                  <img
+                    src={filePreview}
+                    alt="Selected preview"
+                    className="w-10 h-10 object-cover rounded-md border border-slate-200 shrink-0"
+                  />
+                ) : (
+                  <ImageIcon className="w-5 h-5 text-blue-600 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-[11px] font-medium text-slate-800 truncate">
+                    {selectedFile.name}
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    {(selectedFile.size / 1024).toFixed(0)} KB
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleRemoveFile}
+                className="p-1 rounded-md text-red-600 hover:bg-red-50 transition-colors"
+                title="Remove photo"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Delay Estimate & Anonymous Option */}

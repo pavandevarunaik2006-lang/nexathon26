@@ -8,6 +8,9 @@ import {
   Printer,
   Search,
   Wrench,
+  MapPin,
+  Copy,
+  Check,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -388,7 +391,8 @@ export function AuthorityIncidentsPage() {
                     >
                       {inc.title}
                     </Link>
-                    <span className="text-[11px] text-slate-500">{inc.roadName}</span>
+                    <span className="text-[11px] text-slate-500 block">{inc.roadName}</span>
+                    <span className="font-mono text-[9.5px] text-slate-400">ID: {inc.id.slice(0, 8)}...</span>
                   </td>
                   <td className="py-3 px-3 text-slate-600">{inc.category}</td>
                   <td className="py-3 px-3">
@@ -405,12 +409,21 @@ export function AuthorityIncidentsPage() {
                     />
                   </td>
                   <td className="py-3 px-4">
-                    <button
-                      onClick={() => setSelectedIncident(inc)}
-                      className="btn-secondary py-1 px-2.5"
-                    >
-                      Investigate
-                    </button>
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      <button
+                        onClick={() => setSelectedIncident(inc)}
+                        className="btn-secondary py-1 px-2.5 text-xs"
+                      >
+                        Investigate
+                      </button>
+                      <Link
+                        to={`/app/map?incidentId=${encodeURIComponent(inc.id)}&lat=${inc.latitude}&lng=${inc.longitude}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold border border-blue-200 transition-colors shadow-2xs text-[11px]"
+                        title="View on Live Map"
+                      >
+                        <MapPin className="w-3 h-3 text-blue-600" /> Map
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -426,7 +439,18 @@ export function AuthorityIncidentsPage() {
 
           {selectedIncident ? (
             <div className="space-y-4 text-xs">
-              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2">
+                  <span className="font-mono text-[10.5px] text-slate-600 truncate max-w-[170px]" title={selectedIncident.id}>
+                    ID: {selectedIncident.id}
+                  </span>
+                  <Link
+                    to={`/app/map?incidentId=${encodeURIComponent(selectedIncident.id)}&lat=${selectedIncident.latitude}&lng=${selectedIncident.longitude}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold border border-blue-200"
+                  >
+                    <MapPin className="w-3 h-3 text-blue-600" /> View on Map
+                  </Link>
+                </div>
                 <p className="font-bold text-slate-900 text-sm">{selectedIncident.title}</p>
                 <p className="text-slate-500">{selectedIncident.roadName}</p>
                 <p className="text-slate-700 pt-1">{selectedIncident.description}</p>

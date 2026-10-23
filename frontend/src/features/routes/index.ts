@@ -5,3 +5,7 @@ export {
   type LocationEndpointValue,
   type LocationSuggestionItem,
 } from './RouteLocationInput';
+export {
+  ActiveNavigationPanel,
+  type ActiveNavigationPanelProps,
+} from './ActiveNavigationPanel';

@@ -61,6 +61,7 @@ import {
   DraftIncidentMapMarker,
   MapIncidentReportOverlay,
 } from '../incidents/MapIncidentReportOverlay';
+<<<<<<< Updated upstream
 import { HospitalLifelineDrawer } from '../lifeline/HospitalLifelineDrawer';
 import { CorridorFragilityModal } from '../fragility/CorridorFragilityModal';
 import { RoadAlertImpactSimulatorModal } from '../simulation/RoadAlertImpactSimulatorModal';
@@ -75,6 +76,88 @@ import {
   loadGoogleMapsApi,
   type GoogleMapsConfig,
 } from '../../services/googleMapsLoader';
+=======
+import { LiveUserMarker } from './LiveUserMarker';
+import type { LiveCoordinates } from '../../hooks/useLiveGeolocation';
+
+function buildDestinationDivIcon(label?: string): L.DivIcon {
+  const cleanLabel = (label || 'Destination B').replace(/"/g, '&quot;');
+  const html = `
+    <div class="relative flex flex-col items-center pointer-events-auto cursor-pointer" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));">
+      <div style="background:#0f172a;color:#ffffff;font-size:10px;font-weight:800;padding:2px 8px;border-radius:9999px;border:1.5px solid #ffffff;white-space:nowrap;margin-bottom:-4px;z-index:10;">
+        ${cleanLabel}
+      </div>
+      <div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">
+        <span class="animate-marker-pulse" style="position:absolute;inset:0;border-radius:9999px;background:rgba(225, 29, 72, 0.35);"></span>
+        <div style="width:26px;height:26px;border-radius:9999px;background:linear-gradient(135deg, #e11d48, #be123c);border:2.5px solid #ffffff;display:flex;align-items:center;justify-content:center;color:#ffffff;font-weight:900;font-size:12px;box-shadow:0 4px 8px rgba(0,0,0,0.25);">
+          B
+        </div>
+      </div>
+      <div style="width:6px;height:6px;border-radius:9999px;background:#be123c;margin-top:-3px;"></div>
+    </div>
+  `;
+  return L.divIcon({
+    html,
+    className: 'destination-b-marker-icon',
+    iconSize: [100, 60],
+    iconAnchor: [50, 56],
+    popupAnchor: [0, -50],
+  });
+}
+
+function RouteBoundsFitter({
+  activeRouteGeometry,
+  userCoords,
+  destinationCoords,
+  prefersReducedMotion,
+}: {
+  activeRouteGeometry?: [number, number][] | null;
+  userCoords?: LiveCoordinates | null;
+  destinationCoords?: [number, number] | null;
+  prefersReducedMotion: boolean;
+}) {
+  const map = useMap();
+  const lastGeometrySigRef = useRef<string>('');
+
+  useEffect(() => {
+    if (activeRouteGeometry && activeRouteGeometry.length > 1) {
+      const sig = `route-${activeRouteGeometry[0][0]},${activeRouteGeometry[0][1]}-${activeRouteGeometry[activeRouteGeometry.length - 1][0]},${activeRouteGeometry[activeRouteGeometry.length - 1][1]}`;
+      if (sig !== lastGeometrySigRef.current) {
+        lastGeometrySigRef.current = sig;
+        try {
+          const bounds = L.latLngBounds(activeRouteGeometry);
+          map.fitBounds(bounds, {
+            paddingTopLeft: [70, 40],
+            paddingBottomRight: [40, 40],
+            animate: !prefersReducedMotion,
+            maxZoom: 15,
+          });
+        } catch {
+          // ignore error if geometry bounds fail
+        }
+      }
+    } else if (userCoords && destinationCoords) {
+      const sig = `pts-${userCoords.latitude},${userCoords.longitude}-${destinationCoords[0]},${destinationCoords[1]}`;
+      if (sig !== lastGeometrySigRef.current) {
+        lastGeometrySigRef.current = sig;
+        try {
+          const bounds = L.latLngBounds([
+            [userCoords.latitude, userCoords.longitude],
+            destinationCoords,
+          ]);
+          map.fitBounds(bounds, {
+            padding: [60, 60],
+            animate: !prefersReducedMotion,
+            maxZoom: 14,
+          });
+        } catch {}
+      }
+    }
+  }, [activeRouteGeometry, userCoords, destinationCoords, map, prefersReducedMotion]);
+
+  return null;
+}
+>>>>>>> Stashed changes
 
 // Coastal NH-66 Backbone Polyline (Thokkottu -> Pumpwell -> Nanthoor -> KPT -> Kuloor -> Baikampady -> Surathkal -> Mulki -> Padubidri -> Kaup -> Udupi -> Manipal)
 const NH66_CORRIDOR_POLYLINE: [number, number][] = [
@@ -319,9 +402,9 @@ function MapViewportController({
   useEffect(() => {
     if (focusCoords) {
       if (prefersReducedMotion) {
-        map.setView(focusCoords, Math.max(map.getZoom(), 12), { animate: false });
+        map.setView(focusCoords, Math.max(map.getZoom(), 15), { animate: false });
       } else {
-        map.flyTo(focusCoords, Math.max(map.getZoom(), 12), {
+        map.flyTo(focusCoords, Math.max(map.getZoom(), 15), {
           duration: 0.65,
         });
       }
@@ -424,8 +507,20 @@ export interface CorridorIntelligenceMapProps {
     decision: string;
     timestamp: number;
   } | null;
+<<<<<<< Updated upstream
   primaryRoute?: { points: [number, number][]; summary?: string; roadClosureAvoided?: boolean } | null;
   alternativeRoutes?: { points: [number, number][]; summary?: string }[] | null;
+=======
+  userCoords?: LiveCoordinates | null;
+  recenterTrigger?: number;
+  followUser?: boolean;
+  isSimulatedUser?: boolean;
+  destinationCoords?: [number, number] | null;
+  destinationLabel?: string | null;
+  activeRouteGeometry?: [number, number][] | null;
+  alternateRouteGeometry?: [number, number][] | null;
+  routeColor?: string;
+>>>>>>> Stashed changes
 }
 
 const ALL_VEHICLE_CATEGORIES: VehicleCategoryGroup[] = [
@@ -443,8 +538,20 @@ export function CorridorIntelligenceMap({
   onFocusCoordsChange,
   heightClass = 'h-[520px]',
   externalIncidentEvent = null,
+<<<<<<< Updated upstream
   primaryRoute = null,
   alternativeRoutes = null,
+=======
+  userCoords = null,
+  recenterTrigger = 0,
+  followUser = false,
+  isSimulatedUser = false,
+  destinationCoords = null,
+  destinationLabel = null,
+  activeRouteGeometry = null,
+  alternateRouteGeometry = null,
+  routeColor = '#2563eb',
+>>>>>>> Stashed changes
 }: CorridorIntelligenceMapProps) {
   const { showToast } = useToast();
   const prefersReducedMotion = Boolean(useReducedMotion());
@@ -823,6 +930,12 @@ export function CorridorIntelligenceMap({
   }, [mergedIncidents, zoom, enableClustering, selectedIncidentId, showIncidents]);
 
   const handleLocateMe = () => {
+    if (userCoords && Number.isFinite(userCoords.latitude) && Number.isFinite(userCoords.longitude)) {
+      const coords: [number, number] = [userCoords.latitude, userCoords.longitude];
+      setInternalFocus(coords);
+      onFocusCoordsChange?.(coords);
+      return;
+    }
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -1802,6 +1915,87 @@ export function CorridorIntelligenceMap({
           onZoomActionHandled={() => setZoomAction(null)}
           prefersReducedMotion={prefersReducedMotion}
         />
+
+        {/* Live User Geolocation Marker & Telemetry */}
+        <LiveUserMarker
+          coords={userCoords}
+          recenterTrigger={recenterTrigger}
+          followUser={followUser}
+          isSimulated={isSimulatedUser}
+        />
+
+        {/* Dynamic Route Bounds Auto-Fitter */}
+        <RouteBoundsFitter
+          activeRouteGeometry={activeRouteGeometry}
+          userCoords={userCoords}
+          destinationCoords={destinationCoords}
+          prefersReducedMotion={prefersReducedMotion}
+        />
+
+        {/* Alternate Bypass Route Polyline */}
+        {alternateRouteGeometry && alternateRouteGeometry.length > 1 && (
+          <Polyline
+            positions={alternateRouteGeometry}
+            pathOptions={{
+              color: '#94a3b8',
+              weight: 4,
+              dashArray: '6, 8',
+              opacity: 0.8,
+              lineCap: 'round',
+              lineJoin: 'round',
+            }}
+          >
+            <Tooltip sticky direction="top" opacity={0.96}>
+              <div className="text-xs font-semibold text-slate-800">
+                Alternative Bypass Corridor
+              </div>
+            </Tooltip>
+          </Polyline>
+        )}
+
+        {/* Active Route Navigation Polyline (Underlying Glow Ribbon + Foreground Path) */}
+        {activeRouteGeometry && activeRouteGeometry.length > 1 && (
+          <>
+            <Polyline
+              positions={activeRouteGeometry}
+              pathOptions={{
+                color: '#ffffff',
+                weight: 8,
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            <Polyline
+              positions={activeRouteGeometry}
+              pathOptions={{
+                color: routeColor,
+                weight: 5,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          </>
+        )}
+
+        {/* Destination Marker (Marker B) */}
+        {destinationCoords && (
+          <Marker
+            position={destinationCoords}
+            icon={buildDestinationDivIcon(destinationLabel || 'Destination')}
+            zIndexOffset={1100}
+          >
+            <Tooltip direction="top" offset={[0, -48]} opacity={0.98}>
+              <div className="text-xs font-bold text-slate-900">
+                <div>{destinationLabel || 'Destination Point'}</div>
+                <div className="text-[10px] text-slate-500 font-mono">
+                  {destinationCoords[0].toFixed(4)}, {destinationCoords[1].toFixed(4)}
+                </div>
+              </div>
+            </Tooltip>
+          </Marker>
+        )}
 
         {/* Map Click Listener for Direct Incident Placement */}
         <MapIncidentPlacementListener

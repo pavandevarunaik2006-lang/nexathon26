@@ -15,9 +15,15 @@ import {
   AlertTriangle,
   Camera,
   Lock,
+  Copy,
+  Check,
+  ExternalLink,
+  ImageIcon,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { VERIFICATION_LEVELS, classifyIncidentVerificationState } from '@roadalert/shared';
-import { apiRequest } from '../../services/apiClient';
+import { apiRequest, getEvidenceFileUrl } from '../../services/apiClient';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -47,7 +53,25 @@ export function IncidentInvestigationPanel({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const prefersReducedMotion = useReducedMotion();
+<<<<<<< Updated upstream
   const [activeTab, setActiveTab] = useState<'overview' | 'trust' | 'evidence' | 'nearby'>('overview');
+=======
+  const [activeTab, setActiveTab] = useState<'overview' | 'evidence' | 'nearby'>('overview');
+  const [copiedId, setCopiedId] = useState(false);
+  const [selectedImageModal, setSelectedImageModal] = useState<string | null>(null);
+
+  const handleCopyId = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    navigator.clipboard.writeText(id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+    showToast({
+      type: 'info',
+      title: 'Incident ID Copied',
+      message: `Copied ID ${id} to clipboard`,
+    });
+  };
+>>>>>>> Stashed changes
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['incident-detail', incidentId],
@@ -172,14 +196,28 @@ export function IncidentInvestigationPanel({
         className="glass-card overflow-hidden rounded-2xl border-white/70 shadow-xl"
       >
         {/* Panel Header */}
-        <div className="px-4 py-3.5 bg-slate-50/60 backdrop-blur-md border-b border-white/60 flex items-center justify-between gap-2">
+        <div className="px-4 py-3 bg-slate-50/60 backdrop-blur-md border-b border-white/60 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
               Selected Incident Dossier
             </span>
           </div>
-          <DemoDataBadge isDemo={incident.demoData} />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 font-mono text-[11px] text-slate-600 bg-white/80 px-2 py-0.5 rounded border border-slate-200 shadow-2xs">
+              <span className="text-[9.5px] uppercase font-bold text-slate-400">ID:</span>
+              <span className="font-semibold text-slate-800 truncate max-w-[120px]" title={incident.id}>{incident.id}</span>
+              <button
+                type="button"
+                onClick={(e) => handleCopyId(incident.id, e)}
+                className="hover:text-blue-600 transition-colors p-0.5"
+                title="Copy full incident ID"
+              >
+                {copiedId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+              </button>
+            </div>
+            <DemoDataBadge isDemo={incident.demoData} />
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
@@ -211,12 +249,21 @@ export function IncidentInvestigationPanel({
 
           {/* Title & Location */}
           <div>
-            <Link
-              to={`/app/incidents/${incident.id}`}
-              className="text-sm font-bold text-slate-900 hover:text-blue-600 transition-colors leading-snug block"
-            >
-              {incident.title}
-            </Link>
+            <div className="flex items-start justify-between gap-2">
+              <Link
+                to={`/app/incidents/${incident.id}`}
+                className="text-sm font-bold text-slate-900 hover:text-blue-600 transition-colors leading-snug block flex-1"
+              >
+                {incident.title}
+              </Link>
+              <Link
+                to={`/app/map?incidentId=${encodeURIComponent(incident.id)}&lat=${incident.latitude}&lng=${incident.longitude}`}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 shadow-2xs transition-colors"
+                title="Center and highlight this incident on the Live Map"
+              >
+                <MapPin className="w-3.5 h-3.5 text-blue-600" /> View on Map
+              </Link>
+            </div>
             <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 mt-1.5">
               <span className="inline-flex items-center gap-1 text-slate-700 font-semibold">
                 <MapPin className="w-3.5 h-3.5 text-blue-600" /> {incident.roadName}
@@ -224,6 +271,9 @@ export function IncidentInvestigationPanel({
               <span className="inline-flex items-center gap-1 text-amber-700 font-bold">
                 <Clock className="w-3.5 h-3.5 text-amber-600" /> +
                 <AnimatedNumber value={incident.estimatedDelayMinutes} />m delay
+              </span>
+              <span className="font-mono text-[10px] text-slate-400">
+                ({Number(incident.latitude).toFixed(4)}, {Number(incident.longitude).toFixed(4)})
               </span>
             </div>
           </div>
@@ -483,30 +533,60 @@ export function IncidentInvestigationPanel({
                 animate={{ opacity: 1, y: 0 }}
                 exit={prefersReducedMotion ? undefined : { opacity: 0, y: -3 }}
                 transition={{ duration: 0.16, ease: ENTERPRISE_EASE }}
-                className="space-y-2"
+                className="space-y-2.5"
               >
                 {evidences?.length > 0 ? (
-                  evidences.map((ev: any) => (
-                    <div
-                      key={ev.id}
-                      className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
-                          {ev.evidence_type}
-                        </span>
-                        <span className="text-[10px] text-emerald-700 font-semibold">
-                          {ev.validation_status}
-                        </span>
+                  evidences.map((ev: any) => {
+                    const photoUrl = getEvidenceFileUrl(ev.url || ev.evidenceUrl || ev.storage_key);
+                    const isPhoto = ev.evidence_type === 'PHOTO' || Boolean(photoUrl && (ev.storage_key?.match(/\.(jpg|jpeg|png|webp)$/i) || ev.url?.match(/\.(jpg|jpeg|png|webp)$/i)));
+                    return (
+                      <div
+                        key={ev.id}
+                        className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold uppercase tracking-wider">
+                            {ev.evidence_type}
+                          </span>
+                          <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            {ev.validation_status}
+                          </span>
+                        </div>
+
+                        {/* Stored Photo Display */}
+                        {isPhoto && photoUrl && (
+                          <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-900 group">
+                            <img
+                              src={photoUrl}
+                              alt={ev.metadata?.caption || 'Incident evidence photo'}
+                              className="w-full h-36 object-cover cursor-pointer group-hover:scale-105 transition-transform duration-300"
+                              onClick={() => setSelectedImageModal(photoUrl)}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                const fallback = e.currentTarget.parentElement?.querySelector('.img-investigate-fallback') as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }}
+                            />
+                            <div className="img-investigate-fallback hidden p-4 text-center items-center justify-center text-xs text-slate-400 bg-slate-800">
+                              <AlertCircle className="w-4 h-4 text-amber-500 mr-1.5" />
+                              <span>Photo file not found on server</span>
+                            </div>
+                            <div className="absolute bottom-1 right-1 bg-black/70 backdrop-blur-xs text-[10px] text-white px-2 py-0.5 rounded flex items-center gap-1 pointer-events-none">
+                              <ExternalLink className="w-2.5 h-2.5" /> Enlarge
+                            </div>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] font-medium text-slate-800">
+                          {ev.metadata?.caption || (isPhoto ? 'Uploaded incident photo evidence' : ev.storage_key || 'Verified telemetry')}
+                        </p>
+                        <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200 font-mono">
+                          <span>By {ev.submitter_name || 'Commuter'}</span>
+                          {ev.id && <span className="text-slate-400">Ref: {ev.id.slice(0, 8)}...</span>}
+                        </div>
                       </div>
-                      <p className="text-[11px] font-medium text-slate-800">
-                        {ev.metadata?.caption || ev.storage_key || 'Verified telemetry'}
-                      </p>
-                      <p className="text-[10px] text-slate-500">
-                        Submitted by {ev.submitter_name || 'Commuter'}
-                      </p>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-center text-xs text-slate-500">
                     No media or telemetry attachments recorded yet.
@@ -652,6 +732,33 @@ export function IncidentInvestigationPanel({
           )}
         </div>
       </motion.div>
+
+      {/* Full Evidence Image Lightbox Modal */}
+      {selectedImageModal && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedImageModal(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl p-2 border border-white/20"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setSelectedImageModal(null)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors shadow-lg"
+              title="Close image preview"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={selectedImageModal}
+              alt="Enlarged incident evidence"
+              className="max-h-[82vh] w-auto mx-auto object-contain rounded-xl"
+            />
+          </div>
+        </div>
+      )}
     </AnimatePresence>
   );
 }
