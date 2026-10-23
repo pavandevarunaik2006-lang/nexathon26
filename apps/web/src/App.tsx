@@ -69,7 +69,7 @@ function ProtectedRoute({
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-300 flex items-center justify-center text-sm font-medium">
+      <div className="min-h-screen bg-slate-50 text-slate-600 flex items-center justify-center text-sm font-medium">
         Initializing RoadAlert Operations Session...
       </div>
     );

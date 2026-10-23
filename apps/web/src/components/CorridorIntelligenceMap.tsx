@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   MapContainer,
   TileLayer,
@@ -10,16 +10,14 @@ import {
   useMapEvents,
 } from 'react-leaflet';
 import L from 'leaflet';
+import { useReducedMotion } from 'framer-motion';
 import {
   Layers,
   LocateFixed,
-  Maximize2,
-  Minimize2,
-  Eye,
-  EyeOff,
   Compass,
   Route,
-  Sparkles,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import { REGIONAL_DESTINATIONS } from '@roadalert/shared';
 
@@ -42,72 +40,70 @@ const NH66_CORRIDOR_POLYLINE: [number, number][] = [
 function getCategorySvgGlyph(category: string): string {
   const c = category.toLowerCase();
   if (c.includes('flood') || c.includes('rain')) {
-    // Water / Waves glyph
     return `<path d="M2 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 17c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M12 3l-4 5h8l-4-5z"/>`;
   }
   if (c.includes('closure') || c.includes('closed') || c.includes('restriction')) {
-    // Stop / Octagon Barricade glyph
     return `<circle cx="12" cy="12" r="8"/><path d="M8 12h8"/>`;
   }
   if (c.includes('repair') || c.includes('construction') || c.includes('maintenance')) {
-    // Construction / Wrenchcone glyph
     return `<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`;
   }
   if (c.includes('signal')) {
-    // Traffic Signal glyph
     return `<rect x="7" y="2" width="10" height="20" rx="2"/><circle cx="12" cy="7" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="17" r="1.5"/>`;
   }
   if (c.includes('accident') || c.includes('breakdown')) {
-    // Alert / Collision triangle
     return `<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>`;
   }
-  // Default Radar / Traffic pin
   return `<circle cx="12" cy="12" r="4"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/>`;
 }
 
 function buildIncidentDivIcon(
   incident: any,
-  isSelected: boolean
+  isSelected: boolean,
+  staggerIndex: number,
+  prefersReducedMotion: boolean
 ): L.DivIcon {
   const isCritical = incident.severity === 'CRITICAL' || incident.roadClosed;
   const isHigh = incident.severity === 'HIGH';
 
   const bgHex = isCritical
-    ? '#ef4444'
+    ? '#dc2626'
     : isHigh
     ? '#f59e0b'
     : incident.severity === 'MEDIUM'
-    ? '#06b6d4'
-    : '#64748b';
+    ? '#2563eb'
+    : '#475569';
 
-  const ringColor = isSelected ? '#ffffff' : '#050914';
-  const size = isSelected ? 40 : 32;
+  const size = isSelected ? 36 : 30;
   const svgGlyph = getCategorySvgGlyph(incident.category || '');
+  const delayMs = prefersReducedMotion ? 0 : 140 + Math.min(staggerIndex * 30, 260);
 
   const pulseRingHtml =
-    isCritical || isSelected
-      ? `<span class="animate-marker-pulse" style="position:absolute;inset:-6px;border-radius:9999px;border:2px solid ${bgHex};pointer-events:none;"></span>`
+    !prefersReducedMotion && isCritical
+      ? `<span class="animate-marker-pulse" style="position:absolute;inset:-5px;border-radius:9999px;border:2px solid ${bgHex};pointer-events:none;"></span>`
       : '';
 
+  const enterClass = prefersReducedMotion ? '' : 'pin-reveal-enter';
+
   const html = `
-    <div style="position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
+    <div class="${enterClass}" style="animation-delay:${delayMs}ms;position:relative;width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center;">
       ${pulseRingHtml}
       <div style="
         width:${size}px;
         height:${size}px;
         border-radius:9999px;
         background:${bgHex};
-        border:${isSelected ? '3px' : '2px'} solid ${ringColor};
-        box-shadow:0 0 ${isSelected ? '20px' : '10px'} ${bgHex}99;
+        border:${isSelected ? '3px' : '2.5px'} solid #ffffff;
+        box-shadow:0 2px 8px rgba(15, 23, 42, 0.35);
         display:flex;
         align-items:center;
         justify-content:center;
-        color:#050914;
-        transition:all 0.2s ease;
+        color:#ffffff;
+        transition:all 0.15s ease;
       ">
-        <svg viewBox="0 0 24 24" width="${isSelected ? 18 : 15}" height="${
-    isSelected ? 18 : 15
-  }" fill="none" stroke="#050914" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="${isSelected ? 17 : 14}" height="${
+    isSelected ? 17 : 14
+  }" fill="none" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
           ${svgGlyph}
         </svg>
       </div>
@@ -122,33 +118,41 @@ function buildIncidentDivIcon(
   });
 }
 
-function buildClusterDivIcon(cluster: {
-  count: number;
-  maxSeverity: string;
-  hasSelected: boolean;
-}): L.DivIcon {
+function buildClusterDivIcon(
+  cluster: {
+    count: number;
+    maxSeverity: string;
+    hasSelected: boolean;
+  },
+  staggerIndex: number,
+  prefersReducedMotion: boolean
+): L.DivIcon {
   const bgHex =
     cluster.maxSeverity === 'CRITICAL'
-      ? '#ef4444'
+      ? '#dc2626'
       : cluster.maxSeverity === 'HIGH'
       ? '#f59e0b'
-      : '#06b6d4';
+      : '#2563eb';
 
-  const size = 40;
+  const size = 36;
+  const delayMs = prefersReducedMotion ? 0 : Math.min(staggerIndex * 40, 240);
+  const enterClass = prefersReducedMotion ? '' : 'pin-reveal-enter';
+
   const html = `
-    <div style="
+    <div class="${enterClass}" style="
+      animation-delay:${delayMs}ms;
       width:${size}px;
       height:${size}px;
       border-radius:9999px;
-      background:#0b1426;
-      border:2.5px solid ${bgHex};
-      box-shadow:0 0 16px ${bgHex}80;
+      background:${bgHex};
+      border:3px solid #ffffff;
+      box-shadow:0 3px 10px rgba(15, 23, 42, 0.3);
       display:flex;
       flex-direction:column;
       align-items:center;
       justify-content:center;
-      color:#f8fafc;
-      font-weight:800;
+      color:#ffffff;
+      font-weight:700;
       font-size:12px;
     ">
       <span>${cluster.count}</span>
@@ -166,19 +170,39 @@ function buildClusterDivIcon(cluster: {
 function MapViewportController({
   focusCoords,
   onZoomChange,
+  zoomAction,
+  onZoomActionHandled,
+  prefersReducedMotion,
 }: {
   focusCoords: [number, number] | null;
   onZoomChange: (zoom: number) => void;
+  zoomAction: 'in' | 'out' | null;
+  onZoomActionHandled: () => void;
+  prefersReducedMotion: boolean;
 }) {
   const map = useMap();
 
   useEffect(() => {
     if (focusCoords) {
-      map.flyTo(focusCoords, Math.max(map.getZoom(), 12), {
-        duration: 0.75,
-      });
+      if (prefersReducedMotion) {
+        map.setView(focusCoords, Math.max(map.getZoom(), 12), { animate: false });
+      } else {
+        map.flyTo(focusCoords, Math.max(map.getZoom(), 12), {
+          duration: 0.65,
+        });
+      }
     }
-  }, [focusCoords, map]);
+  }, [focusCoords, map, prefersReducedMotion]);
+
+  useEffect(() => {
+    if (zoomAction === 'in') {
+      map.zoomIn(1, { animate: !prefersReducedMotion });
+      onZoomActionHandled();
+    } else if (zoomAction === 'out') {
+      map.zoomOut(1, { animate: !prefersReducedMotion });
+      onZoomActionHandled();
+    }
+  }, [zoomAction, map, onZoomActionHandled, prefersReducedMotion]);
 
   useMapEvents({
     zoomend() {
@@ -187,6 +211,61 @@ function MapViewportController({
   });
 
   return null;
+}
+
+/**
+ * AnimatedCorridorPolyline — Coordinates SVG route drawing and fires onDrawComplete
+ * using native DOM animationend event (or immediately when reduced motion is active).
+ */
+function AnimatedCorridorPolyline({
+  positions,
+  prefersReducedMotion,
+  onDrawComplete,
+}: {
+  positions: [number, number][];
+  prefersReducedMotion: boolean;
+  onDrawComplete: () => void;
+}) {
+  const polylineRef = useRef<L.Polyline | null>(null);
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      onDrawComplete();
+      return;
+    }
+
+    const poly = polylineRef.current;
+    const pathEl = poly?.getElement() as SVGPathElement | undefined;
+
+    if (!pathEl) {
+      const fallbackTimer = window.setTimeout(onDrawComplete, 450);
+      return () => window.clearTimeout(fallbackTimer);
+    }
+
+    pathEl.classList.add('corridor-route-path-draw');
+    const handleAnimEnd = () => {
+      onDrawComplete();
+    };
+    pathEl.addEventListener('animationend', handleAnimEnd, { once: true });
+
+    const safetyTimer = window.setTimeout(onDrawComplete, 900);
+    return () => {
+      pathEl.removeEventListener('animationend', handleAnimEnd);
+      window.clearTimeout(safetyTimer);
+    };
+  }, [prefersReducedMotion, onDrawComplete]);
+
+  return (
+    <Polyline
+      ref={polylineRef}
+      positions={positions}
+      pathOptions={{
+        color: '#0284c7',
+        weight: 4,
+        opacity: 0.8,
+      }}
+    />
+  );
 }
 
 export interface CorridorIntelligenceMapProps {
@@ -204,19 +283,27 @@ export function CorridorIntelligenceMap({
   onSelectIncident,
   focusCoords = null,
   onFocusCoordsChange,
-  heightClass = 'h-[540px]',
+  heightClass = 'h-[520px]',
 }: CorridorIntelligenceMapProps) {
-  const [darkTacticalTiles, setDarkTacticalTiles] = useState(true);
+  const prefersReducedMotion = Boolean(useReducedMotion());
+  const [darkTacticalTiles, setDarkTacticalTiles] = useState(false);
   const [showCorridorLine, setShowCorridorLine] = useState(true);
   const [showLandmarks, setShowLandmarks] = useState(true);
   const [enableClustering, setEnableClustering] = useState(true);
   const [zoom, setZoom] = useState(10);
+  const [zoomAction, setZoomAction] = useState<'in' | 'out' | null>(null);
   const [tileError, setTileError] = useState(false);
   const [internalFocus, setInternalFocus] = useState<[number, number] | null>(null);
+  const [corridorDrawComplete, setCorridorDrawComplete] = useState(prefersReducedMotion);
 
   const effectiveFocus = focusCoords || internalFocus;
 
-  // Compute spatial clusters when zoomed out (zoom <= 10) and enableClustering is true
+  useEffect(() => {
+    if (!showCorridorLine || prefersReducedMotion) {
+      setCorridorDrawComplete(true);
+    }
+  }, [showCorridorLine, prefersReducedMotion]);
+
   const { singleMarkers, clusters } = useMemo(() => {
     if (!enableClustering || zoom >= 11) {
       return { singleMarkers: incidents, clusters: [] };
@@ -297,7 +384,6 @@ export function CorridorIntelligenceMap({
         onFocusCoordsChange?.(coords);
       },
       () => {
-        // Fallback to Pumpwell Mangaluru center
         const coords: [number, number] = [12.8669, 74.8692];
         setInternalFocus(coords);
         onFocusCoordsChange?.(coords);
@@ -307,17 +393,17 @@ export function CorridorIntelligenceMap({
 
   return (
     <div
-      className={`relative rounded-2xl overflow-hidden border border-slate-800/90 bg-[#070d1d] shadow-2xl ${
-        darkTacticalTiles ? 'map-tiles-dark' : ''
+      className={`relative rounded-xl overflow-hidden border border-slate-200 bg-white shadow-card ${
+        darkTacticalTiles ? 'map-tiles-dark' : 'map-tiles-light'
       }`}
     >
-      {/* Top Floating Geospatial Layer HUD */}
+      {/* Top Floating Geospatial Controls */}
       <div className="absolute top-3 left-3 right-3 z-[400] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        <div className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 text-[11px] font-semibold text-slate-200 shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span>NH-66 / NH-75 Geospatial Radar</span>
-          <span className="text-slate-500">•</span>
-          <span className="text-cyan-300 font-bold">{incidents.length} Active Pins</span>
+        <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/95 backdrop-blur-xs border border-slate-200 text-xs font-semibold text-slate-800 shadow-sm">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>NH-66 / NH-75 Corridor Map</span>
+          <span className="text-slate-300">|</span>
+          <span className="text-blue-600 font-bold">{incidents.length} Active</span>
         </div>
 
         <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
@@ -331,11 +417,11 @@ export function CorridorIntelligenceMap({
               }
             }}
             defaultValue=""
-            aria-label="Fly to corridor checkpoint"
-            className="px-2.5 py-1.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 text-[11px] font-medium text-cyan-300 focus:outline-none focus:border-cyan-500"
+            aria-label="Jump to corridor checkpoint"
+            className="px-2.5 py-1.5 rounded-lg bg-white/95 backdrop-blur-xs border border-slate-200 text-xs font-medium text-slate-700 shadow-sm focus:outline-none focus:border-blue-600"
           >
             <option value="" disabled>
-              Jump to Checkpoint...
+              Jump to Location...
             </option>
             {REGIONAL_DESTINATIONS.map((d) => (
               <option key={d.name} value={d.name}>
@@ -346,13 +432,21 @@ export function CorridorIntelligenceMap({
 
           <button
             type="button"
-            onClick={() => setShowCorridorLine((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-xl backdrop-blur-md border text-[11px] font-semibold flex items-center gap-1 transition-colors ${
+            onClick={() => {
+              setShowCorridorLine((v) => {
+                const next = !v;
+                if (next && !prefersReducedMotion) {
+                  setCorridorDrawComplete(false);
+                }
+                return next;
+              });
+            }}
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors ${
               showCorridorLine
-                ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
-                : 'bg-slate-950/90 border-slate-800 text-slate-400'
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
-            title="Toggle NH-66 Corridor Overlay"
+            title="Toggle NH-66 Corridor Route Highlight"
           >
             <Route className="w-3.5 h-3.5" /> Corridor
           </button>
@@ -360,10 +454,10 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setEnableClustering((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-xl backdrop-blur-md border text-[11px] font-semibold flex items-center gap-1 transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors ${
               enableClustering
-                ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
-                : 'bg-slate-950/90 border-slate-800 text-slate-400'
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'bg-white/95 border-slate-200 text-slate-700 hover:bg-slate-50'
             }`}
             title="Toggle Spatial Marker Clustering"
           >
@@ -373,28 +467,51 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setDarkTacticalTiles((v) => !v)}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 text-[11px] font-semibold text-slate-300 hover:text-white flex items-center gap-1"
-            title="Switch Tactical Dark / Standard Daylight Map Tiles"
+            className="px-2.5 py-1.5 rounded-lg bg-white/95 border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm flex items-center gap-1"
+            title="Switch Daylight / Dark Map Style"
           >
-            <Compass className="w-3.5 h-3.5 text-cyan-400" />
-            {darkTacticalTiles ? 'Tactical Dark' : 'Daylight OSM'}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleLocateMe}
-            className="p-1.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-slate-800 text-cyan-400 hover:bg-slate-900"
-            title="Center on my location"
-            aria-label="Center on my location"
-          >
-            <LocateFixed className="w-4 h-4" />
+            <Compass className="w-3.5 h-3.5 text-blue-600" />
+            {darkTacticalTiles ? 'Dark Map' : 'Standard Map'}
           </button>
         </div>
       </div>
 
+      {/* Right-Side Compact Zoom & Locate Controls */}
+      <div className="absolute bottom-14 right-3 z-[400] flex flex-col gap-1 pointer-events-auto">
+        <div className="flex flex-col rounded-lg bg-white/95 border border-slate-200 shadow-sm overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setZoomAction('in')}
+            className="p-2 text-slate-700 hover:bg-slate-100 border-b border-slate-200"
+            title="Zoom in"
+            aria-label="Zoom in"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoomAction('out')}
+            className="p-2 text-slate-700 hover:bg-slate-100"
+            title="Zoom out"
+            aria-label="Zoom out"
+          >
+            <Minus className="w-4 h-4" />
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={handleLocateMe}
+          className="p-2 rounded-lg bg-white/95 border border-slate-200 text-blue-600 hover:bg-slate-100 shadow-sm"
+          title="Center on my location"
+          aria-label="Center on my location"
+        >
+          <LocateFixed className="w-4 h-4" />
+        </button>
+      </div>
+
       {tileError && (
-        <div className="absolute top-14 left-3 right-3 z-[400] p-2.5 rounded-xl bg-amber-950/95 border border-amber-500/40 text-amber-200 text-xs">
-          Map tile service unreachable; displaying tactical coordinate vector layer and synchronized incident markers.
+        <div className="absolute top-14 left-3 right-3 z-[400] p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs shadow-sm">
+          Map tile service unreachable; displaying coordinate vector layer and synchronized incident markers.
         </div>
       )}
 
@@ -418,132 +535,137 @@ export function CorridorIntelligenceMap({
         <MapViewportController
           focusCoords={effectiveFocus}
           onZoomChange={(z) => setZoom(z)}
+          zoomAction={zoomAction}
+          onZoomActionHandled={() => setZoomAction(null)}
+          prefersReducedMotion={prefersReducedMotion}
         />
 
-        {/* NH-66 Primary Coastal Highway Vector Spine */}
+        {/* NH-66 Primary Coastal Highway Route Highlight with Coordinated Draw Completion */}
         {showCorridorLine && (
-          <Polyline
+          <AnimatedCorridorPolyline
             positions={NH66_CORRIDOR_POLYLINE}
-            pathOptions={{
-              color: '#06b6d4',
-              weight: 3,
-              opacity: 0.45,
-              dashArray: '6, 8',
-            }}
+            prefersReducedMotion={prefersReducedMotion}
+            onDrawComplete={() => setCorridorDrawComplete(true)}
           />
         )}
 
         {/* Regional Checkpoint Nodes */}
         {showLandmarks &&
+          corridorDrawComplete &&
           REGIONAL_DESTINATIONS.map((lm) => (
             <CircleMarker
               key={lm.name}
               center={[lm.lat, lm.lng]}
-              radius={3.5}
+              radius={4}
               pathOptions={{
-                color: '#38bdf8',
+                color: '#ffffff',
                 fillColor: '#0284c7',
-                fillOpacity: 0.6,
-                weight: 1,
+                fillOpacity: 0.9,
+                weight: 1.5,
               }}
             >
-              <Tooltip direction="top" offset={[0, -4]} opacity={0.9}>
-                <span className="text-[10px] font-semibold">
+              <Tooltip direction="top" offset={[0, -4]} opacity={0.95}>
+                <span className="text-[11px] font-semibold text-slate-800">
                   {lm.name} ({lm.corridor})
                 </span>
               </Tooltip>
             </CircleMarker>
           ))}
 
-        {/* Clustered Incident Markers */}
-        {clusters.map((cluster) => (
-          <Marker
-            key={cluster.id}
-            position={[cluster.lat, cluster.lng]}
-            icon={buildClusterDivIcon({
-              count: cluster.items.length,
-              maxSeverity: cluster.maxSeverity,
-              hasSelected: cluster.hasSelected,
-            })}
-            eventHandlers={{
-              click: () => {
-                setInternalFocus([cluster.lat, cluster.lng]);
-                onSelectIncident(cluster.items[0]);
-              },
-            }}
-          >
-            <Tooltip direction="top" offset={[0, -14]} opacity={0.95}>
-              <div className="text-xs font-semibold text-slate-900">
-                <div>{cluster.items.length} Clustered Incidents</div>
-                <div className="text-[10px] text-slate-600">
-                  Click to zoom &amp; inspect {cluster.items[0].roadName}
-                </div>
-              </div>
-            </Tooltip>
-          </Marker>
-        ))}
-
-        {/* Individual Category-Specific Animated Incident Markers */}
-        {singleMarkers.map((inc) => {
-          const isSelected = inc.id === selectedIncidentId;
-          return (
+        {/* Clustered Incident Markers (Revealed after corridor route draw completes) */}
+        {corridorDrawComplete &&
+          clusters.map((cluster, idx) => (
             <Marker
-              key={inc.id}
-              position={[Number(inc.latitude), Number(inc.longitude)]}
-              icon={buildIncidentDivIcon(inc, isSelected)}
-              zIndexOffset={isSelected ? 1000 : inc.severity === 'CRITICAL' ? 500 : 100}
+              key={cluster.id}
+              position={[cluster.lat, cluster.lng]}
+              icon={buildClusterDivIcon(
+                {
+                  count: cluster.items.length,
+                  maxSeverity: cluster.maxSeverity,
+                  hasSelected: cluster.hasSelected,
+                },
+                idx,
+                prefersReducedMotion
+              )}
               eventHandlers={{
                 click: () => {
-                  onSelectIncident(inc);
-                  setInternalFocus([Number(inc.latitude), Number(inc.longitude)]);
+                  setInternalFocus([cluster.lat, cluster.lng]);
+                  onSelectIncident(cluster.items[0]);
                 },
               }}
             >
-              <Tooltip direction="top" offset={[0, -16]} opacity={0.96}>
-                <div className="p-1 max-w-xs space-y-0.5 text-slate-900">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-slate-900 text-white">
-                      {inc.severity}
-                    </span>
-                    <span className="text-[10px] font-bold text-cyan-700">
-                      {inc.category}
-                    </span>
-                  </div>
-                  <div className="font-bold text-xs leading-tight">{inc.title}</div>
+              <Tooltip direction="top" offset={[0, -14]} opacity={0.96}>
+                <div className="text-xs font-semibold text-slate-900">
+                  <div>{cluster.items.length} Clustered Incidents</div>
                   <div className="text-[10px] text-slate-600">
-                    {inc.roadName} • Confidence: <strong>{inc.confidenceScore}/100</strong> • Delay:{' '}
-                    <strong>+{inc.estimatedDelayMinutes}m</strong>
+                    Click to zoom &amp; inspect {cluster.items[0].roadName}
                   </div>
                 </div>
               </Tooltip>
             </Marker>
-          );
-        })}
+          ))}
+
+        {/* Individual Category-Specific Incident Markers (Coordinated staggered reveal) */}
+        {corridorDrawComplete &&
+          singleMarkers.map((inc, idx) => {
+            const isSelected = inc.id === selectedIncidentId;
+            return (
+              <Marker
+                key={inc.id}
+                position={[Number(inc.latitude), Number(inc.longitude)]}
+                icon={buildIncidentDivIcon(inc, isSelected, idx, prefersReducedMotion)}
+                zIndexOffset={isSelected ? 1000 : inc.severity === 'CRITICAL' ? 500 : 100}
+                eventHandlers={{
+                  click: () => {
+                    onSelectIncident(inc);
+                    setInternalFocus([Number(inc.latitude), Number(inc.longitude)]);
+                  },
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -16]} opacity={0.98}>
+                  <div className="p-1 max-w-xs space-y-0.5 text-slate-900">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-900 text-white">
+                        {inc.severity}
+                      </span>
+                      <span className="text-[10px] font-semibold text-blue-700">
+                        {inc.category}
+                      </span>
+                    </div>
+                    <div className="font-bold text-xs leading-tight">{inc.title}</div>
+                    <div className="text-[10px] text-slate-600">
+                      {inc.roadName} • Confidence: <strong>{inc.confidenceScore}%</strong> • Delay:{' '}
+                      <strong>+{inc.estimatedDelayMinutes}m</strong>
+                    </div>
+                  </div>
+                </Tooltip>
+              </Marker>
+            );
+          })}
       </MapContainer>
 
-      {/* Bottom Compact Legend & Status Bar */}
-      <div className="px-3.5 py-2 bg-slate-950/95 border-t border-slate-800/90 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1.5 font-medium text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Critical / Closure
+      {/* Bottom Compact Legend & Layer Controls */}
+      <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block" /> Critical / Closure
           </span>
-          <span className="inline-flex items-center gap-1.5 font-medium text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> High Disruption
+          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Warning / High
           </span>
-          <span className="inline-flex items-center gap-1.5 font-medium text-slate-300">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block" /> Medium / Active
+          <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" /> Medium / Active
           </span>
           <button
             type="button"
             onClick={() => setShowLandmarks((v) => !v)}
-            className="text-cyan-400 hover:underline ml-1"
+            className="text-blue-600 hover:underline font-medium"
           >
             {showLandmarks ? 'Hide Checkpoints' : 'Show Checkpoints'}
           </button>
         </div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-400">
-          <Sparkles className="w-3 h-3 text-indigo-400" />
-          <span>Seeded regional incidents labeled as Demo Data</span>
+        <div className="text-[11px] text-slate-500">
+          Coastal Corridor: Mangaluru – Surathkal – Mulki – Udupi (NH-66)
         </div>
       </div>
     </div>

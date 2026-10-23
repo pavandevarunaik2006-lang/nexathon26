@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Navigation,
   MapPin,
@@ -9,30 +10,26 @@ import {
   CheckCircle2,
   AlertTriangle,
   Sparkles,
-  Upload,
   LocateFixed,
   ThumbsUp,
   ThumbsDown,
   Flag,
-  Camera,
   Radio,
-  Check,
-  XCircle,
-  Clock,
+  Lock,
 } from 'lucide-react';
 import {
   MapContainer,
   TileLayer,
   Polyline,
   CircleMarker,
-  Popup,
+  Tooltip as LeafletTooltip,
   useMapEvents,
 } from 'react-leaflet';
+import type L from 'leaflet';
 import {
   INCIDENT_CATEGORIES,
   INCIDENT_SEVERITIES,
   REGIONAL_DESTINATIONS,
-  VERIFICATION_LEVELS,
 } from '@roadalert/shared';
 import { apiRequest } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -43,13 +40,90 @@ import {
   ConfidenceMeter,
   DemoDataBadge,
 } from '../components/Badges';
+import {
+  AnimatedNumber,
+  StaggerGrid,
+  StaggerItem,
+  ENTERPRISE_EASE,
+} from '../components/MotionPrimitives';
+
+function RoutePolylineWithDraw({
+  route,
+  isSelected,
+  strokeColor,
+  prefersReducedMotion,
+  onSelect,
+  onDrawComplete,
+}: {
+  route: any;
+  isSelected: boolean;
+  strokeColor: string;
+  prefersReducedMotion: boolean;
+  onSelect: () => void;
+  onDrawComplete: () => void;
+}) {
+  const polylineRef = useRef<L.Polyline | null>(null);
+
+  useEffect(() => {
+    if (!isSelected) return;
+    if (prefersReducedMotion) {
+      onDrawComplete();
+      return;
+    }
+
+    const poly = polylineRef.current;
+    const pathEl = poly?.getElement() as SVGPathElement | undefined;
+    if (!pathEl) {
+      const timer = setTimeout(onDrawComplete, 450);
+      return () => clearTimeout(timer);
+    }
+
+    // Re-trigger CSS path draw animation when selected route changes
+    pathEl.classList.remove('corridor-route-path-draw');
+    void pathEl.getBoundingClientRect();
+    pathEl.classList.add('corridor-route-path-draw');
+
+    const handleEnd = () => {
+      onDrawComplete();
+    };
+    pathEl.addEventListener('animationend', handleEnd, { once: true });
+    const fallbackTimer = setTimeout(onDrawComplete, 780);
+
+    return () => {
+      pathEl.removeEventListener('animationend', handleEnd);
+      clearTimeout(fallbackTimer);
+    };
+  }, [isSelected, route.id, prefersReducedMotion, onDrawComplete]);
+
+  return (
+    <Polyline
+      ref={polylineRef}
+      positions={route.geometry}
+      pathOptions={{
+        color: strokeColor,
+        weight: isSelected ? 6 : 3.5,
+        opacity: isSelected ? 0.95 : 0.45,
+        dashArray: route.hasRoadClosureWarning ? '8, 8' : undefined,
+        className:
+          isSelected && !prefersReducedMotion && !route.hasRoadClosureWarning
+            ? 'corridor-route-path-draw'
+            : undefined,
+      }}
+      eventHandlers={{
+        click: onSelect,
+      }}
+    />
+  );
+}
 
 export function RoutePlannerPage() {
   const { showToast } = useToast();
+  const prefersReducedMotion = Boolean(useReducedMotion());
   const [origin, setOrigin] = useState('Pumpwell Circle, Mangaluru (NH-66)');
   const [destination, setDestination] = useState('Udupi Karavali Bypass (NH-66)');
   const [avoidIncidentZones, setAvoidIncidentZones] = useState(true);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [routePinsReady, setRoutePinsReady] = useState<boolean>(prefersReducedMotion);
 
   const planMutation = useMutation({
     mutationFn: (payload: any) =>
@@ -59,7 +133,10 @@ export function RoutePlannerPage() {
       }),
     onSuccess: (data) => {
       const rec = data.routes?.find((r: any) => r.recommended) || data.routes?.[0];
-      if (rec) setSelectedRouteId(rec.id);
+      if (rec) {
+        setRoutePinsReady(prefersReducedMotion);
+        setSelectedRouteId(rec.id);
+      }
     },
     onError: (err: any) => {
       showToast({
@@ -70,7 +147,6 @@ export function RoutePlannerPage() {
     },
   });
 
-  // Trigger initial route calculation for Mangaluru -> Udupi demo journey on mount
   React.useEffect(() => {
     planMutation.mutate({
       origin,
@@ -94,14 +170,14 @@ export function RoutePlannerPage() {
     routes.find((r: any) => r.id === selectedRouteId) || routes[0] || null;
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+    <div className="space-y-5">
+      <div className="p-5 enterprise-card space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h1 className="text-xl font-bold text-white">
-              Intelligent Route Planner &amp; Incident Avoidance Engine
+            <h1 className="text-lg font-bold text-slate-900">
+              Route Planner &amp; Incident Avoidance Engine
             </h1>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 mt-0.5">
               Separates base road travel time from verified RoadAlert incident delays and flags confirmed road closures.
             </p>
           </div>
@@ -110,13 +186,13 @@ export function RoutePlannerPage() {
 
         <form onSubmit={handlePlanSubmit} className="grid sm:grid-cols-12 gap-3 items-end">
           <div className="sm:col-span-4">
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
               Origin Location
             </label>
             <select
               value={origin}
               onChange={(e) => setOrigin(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+              className="enterprise-select w-full py-2"
             >
               {REGIONAL_DESTINATIONS.map((d) => (
                 <option key={d.name} value={d.name}>
@@ -127,13 +203,13 @@ export function RoutePlannerPage() {
           </div>
 
           <div className="sm:col-span-4">
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
               Destination Location
             </label>
             <select
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+              className="enterprise-select w-full py-2"
             >
               {REGIONAL_DESTINATIONS.map((d) => (
                 <option key={d.name} value={d.name}>
@@ -149,9 +225,9 @@ export function RoutePlannerPage() {
               type="checkbox"
               checked={avoidIncidentZones}
               onChange={(e) => setAvoidIncidentZones(e.target.checked)}
-              className="w-4 h-4 rounded accent-cyan-500"
+              className="w-4 h-4 rounded accent-blue-600"
             />
-            <label htmlFor="avoidZones" className="text-xs font-medium text-slate-200">
+            <label htmlFor="avoidZones" className="text-xs font-medium text-slate-700">
               Avoid Incident Zones
             </label>
           </div>
@@ -160,7 +236,7 @@ export function RoutePlannerPage() {
             <button
               type="submit"
               disabled={planMutation.isPending}
-              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/20"
+              className="btn-primary w-full py-2"
             >
               {planMutation.isPending ? 'Calculating...' : 'Calculate Routes'}
             </button>
@@ -168,16 +244,16 @@ export function RoutePlannerPage() {
         </form>
 
         {planMutation.data?.disclaimer && (
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-[11px] text-slate-600">
             <strong>Routing Transparency Note:</strong> {planMutation.data.disclaimer}
           </div>
         )}
       </div>
 
       {/* Route Comparison Cards + Map */}
-      <div className="grid lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-5 space-y-3.5">
-          <h2 className="text-sm font-bold text-white">
+      <div className="grid lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-5 space-y-3">
+          <h2 className="text-sm font-bold text-slate-900">
             Evaluated Corridor Alternatives ({routes.length})
           </h2>
 
@@ -186,67 +262,72 @@ export function RoutePlannerPage() {
             return (
               <div
                 key={route.id}
-                onClick={() => setSelectedRouteId(route.id)}
-                className={`cursor-pointer p-4 rounded-2xl border transition-all space-y-3 ${
+                onClick={() => {
+                  if (selectedRouteId !== route.id) {
+                    setRoutePinsReady(prefersReducedMotion);
+                    setSelectedRouteId(route.id);
+                  }
+                }}
+                className={`cursor-pointer p-4 enterprise-card transition-all active:scale-[0.99] space-y-3 ${
                   isSelected
-                    ? 'bg-slate-900 border-cyan-500 shadow-lg shadow-cyan-500/10'
-                    : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                    ? 'ring-2 ring-blue-600/20 border-blue-600'
+                    : 'hover:border-slate-300'
                 }`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white">{route.name}</h3>
+                    <h3 className="text-sm font-bold text-slate-900">{route.name}</h3>
                     {route.recommended && (
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold uppercase">
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase">
                         Recommended Bypass
                       </span>
                     )}
                     {route.hasRoadClosureWarning && (
-                      <span className="px-2 py-0.5 rounded-full bg-red-500/20 border border-red-500/50 text-red-300 text-[10px] font-bold uppercase">
+                      <span className="px-2 py-0.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold uppercase">
                         Road Closure Intersects
                       </span>
                     )}
                   </div>
-                  <span className="text-xs font-bold text-cyan-300">
-                    Avoidance Score: {route.avoidanceScore}/100
+                  <span className="text-xs font-bold text-blue-600">
+                    Avoidance Score: <AnimatedNumber value={route.avoidanceScore} />/100
                   </span>
                 </div>
 
-                <p className="text-xs text-slate-400">{route.corridorDescription}</p>
+                <p className="text-xs text-slate-600">{route.corridorDescription}</p>
 
                 {/* Separate Base Travel Time vs Incident Delay */}
                 <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Base Travel</span>
-                    <span className="text-xs font-bold text-white">
-                      {route.baseDurationMin} min ({route.distanceKm} km)
+                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">Base Travel</span>
+                    <span className="text-xs font-bold text-slate-900">
+                      <AnimatedNumber value={route.baseDurationMin} suffix=" min" /> ({route.distanceKm} km)
                     </span>
                   </div>
-                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Incident Delay</span>
+                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">Incident Delay</span>
                     <span
                       className={`text-xs font-bold ${
-                        route.incidentDelayMin > 0 ? 'text-amber-300' : 'text-emerald-300'
+                        route.incidentDelayMin > 0 ? 'text-amber-700' : 'text-emerald-700'
                       }`}
                     >
-                      +{route.incidentDelayMin} min
+                      <AnimatedNumber value={route.incidentDelayMin} prefix="+" suffix=" min" />
                     </span>
                   </div>
-                  <div className="p-2 rounded-xl bg-slate-950 border border-slate-800">
-                    <span className="text-[10px] text-slate-400 block">Total Est. Time</span>
-                    <span className="text-xs font-extrabold text-cyan-300">
-                      {route.totalEstimatedMin} min
+                  <div className="p-2 rounded-lg bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] text-slate-500 block">Total Est. Time</span>
+                    <span className="text-xs font-bold text-blue-600">
+                      <AnimatedNumber value={route.totalEstimatedMin} suffix=" min" />
                     </span>
                   </div>
                 </div>
 
                 <div
-                  className={`p-2.5 rounded-xl text-xs ${
+                  className={`p-2.5 rounded-lg text-xs ${
                     route.hasRoadClosureWarning
-                      ? 'bg-red-950/40 border border-red-500/40 text-red-200'
+                      ? 'bg-red-50 border border-red-200 text-red-800'
                       : route.recommended
-                      ? 'bg-emerald-950/30 border border-emerald-500/30 text-emerald-200'
-                      : 'bg-slate-950 border border-slate-800 text-slate-300'
+                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                      : 'bg-slate-50 border border-slate-200 text-slate-700'
                   }`}
                 >
                   {route.recommendationReason}
@@ -254,21 +335,21 @@ export function RoutePlannerPage() {
 
                 {route.affectingIncidents?.length > 0 && (
                   <div className="space-y-1.5 pt-1">
-                    <span className="text-[11px] font-semibold text-amber-300 block">
+                    <span className="text-[11px] font-semibold text-amber-700 block">
                       Intersecting Incidents Along Corridor ({route.affectingIncidents.length}):
                     </span>
                     {route.affectingIncidents.map((inc: any) => (
                       <div
                         key={inc.id}
-                        className="flex items-center justify-between text-[11px] bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800"
+                        className="flex items-center justify-between text-[11px] bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200"
                       >
-                        <span className="truncate text-slate-200">
-                          {inc.roadClosed ? '⛔ ' : '⚠️ '}
+                        <span className="truncate text-slate-800 font-medium">
+                          {inc.roadClosed ? '[CLOSED] ' : ''}
                           {inc.title}
                         </span>
                         <Link
                           to={`/app/incidents/${inc.id}`}
-                          className="text-cyan-400 hover:underline shrink-0 ml-2"
+                          className="text-blue-600 hover:underline font-semibold shrink-0 ml-2"
                         >
                           +{inc.estimatedDelayMinutes}m ({inc.confidenceScore}%)
                         </Link>
@@ -282,7 +363,7 @@ export function RoutePlannerPage() {
         </div>
 
         {/* Route Map Display */}
-        <div className="lg:col-span-7 rounded-2xl overflow-hidden border border-slate-800/90 bg-[#070d1d] min-h-[520px] map-tiles-dark shadow-2xl">
+        <div className="lg:col-span-7 enterprise-card overflow-hidden min-h-[520px] map-tiles-light">
           <MapContainer center={[13.06, 74.81]} zoom={10} className="w-full h-[560px] z-0">
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -291,27 +372,54 @@ export function RoutePlannerPage() {
             {routes.map((route: any) => {
               const isSelected = selectedRoute?.id === route.id;
               const strokeColor = route.hasRoadClosureWarning
-                ? '#ef4444'
+                ? '#dc2626'
                 : route.recommended
-                ? '#10b981'
-                : '#06b6d4';
+                ? '#16a34a'
+                : '#2563eb';
 
               return (
-                <Polyline
+                <RoutePolylineWithDraw
                   key={route.id}
-                  positions={route.geometry}
-                  pathOptions={{
-                    color: strokeColor,
-                    weight: isSelected ? 6 : 3,
-                    opacity: isSelected ? 0.95 : 0.45,
-                    dashArray: route.hasRoadClosureWarning ? '8, 8' : undefined,
+                  route={route}
+                  isSelected={isSelected}
+                  strokeColor={strokeColor}
+                  prefersReducedMotion={prefersReducedMotion}
+                  onSelect={() => {
+                    if (selectedRouteId !== route.id) {
+                      setRoutePinsReady(prefersReducedMotion);
+                      setSelectedRouteId(route.id);
+                    }
                   }}
-                  eventHandlers={{
-                    click: () => setSelectedRouteId(route.id),
-                  }}
+                  onDrawComplete={() => setRoutePinsReady(true)}
                 />
               );
             })}
+
+            {routePinsReady &&
+              selectedRoute?.affectingIncidents?.map(
+                (inc: any) =>
+                  inc.latitude != null &&
+                  inc.longitude != null && (
+                    <CircleMarker
+                      key={`route-inc-${inc.id}`}
+                      center={[Number(inc.latitude), Number(inc.longitude)]}
+                      radius={7}
+                      pathOptions={{
+                        color: '#ffffff',
+                        fillColor: inc.roadClosed ? '#dc2626' : '#f59e0b',
+                        fillOpacity: 0.95,
+                        weight: 2,
+                        className: prefersReducedMotion ? undefined : 'pin-reveal-enter',
+                      }}
+                    >
+                      <LeafletTooltip direction="top" offset={[0, -6]} opacity={0.95}>
+                        <div className="text-[11px] font-sans">
+                          <strong>{inc.title}</strong> (+{inc.estimatedDelayMinutes}m)
+                        </div>
+                      </LeafletTooltip>
+                    </CircleMarker>
+                  )
+              )}
           </MapContainer>
         </div>
       </div>
@@ -337,7 +445,6 @@ function LocationPickerWatcher({
 
 export function ReportIncidentPage() {
   const { showToast } = useToast();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [title, setTitle] = useState('');
@@ -409,7 +516,7 @@ export function ReportIncidentPage() {
       showToast({
         type: 'success',
         title: 'Incident Report Persisted & Scored',
-        message: `Assigned ID ${data.incident.id.slice(0, 8)} with initial confidence ${data.confidenceBreakdown.totalScore}/100.`,
+        message: `Assigned ID ${data.incident.id.slice(0, 8)} with initial confidence ${data.confidenceBreakdown.totalScore}%.`,
       });
     },
     onError: (err: any) => {
@@ -445,29 +552,29 @@ export function ReportIncidentPage() {
 
   if (submittedRecord) {
     return (
-      <div className="max-w-2xl mx-auto p-8 rounded-2xl bg-slate-900 border border-emerald-500/40 space-y-5">
+      <div className="max-w-2xl mx-auto p-6 enterprise-card space-y-5">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center">
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">
+            <h1 className="text-lg font-bold text-slate-900">
               Incident Report Saved &amp; Initial Verification Calculated
             </h1>
-            <p className="text-xs text-slate-400">
-              Incident ID: <span className="font-mono text-cyan-300">{submittedRecord.incident.id}</span>
+            <p className="text-xs text-slate-500">
+              Incident ID: <span className="font-mono text-blue-600">{submittedRecord.incident.id}</span>
             </p>
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-          <p className="text-sm font-bold text-white">{submittedRecord.incident.title}</p>
-          <p className="text-xs text-slate-300">{submittedRecord.incident.roadName}</p>
+        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <p className="text-sm font-bold text-slate-900">{submittedRecord.incident.title}</p>
+          <p className="text-xs text-slate-600">{submittedRecord.incident.roadName}</p>
           <ConfidenceMeter
             score={submittedRecord.confidenceBreakdown.totalScore}
             authorityConfirmed={submittedRecord.confidenceBreakdown.authorityConfirmed}
           />
-          <ul className="text-xs text-slate-400 space-y-1 list-disc pl-4">
+          <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
             {submittedRecord.confidenceBreakdown.explanation.map((line: string, idx: number) => (
               <li key={idx}>{line}</li>
             ))}
@@ -477,7 +584,7 @@ export function ReportIncidentPage() {
         <div className="flex flex-wrap items-center gap-3">
           <Link
             to={`/app/incidents/${submittedRecord.incident.id}`}
-            className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs"
+            className="btn-primary"
           >
             Inspect Live Incident &amp; Verification Page
           </Link>
@@ -487,7 +594,7 @@ export function ReportIncidentPage() {
               setTitle('');
               setDescription('');
             }}
-            className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs"
+            className="btn-secondary"
           >
             Submit Another Report
           </button>
@@ -497,13 +604,13 @@ export function ReportIncidentPage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">
+          <h1 className="text-lg font-bold text-slate-900">
             Report a Traffic Incident (Mangaluru–Udupi Corridor)
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 mt-0.5">
             Every report is persisted in PostgreSQL, evaluated by the 6-level verification engine, and protected against duplicate inflation.
           </p>
         </div>
@@ -514,11 +621,11 @@ export function ReportIncidentPage() {
           e.preventDefault();
           submitMutation.mutate();
         }}
-        className="grid lg:grid-cols-12 gap-6"
+        className="grid lg:grid-cols-12 gap-5"
       >
-        <div className="lg:col-span-7 p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+        <div className="lg:col-span-7 p-6 enterprise-card space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
               Incident Title *
             </label>
             <input
@@ -528,20 +635,20 @@ export function ReportIncidentPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Waterlogging and stalled vehicles at Nanthoor slip road"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+              className="enterprise-input py-2.5 text-sm"
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-slate-300">
+              <label className="block text-xs font-semibold text-slate-700">
                 Detailed Description *
               </label>
               <button
                 type="button"
                 disabled={title.length < 4 && description.length < 6}
                 onClick={() => aiAssistMutation.mutate()}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-400 hover:text-cyan-300 disabled:opacity-40"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-40"
               >
                 <Sparkles className="w-3.5 h-3.5" /> Auto-Suggest Category &amp; Evidence
               </button>
@@ -553,34 +660,34 @@ export function ReportIncidentPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe what is happening, affected lanes, and direction of travel..."
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+              className="enterprise-input py-2.5 text-sm"
             />
           </div>
 
           {aiSuggestion && (
-            <div className="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/40 text-xs space-y-1.5">
+            <div className="p-3.5 rounded-lg bg-blue-50/70 border border-blue-200 text-xs space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-indigo-300 flex items-center gap-1">
+                <span className="font-bold text-blue-800 flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5" /> Advisory Classification Suggestion
                 </span>
-                <span className="text-[10px] font-mono text-indigo-400">
+                <span className="text-[10px] font-mono text-blue-600">
                   {aiSuggestion.providerUsed}
                 </span>
               </div>
-              <p className="text-slate-200">{aiSuggestion.conciseSummary}</p>
-              <p className="text-[11px] text-slate-400 italic">{aiSuggestion.disclaimer}</p>
+              <p className="text-slate-700">{aiSuggestion.conciseSummary}</p>
+              <p className="text-[11px] text-slate-500 italic">{aiSuggestion.disclaimer}</p>
             </div>
           )}
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Incident Category *
               </label>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-select w-full py-2.5"
               >
                 {INCIDENT_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
@@ -591,13 +698,13 @@ export function ReportIncidentPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Severity Level *
               </label>
               <select
                 value={severity}
                 onChange={(e) => setSeverity(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-select w-full py-2.5"
               >
                 {INCIDENT_SEVERITIES.map((sev) => (
                   <option key={sev} value={sev}>
@@ -610,7 +717,7 @@ export function ReportIncidentPage() {
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Road Name or Regional Landmark *
               </label>
               <input
@@ -618,12 +725,12 @@ export function ReportIncidentPage() {
                 required
                 value={roadName}
                 onChange={(e) => setRoadName(e.target.value)}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-input py-2"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Estimated Delay (Minutes)
               </label>
               <input
@@ -632,21 +739,20 @@ export function ReportIncidentPage() {
                 max={360}
                 value={estimatedDelayMinutes}
                 onChange={(e) => setEstimatedDelayMinutes(Number(e.target.value))}
-                className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-input py-2"
               />
             </div>
           </div>
 
-          {/* Optional Photo/Video Evidence Upload */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
               Optional Photo / Video Evidence (JPEG, PNG, WEBP, MP4 — max 10MB)
             </label>
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
               onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
-              className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-cyan-500/15 file:text-cyan-300 hover:file:bg-cyan-500/25"
+              className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             />
           </div>
 
@@ -656,9 +762,9 @@ export function ReportIncidentPage() {
               type="checkbox"
               checked={anonymousPublicDisplay}
               onChange={(e) => setAnonymousPublicDisplay(e.target.checked)}
-              className="w-4 h-4 rounded accent-cyan-500"
+              className="w-4 h-4 rounded accent-blue-600"
             />
-            <label htmlFor="anonToggle" className="text-xs text-slate-300">
+            <label htmlFor="anonToggle" className="text-xs text-slate-600">
               Display my report anonymously on the public map (preserves server verification credit)
             </label>
           </div>
@@ -666,27 +772,27 @@ export function ReportIncidentPage() {
           <button
             type="submit"
             disabled={submitMutation.isPending}
-            className="w-full py-3 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20"
+            className="btn-primary w-full py-2.5 text-sm"
           >
             {submitMutation.isPending ? 'Submitting & Calculating Score...' : 'Submit Verified Incident Report'}
           </button>
         </div>
 
         {/* Right 5 Cols: Map Location Picker & Quick Landmarks */}
-        <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+        <div className="lg:col-span-5 p-5 enterprise-card space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white">Pin Incident Coordinates</h2>
+            <h2 className="text-sm font-bold text-slate-900">Pin Incident Coordinates</h2>
             <button
               type="button"
               onClick={handleGetBrowserLocation}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold"
+              className="btn-secondary py-1.5 px-2.5"
             >
-              <LocateFixed className="w-3.5 h-3.5" /> Use Browser GPS
+              <LocateFixed className="w-3.5 h-3.5 text-blue-600" /> Use Browser GPS
             </button>
           </div>
 
           <div>
-            <label className="block text-[11px] text-slate-400 mb-1">
+            <label className="block text-[11px] font-medium text-slate-500 mb-1">
               Quick-Select Coastal Corridor Landmark:
             </label>
             <select
@@ -699,7 +805,7 @@ export function ReportIncidentPage() {
                 }
               }}
               value={roadName}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-cyan-300"
+              className="enterprise-select w-full py-2"
             >
               {REGIONAL_DESTINATIONS.map((d) => (
                 <option key={d.name} value={d.name}>
@@ -711,28 +817,28 @@ export function ReportIncidentPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Latitude</label>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">Latitude</label>
               <input
                 type="number"
                 step="0.0001"
                 value={latitude}
                 onChange={(e) => setLatitude(Number(e.target.value))}
-                className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-input py-1.5"
               />
             </div>
             <div>
-              <label className="block text-[11px] text-slate-400 mb-1">Longitude</label>
+              <label className="block text-[11px] font-medium text-slate-500 mb-1">Longitude</label>
               <input
                 type="number"
                 step="0.0001"
                 value={longitude}
                 onChange={(e) => setLongitude(Number(e.target.value))}
-                className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-input py-1.5"
               />
             </div>
           </div>
 
-          <div className="rounded-xl overflow-hidden border border-slate-800 h-64">
+          <div className="rounded-xl overflow-hidden border border-slate-200 h-64 map-tiles-light">
             <MapContainer
               center={[latitude, longitude]}
               zoom={12}
@@ -747,12 +853,12 @@ export function ReportIncidentPage() {
               />
               <CircleMarker
                 center={[latitude, longitude]}
-                radius={10}
-                pathOptions={{ color: '#06b6d4', fillColor: '#06b6d4', fillOpacity: 0.9 }}
+                radius={9}
+                pathOptions={{ color: '#ffffff', fillColor: '#2563eb', fillOpacity: 0.95, weight: 2 }}
               />
             </MapContainer>
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-500">
             Click anywhere on the map to adjust the incident pin coordinates manually.
           </p>
         </div>
@@ -766,6 +872,7 @@ export function IncidentDetailPage() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const prefersReducedMotion = Boolean(useReducedMotion());
 
   const [corrNotes, setCorrNotes] = useState('');
   const [flagReason, setFlagReason] = useState('');
@@ -805,7 +912,7 @@ export function IncidentDetailPage() {
         showToast({
           type: 'success',
           title: 'Confidence Score Recalculated',
-          message: `Updated confidence score: ${res.confidenceBreakdown.totalScore}/100 (${res.confidenceBreakdown.band})`,
+          message: `Updated confidence score: ${res.confidenceBreakdown.totalScore}% (${res.confidenceBreakdown.band})`,
         });
       }
       setCorrNotes('');
@@ -831,7 +938,7 @@ export function IncidentDetailPage() {
       showToast({
         type: 'success',
         title: 'Evidence Validated & Attached',
-        message: `New confidence score: ${res.confidenceBreakdown.totalScore}/100`,
+        message: `New confidence score: ${res.confidenceBreakdown.totalScore}%`,
       });
     },
   });
@@ -868,7 +975,7 @@ export function IncidentDetailPage() {
       showToast({
         type: 'success',
         title: `Authority Decision Recorded (${authorityDecision})`,
-        message: `Confidence score: ${res.confidenceBreakdown.totalScore}/100. Audit trail updated.`,
+        message: `Confidence score: ${res.confidenceBreakdown.totalScore}%. Audit trail updated.`,
       });
     },
     onError: (err: any) => {
@@ -882,87 +989,122 @@ export function IncidentDetailPage() {
 
   if (isLoading || !data) {
     return (
-      <div className="p-8 text-center text-sm text-slate-400">
+      <div className="p-8 text-center text-sm text-slate-500">
         Loading incident verification breakdown...
       </div>
     );
   }
 
-  const { incident, confidenceBreakdown, evidences, corroborations, reviews, auditTrail, nearbyIncidents } = data;
+  const { incident, confidenceBreakdown, evidences, auditTrail, nearbyIncidents } = data;
   const canAuthorityReview =
     user?.role === 'TRAFFIC_AUTHORITY' || user?.role === 'ADMIN';
 
+  const detailPillars = [
+    {
+      label: 'Independent Reports',
+      pts: confidenceBreakdown.components.independentReports,
+      max: 30,
+      sub: `${confidenceBreakdown.counts.distinctReporters} distinct user(s)`,
+      barColor: 'bg-blue-600',
+    },
+    {
+      label: 'Location & Time',
+      pts: confidenceBreakdown.components.locationTimeProximity,
+      max: 20,
+      sub: 'Proximity checked',
+      barColor: 'bg-sky-500',
+    },
+    {
+      label: 'GPS Speed Drops',
+      pts: confidenceBreakdown.components.gpsCorroboration,
+      max: 20,
+      sub: `${confidenceBreakdown.counts.gpsSpeedDropsCount} telemetry signal(s)`,
+      barColor: 'bg-emerald-600',
+    },
+    {
+      label: 'Photo / Video',
+      pts: confidenceBreakdown.components.mediaEvidence,
+      max: 15,
+      sub: `${confidenceBreakdown.counts.validatedMediaCount} attachment(s)`,
+      barColor: 'bg-amber-500',
+    },
+    {
+      label: 'Authority Review',
+      pts: confidenceBreakdown.components.authorityConfirmation,
+      max: 15,
+      sub: confidenceBreakdown.authorityConfirmed ? 'Confirmed' : 'Pending',
+      barColor: 'bg-indigo-600',
+    },
+  ];
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header Banner */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+      <div className="p-6 enterprise-card space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <SeverityBadge severity={incident.severity} />
             <StatusBadge status={incident.status} />
-            <span className="px-2.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-xs font-semibold">
+            <span className="px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold">
               {incident.category}
             </span>
             {incident.roadClosed && (
-              <span className="px-2.5 py-0.5 rounded bg-red-600/30 text-red-200 border border-red-500/50 text-xs font-bold">
-                ⛔ ROAD CLOSED
+              <span className="px-2.5 py-0.5 rounded-md bg-red-600 text-white text-xs font-bold inline-flex items-center gap-1">
+                <Lock className="w-3.5 h-3.5" /> ROAD CLOSED
               </span>
             )}
             <DemoDataBadge isDemo={incident.demoData} />
           </div>
-          <span className="text-xs text-slate-400 font-mono">ID: {incident.id}</span>
+          <span className="text-xs text-slate-500 font-mono">ID: {incident.id}</span>
         </div>
 
-        <h1 className="text-2xl font-extrabold text-white">{incident.title}</h1>
-        <p className="text-sm text-slate-300 leading-relaxed">{incident.description}</p>
+        <h1 className="text-xl font-bold text-slate-900">{incident.title}</h1>
+        <p className="text-sm text-slate-600 leading-relaxed">{incident.description}</p>
 
         <div className="grid sm:grid-cols-4 gap-3 pt-2 text-xs">
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 block">Location / Corridor</span>
-            <span className="font-bold text-white">{incident.roadName}</span>
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <span className="text-slate-500 block">Location / Corridor</span>
+            <span className="font-bold text-slate-900">{incident.roadName}</span>
             <span className="block text-[10px] text-slate-500 mt-0.5">
               {incident.latitude.toFixed(4)}, {incident.longitude.toFixed(4)}
             </span>
           </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 block">Estimated Delay</span>
-            <span className="font-bold text-amber-300 text-sm">
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <span className="text-slate-500 block">Estimated Delay</span>
+            <span className="font-bold text-amber-700 text-sm">
               +{incident.estimatedDelayMinutes} minutes
             </span>
           </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 block">Verification Tier</span>
-            <span className="font-bold text-cyan-300">
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <span className="text-slate-500 block">Verification Tier</span>
+            <span className="font-bold text-blue-600">
               {confidenceBreakdown.verificationLevelLabel}
             </span>
           </div>
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 block">Reporter Credibility</span>
-            <span className="font-bold text-emerald-300">
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <span className="text-slate-500 block">Reporter Credibility</span>
+            <span className="font-bold text-emerald-700">
               {incident.reporterName} ({incident.reporterCredibility?.roleBadge})
             </span>
           </div>
         </div>
 
-        <div className="p-3.5 rounded-xl bg-cyan-950/30 border border-cyan-500/30 text-xs text-cyan-100">
+        <div className="p-3.5 rounded-lg bg-blue-50/70 border border-blue-200 text-xs text-blue-900">
           <strong>Recommended Action:</strong> {incident.recommendedAction}
         </div>
       </div>
 
       {/* Main Grid: Explainable Verification Engine + Actions */}
-      <div className="grid lg:grid-cols-12 gap-6">
-        {/* Left 7 Cols: Explainable Confidence Score Breakdown & Evidence */}
-        <div className="lg:col-span-7 space-y-6">
-          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-white">
-                  Explainable Incident Verification Engine (0–100 Heuristic)
-                </h2>
-                <p className="text-xs text-slate-400">
-                  Transparent rule-based confidence breakdown. Clearly labeled as a product confidence score, not a guaranteed statistical probability.
-                </p>
-              </div>
+      <div className="grid lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-7 space-y-5">
+          <div className="p-6 enterprise-card space-y-5">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                Explainable Incident Verification Engine (0–100 Heuristic)
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Transparent rule-based confidence breakdown. Clearly labeled as a product confidence score, not a guaranteed statistical probability.
+              </p>
             </div>
 
             <ConfidenceMeter
@@ -971,72 +1113,46 @@ export function IncidentDetailPage() {
             />
 
             {/* 5 Component Pillars */}
-            <div className="grid sm:grid-cols-5 gap-2.5 text-center">
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">Independent Reports</span>
-                <span className="text-base font-extrabold text-cyan-300">
-                  +{confidenceBreakdown.components.independentReports}/30
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {confidenceBreakdown.counts.distinctReporters} distinct user(s)
-                </span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">Location &amp; Time</span>
-                <span className="text-base font-extrabold text-cyan-300">
-                  +{confidenceBreakdown.components.locationTimeProximity}/20
-                </span>
-                <span className="text-[10px] text-slate-500 block">Proximity checked</span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">GPS Speed Drops</span>
-                <span className="text-base font-extrabold text-cyan-300">
-                  +{confidenceBreakdown.components.gpsCorroboration}/20
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {confidenceBreakdown.counts.gpsSpeedDropsCount} telemetry signal(s)
-                </span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">Photo / Video</span>
-                <span className="text-base font-extrabold text-cyan-300">
-                  +{confidenceBreakdown.components.mediaEvidence}/15
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {confidenceBreakdown.counts.validatedMediaCount} attachment(s)
-                </span>
-              </div>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-[10px] text-slate-400 block">Authority Review</span>
-                <span className="text-base font-extrabold text-emerald-300">
-                  +{confidenceBreakdown.components.authorityConfirmation}/15
-                </span>
-                <span className="text-[10px] text-slate-500 block">
-                  {confidenceBreakdown.authorityConfirmed ? 'Confirmed' : 'Pending'}
-                </span>
-              </div>
-            </div>
+            <StaggerGrid className="grid sm:grid-cols-5 gap-2.5 text-center">
+              {detailPillars.map((pillar, idx) => (
+                <StaggerItem
+                  key={pillar.label}
+                  className="p-3 rounded-lg bg-slate-50 border border-slate-200"
+                >
+                  <span className="text-[10px] font-medium text-slate-500 block">
+                    {pillar.label}
+                  </span>
+                  <span
+                    className={`text-base font-bold ${
+                      idx === 4 ? 'text-emerald-600' : 'text-blue-600'
+                    }`}
+                  >
+                    +<AnimatedNumber value={pillar.pts} />/{pillar.max}
+                  </span>
+                  <span className="text-[10px] text-slate-500 block">{pillar.sub}</span>
+                </StaggerItem>
+              ))}
+            </StaggerGrid>
 
-            {/* Why the score changed & what is missing */}
             <div className="grid sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <h3 className="font-bold text-emerald-300">Positive Verification Factors</h3>
-                <ul className="space-y-1 text-slate-300 list-disc pl-4">
+              <div className="p-4 rounded-lg bg-emerald-50/50 border border-emerald-200 space-y-2">
+                <h3 className="font-bold text-emerald-800">Positive Verification Factors</h3>
+                <ul className="space-y-1 text-slate-700 list-disc pl-4">
                   {confidenceBreakdown.explanation.map((item: string, idx: number) => (
                     <li key={idx}>{item}</li>
                   ))}
                 </ul>
               </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <h3 className="font-bold text-amber-300">What Is Missing for 100/100</h3>
+              <div className="p-4 rounded-lg bg-amber-50/50 border border-amber-200 space-y-2">
+                <h3 className="font-bold text-amber-800">What Is Missing for 100/100</h3>
                 {confidenceBreakdown.missingFactors.length > 0 ? (
-                  <ul className="space-y-1 text-slate-300 list-disc pl-4">
+                  <ul className="space-y-1 text-slate-700 list-disc pl-4">
                     {confidenceBreakdown.missingFactors.map((m: string, idx: number) => (
                       <li key={idx}>{m}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-emerald-300">
+                  <p className="text-emerald-700 font-medium">
                     All 5 verification dimensions have reached maximum corroboration!
                   </p>
                 )}
@@ -1045,27 +1161,27 @@ export function IncidentDetailPage() {
           </div>
 
           {/* Evidence Gallery & Audit Trail */}
-          <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-            <h2 className="text-sm font-bold text-white">
+          <div className="p-6 enterprise-card space-y-4">
+            <h2 className="text-sm font-bold text-slate-900">
               Attached Evidence Records ({evidences.length})
             </h2>
             <div className="space-y-2.5">
               {evidences.map((ev: any) => (
                 <div
                   key={ev.id}
-                  className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs"
+                  className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-3 text-xs"
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 font-bold">
+                      <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
                         {ev.evidence_type}
                       </span>
-                      <span className="font-semibold text-white">
+                      <span className="font-semibold text-slate-900">
                         {ev.metadata?.caption || ev.storage_key || 'Validated Evidence Record'}
                       </span>
                       {ev.metadata?.simulatedDemoEvidence && <DemoDataBadge />}
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-1">
+                    <p className="text-[11px] text-slate-500 mt-1">
                       Submitted by {ev.submitter_name || 'Commuter'} • Status: {ev.validation_status}
                     </p>
                   </div>
@@ -1076,20 +1192,19 @@ export function IncidentDetailPage() {
               ))}
             </div>
 
-            {/* Verification Audit Trail */}
-            <div className="pt-4 border-t border-slate-800 space-y-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            <div className="pt-4 border-t border-slate-200 space-y-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Immutable Verification Audit Trail ({auditTrail.length})
               </h3>
               <div className="max-h-52 overflow-y-auto space-y-1.5">
                 {auditTrail.map((log: any) => (
                   <div
                     key={log.id}
-                    className="p-2.5 rounded-lg bg-slate-950 border border-slate-800/80 text-[11px] flex items-center justify-between gap-2"
+                    className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-[11px] flex items-center justify-between gap-2"
                   >
                     <div>
-                      <span className="font-mono font-bold text-cyan-300">{log.action}</span>
-                      <span className="text-slate-400 ml-2">
+                      <span className="font-mono font-bold text-blue-700">{log.action}</span>
+                      <span className="text-slate-600 ml-2">
                         by {log.actor_name || 'System'}
                       </span>
                     </div>
@@ -1105,12 +1220,11 @@ export function IncidentDetailPage() {
 
         {/* Right 5 Cols: Community Corroboration, Evidence Upload, Flagging & Authority Review */}
         <div className="lg:col-span-5 space-y-5">
-          {/* Commuter Corroboration & Telemetry Box */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-            <h2 className="text-sm font-bold text-white">
+          <div className="p-5 enterprise-card space-y-4">
+            <h2 className="text-sm font-bold text-slate-900">
               Submit Corroboration or Dispute Report
             </h2>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Distinct users increase independent report score. Duplicate clicks from the same account are automatically deduplicated.
             </p>
             <input
@@ -1118,35 +1232,34 @@ export function IncidentDetailPage() {
               value={corrNotes}
               onChange={(e) => setCorrNotes(e.target.value)}
               placeholder="Optional observation note (e.g., Crane on scene, 1 lane open)..."
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+              className="enterprise-input"
             />
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <button
                 onClick={() => corroborateMutation.mutate('CORROBORATE')}
                 disabled={corroborateMutation.isPending}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs"
+                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-semibold text-xs"
               >
                 <ThumbsUp className="w-3.5 h-3.5" /> Corroborate
               </button>
               <button
                 onClick={() => corroborateMutation.mutate('GPS_CONGESTION')}
                 disabled={corroborateMutation.isPending}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs"
+                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 font-semibold text-xs"
               >
-                <Radio className="w-3.5 h-3.5" /> Share GPS Slowdown
+                <Radio className="w-3.5 h-3.5" /> GPS Slowdown
               </button>
               <button
                 onClick={() => corroborateMutation.mutate('DISPUTE')}
                 disabled={corroborateMutation.isPending}
-                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-bold text-xs"
+                className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 font-semibold text-xs"
               >
-                <ThumbsDown className="w-3.5 h-3.5" /> Mark Incorrect
+                <ThumbsDown className="w-3.5 h-3.5" /> Dispute
               </button>
             </div>
 
-            {/* Attach Photo Evidence */}
-            <div className="pt-3 border-t border-slate-800 space-y-2">
-              <label className="block text-xs font-semibold text-slate-300">
+            <div className="pt-3 border-t border-slate-200 space-y-2">
+              <label className="block text-xs font-semibold text-slate-700">
                 Attach On-Scene Photo/Video Evidence (+15 pts)
               </label>
               <div className="flex items-center gap-2">
@@ -1154,12 +1267,12 @@ export function IncidentDetailPage() {
                   type="file"
                   accept="image/jpeg,image/png,image/webp,video/mp4"
                   onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
-                  className="flex-1 text-xs text-slate-400 file:mr-2 file:py-1.5 file:px-2.5 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200"
+                  className="flex-1 text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-2.5 file:rounded-lg file:border-0 file:bg-slate-100 file:text-slate-700 file:font-semibold"
                 />
                 <button
                   onClick={() => uploadEvidenceMutation.mutate()}
                   disabled={uploadEvidenceMutation.isPending}
-                  className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs shrink-0"
+                  className="btn-primary py-1.5 px-3 shrink-0"
                 >
                   Add Proof
                 </button>
@@ -1167,21 +1280,20 @@ export function IncidentDetailPage() {
             </div>
           </div>
 
-          {/* Traffic Authority Command Box (visible to TRAFFIC_AUTHORITY and ADMIN) */}
           {canAuthorityReview && (
-            <div className="p-5 rounded-2xl bg-navy-900 border border-cyan-500/40 space-y-3">
+            <div className="p-5 enterprise-card border-blue-200 bg-blue-50/30 space-y-3">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-cyan-300 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" /> Traffic Authority Investigation Decision
+                <h2 className="text-sm font-bold text-blue-900 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-blue-600" /> Traffic Authority Investigation Decision
                 </h2>
               </div>
-              <p className="text-[11px] text-slate-300">
+              <p className="text-[11px] text-slate-600">
                 Mandatory administrative reason is recorded in the audit log.
               </p>
               <select
                 value={authorityDecision}
                 onChange={(e) => setAuthorityDecision(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-select w-full"
               >
                 <option value="CONFIRM">CONFIRM — Authoritative Verification (+15 pts)</option>
                 <option value="MARK_ROAD_CLOSED">
@@ -1195,22 +1307,21 @@ export function IncidentDetailPage() {
                 value={authorityReason}
                 onChange={(e) => setAuthorityReason(e.target.value)}
                 placeholder="Enter official investigation note / patrol dispatch reason (min 5 chars)..."
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-input"
               />
               <button
                 onClick={() => authorityReviewMutation.mutate()}
                 disabled={authorityReason.trim().length < 5 || authorityReviewMutation.isPending}
-                className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 font-bold text-xs"
+                className="btn-primary w-full py-2.5"
               >
                 Record Authority Decision &amp; Recalculate Score
               </button>
             </div>
           )}
 
-          {/* Flag Suspicious / Duplicate Report */}
-          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-              <Flag className="w-3.5 h-3.5 text-amber-400" /> Flag Suspicious or Duplicate Report
+          <div className="p-5 enterprise-card space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+              <Flag className="w-3.5 h-3.5 text-amber-500" /> Flag Suspicious or Duplicate Report
             </h3>
             <div className="flex gap-2">
               <input
@@ -1218,38 +1329,37 @@ export function IncidentDetailPage() {
                 value={flagReason}
                 onChange={(e) => setFlagReason(e.target.value)}
                 placeholder="Reason for flagging (min 5 chars)..."
-                className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+                className="enterprise-input flex-1"
               />
               <button
                 onClick={() => flagMutation.mutate()}
                 disabled={flagReason.trim().length < 5 || flagMutation.isPending}
-                className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-semibold text-xs disabled:opacity-40"
+                className="px-3 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-semibold text-xs disabled:opacity-40"
               >
                 Flag
               </button>
             </div>
           </div>
 
-          {/* Nearby Related Incidents */}
           {nearbyIncidents?.length > 0 && (
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+            <div className="p-5 enterprise-card space-y-2.5">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Nearby Corridor Incidents (&le; 8 km)
               </h3>
               {nearbyIncidents.map((nb: any) => (
                 <Link
                   key={nb.id}
                   to={`/app/incidents/${nb.id}`}
-                  className="block p-3 rounded-xl bg-slate-950 border border-slate-800 hover:border-cyan-500/40 text-xs"
+                  className="block p-3 rounded-lg bg-slate-50 border border-slate-200 hover:border-blue-300 text-xs transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-white truncate">{nb.title}</span>
-                    <span className="text-cyan-400 font-semibold shrink-0 ml-2">
+                    <span className="font-bold text-slate-900 truncate">{nb.title}</span>
+                    <span className="text-blue-600 font-semibold shrink-0 ml-2">
                       {nb.distanceKm} km away
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {nb.road_name} • Confidence {nb.confidence_score}/100
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {nb.road_name} • Confidence {nb.confidence_score}%
                   </p>
                 </Link>
               ))}

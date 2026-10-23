@@ -1,20 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Users,
-  Building2,
-  Scale,
-  History,
-  Settings,
-  ShieldCheck,
-  AlertOctagon,
-  Plus,
-} from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { USER_ROLES } from '@roadalert/shared';
 import { apiRequest } from '../lib/api';
 import { useToast } from '../context/ToastContext';
-import { DemoDataBadge, SeverityBadge, StatusBadge, ConfidenceMeter } from '../components/Badges';
+import { DemoDataBadge } from '../components/Badges';
+import { AnimatedNumber, StaggerGrid, StaggerItem } from '../components/MotionPrimitives';
 
 export function AdminDashboardPage() {
   const { data } = useQuery({
@@ -28,79 +20,93 @@ export function AdminDashboardPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="p-6 enterprise-card flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-semibold">
+            <span className="px-2.5 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
               Platform Administration &amp; Governance
             </span>
             <DemoDataBadge />
           </div>
-          <h1 className="text-2xl font-extrabold text-white">
+          <h1 className="text-xl font-bold text-slate-900">
             RoadAlert System Administration &amp; Audit Control
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 mt-0.5">
             Manage users, organizations, verification queues, complaints, and immutable audit trails.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-        <Link
-          to="/admin/users"
-          className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-cyan-500/40"
-        >
-          <span className="text-xs text-slate-400">Users</span>
-          <p className="text-2xl font-extrabold text-white mt-1">{data?.totalUsers ?? 0}</p>
-        </Link>
-        <Link
-          to="/admin/organizations"
-          className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-cyan-500/40"
-        >
-          <span className="text-xs text-slate-400">Organizations</span>
-          <p className="text-2xl font-extrabold text-cyan-300 mt-1">
-            {data?.totalOrganizations ?? 0}
+      <StaggerGrid className="grid grid-cols-2 lg:grid-cols-6 gap-3.5">
+        <StaggerItem>
+          <Link
+            to="/admin/users"
+            className="block p-4 enterprise-card hover:border-blue-400 transition-colors"
+          >
+            <span className="text-xs font-medium text-slate-500">Users</span>
+            <p className="text-2xl font-bold text-slate-900 mt-1">
+              <AnimatedNumber value={data?.totalUsers ?? 0} />
+            </p>
+          </Link>
+        </StaggerItem>
+        <StaggerItem>
+          <Link
+            to="/admin/organizations"
+            className="block p-4 enterprise-card hover:border-blue-400 transition-colors"
+          >
+            <span className="text-xs font-medium text-slate-500">Organizations</span>
+            <p className="text-2xl font-bold text-blue-600 mt-1">
+              <AnimatedNumber value={data?.totalOrganizations ?? 0} />
+            </p>
+          </Link>
+        </StaggerItem>
+        <StaggerItem>
+          <Link
+            to="/admin/incidents"
+            className="block p-4 enterprise-card hover:border-blue-400 transition-colors"
+          >
+            <span className="text-xs font-medium text-slate-500">Total Incidents</span>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">
+              <AnimatedNumber value={data?.totalIncidents ?? 0} />
+            </p>
+          </Link>
+        </StaggerItem>
+        <StaggerItem>
+          <Link
+            to="/admin/complaints"
+            className="block p-4 enterprise-card hover:border-blue-400 transition-colors"
+          >
+            <span className="text-xs font-medium text-slate-500">Open Complaints</span>
+            <p className="text-2xl font-bold text-amber-600 mt-1">
+              <AnimatedNumber value={data?.openComplaints ?? 0} />
+            </p>
+          </Link>
+        </StaggerItem>
+        <StaggerItem className="p-4 enterprise-card">
+          <span className="text-xs font-medium text-slate-500">Active Commutes</span>
+          <p className="text-2xl font-bold text-sky-600 mt-1">
+            <AnimatedNumber value={data?.activeJourneys ?? 0} />
           </p>
-        </Link>
-        <Link
-          to="/admin/incidents"
-          className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-cyan-500/40"
-        >
-          <span className="text-xs text-slate-400">Total Incidents</span>
-          <p className="text-2xl font-extrabold text-emerald-400 mt-1">
-            {data?.totalIncidents ?? 0}
-          </p>
-        </Link>
-        <Link
-          to="/admin/complaints"
-          className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-cyan-500/40"
-        >
-          <span className="text-xs text-slate-400">Open Complaints</span>
-          <p className="text-2xl font-extrabold text-amber-300 mt-1">
-            {data?.openComplaints ?? 0}
-          </p>
-        </Link>
-        <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-          <span className="text-xs text-slate-400">Active Commutes</span>
-          <p className="text-2xl font-extrabold text-indigo-300 mt-1">
-            {data?.activeJourneys ?? 0}
-          </p>
-        </div>
-        <Link
-          to="/admin/audit-logs"
-          className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-cyan-500/40"
-        >
-          <span className="text-xs text-slate-400">Audit Events</span>
-          <p className="text-2xl font-extrabold text-white mt-1">{data?.totalAuditLogs ?? 0}</p>
-        </Link>
-      </div>
+        </StaggerItem>
+        <StaggerItem>
+          <Link
+            to="/admin/audit-logs"
+            className="block p-4 enterprise-card hover:border-blue-400 transition-colors"
+          >
+            <span className="text-xs font-medium text-slate-500">Audit Events</span>
+            <p className="text-2xl font-bold text-slate-900 mt-1">
+              <AnimatedNumber value={data?.totalAuditLogs ?? 0} />
+            </p>
+          </Link>
+        </StaggerItem>
+      </StaggerGrid>
 
       {/* Recent Audit Logs */}
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+      <div className="p-6 enterprise-card space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white">Recent System Audit Logs</h2>
-          <Link to="/admin/audit-logs" className="text-xs text-cyan-400 hover:underline">
+          <h2 className="text-sm font-bold text-slate-900">Recent System Audit Logs</h2>
+          <Link to="/admin/audit-logs" className="text-xs font-semibold text-blue-600 hover:underline">
             View Full Audit Log →
           </Link>
         </div>
@@ -108,11 +114,11 @@ export function AdminDashboardPage() {
           {(logs || []).map((log: any) => (
             <div
               key={log.id}
-              className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs flex flex-wrap items-center justify-between gap-2"
+              className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-2"
             >
               <div>
-                <span className="font-mono font-bold text-cyan-300">{log.action}</span>
-                <span className="text-slate-400 ml-2">
+                <span className="font-mono font-bold text-blue-700">{log.action}</span>
+                <span className="text-slate-600 ml-2">
                   ({log.entity_type} • {log.actor_name || 'System'})
                 </span>
               </div>
@@ -164,11 +170,11 @@ export function AdminUsersPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="p-6 enterprise-card flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">User &amp; Role Access Governance</h1>
-          <p className="text-xs text-slate-400">
+          <h1 className="text-lg font-bold text-slate-900">User &amp; Role Access Governance</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
             Explicit confirmation is required before changing privileged roles or suspending accounts (soft archival).
           </p>
         </div>
@@ -176,12 +182,12 @@ export function AdminUsersPage() {
       </div>
 
       {confirmUser && (
-        <div className="p-5 rounded-2xl bg-amber-950/30 border border-amber-500/40 flex flex-wrap items-center justify-between gap-4 text-xs">
+        <div className="p-5 rounded-xl bg-amber-50 border border-amber-200 flex flex-wrap items-center justify-between gap-4 text-xs">
           <div>
-            <p className="font-bold text-amber-200 text-sm">
+            <p className="font-bold text-amber-900 text-sm">
               Confirm Administrative Change for {confirmUser.name}
             </p>
-            <p className="text-amber-100/80 mt-0.5">
+            <p className="text-amber-800 mt-0.5">
               Set Role to <strong>{confirmUser.role}</strong> and Status to{' '}
               <strong>{confirmUser.status}</strong>? This action will be written to the immutable audit trail.
             </p>
@@ -189,13 +195,13 @@ export function AdminUsersPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => updateMutation.mutate(confirmUser)}
-              className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold"
+              className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold"
             >
               Confirm &amp; Audit Change
             </button>
             <button
               onClick={() => setConfirmUser(null)}
-              className="px-3 py-2 rounded-xl bg-slate-800 text-slate-200"
+              className="btn-secondary"
             >
               Cancel
             </button>
@@ -203,39 +209,39 @@ export function AdminUsersPage() {
         </div>
       )}
 
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 overflow-x-auto">
+      <div className="enterprise-card overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="border-b border-slate-800 text-slate-400">
-              <th className="py-2.5 px-3">Name</th>
-              <th className="py-2.5 px-3">Email</th>
-              <th className="py-2.5 px-3">Role</th>
-              <th className="py-2.5 px-3">Status</th>
-              <th className="py-2.5 px-3">Quick Governance Action</th>
+            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
+              <th className="py-3 px-4 font-semibold">Name</th>
+              <th className="py-3 px-4 font-semibold">Email</th>
+              <th className="py-3 px-3 font-semibold">Role</th>
+              <th className="py-3 px-3 font-semibold">Status</th>
+              <th className="py-3 px-4 font-semibold">Quick Governance Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
+          <tbody className="divide-y divide-slate-100">
             {(users || []).map((u: any) => (
-              <tr key={u.id}>
-                <td className="py-3 px-3 font-bold text-white">{u.name}</td>
-                <td className="py-3 px-3 text-slate-300">{u.email}</td>
+              <tr key={u.id} className="hover:bg-slate-50">
+                <td className="py-3 px-4 font-bold text-slate-900">{u.name}</td>
+                <td className="py-3 px-4 text-slate-600">{u.email}</td>
                 <td className="py-3 px-3">
-                  <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-300 font-bold">
+                  <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
                     {u.role}
                   </span>
                 </td>
                 <td className="py-3 px-3">
                   <span
-                    className={`px-2 py-0.5 rounded font-bold ${
+                    className={`px-2 py-0.5 rounded font-bold border ${
                       u.status === 'ACTIVE'
-                        ? 'bg-emerald-500/15 text-emerald-300'
-                        : 'bg-red-500/15 text-red-300'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-red-50 text-red-700 border-red-200'
                     }`}
                   >
                     {u.status}
                   </span>
                 </td>
-                <td className="py-3 px-3 flex items-center gap-2">
+                <td className="py-3 px-4 flex items-center gap-2">
                   <select
                     defaultValue={u.role}
                     onChange={(e) =>
@@ -246,7 +252,7 @@ export function AdminUsersPage() {
                         status: u.status,
                       })
                     }
-                    className="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 text-white"
+                    className="enterprise-select py-1 px-2.5"
                   >
                     {USER_ROLES.map((r) => (
                       <option key={r} value={r}>
@@ -263,7 +269,7 @@ export function AdminUsersPage() {
                         status: u.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE',
                       })
                     }
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold"
+                    className="btn-secondary py-1 px-2.5"
                   >
                     {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
                   </button>
@@ -306,9 +312,9 @@ export function AdminOrganizationsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-        <h1 className="text-xl font-bold text-white">
+    <div className="space-y-5">
+      <div className="p-6 enterprise-card space-y-4">
+        <h1 className="text-lg font-bold text-slate-900">
           Organizations &amp; Commute Policy Isolation
         </h1>
         <form
@@ -325,12 +331,12 @@ export function AdminOrganizationsPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="New Organization Name (e.g., Mangaluru Port Logistics Ltd)..."
-            className="flex-1 min-w-[240px] px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white"
+            className="enterprise-input flex-1 min-w-[240px] py-2.5"
           />
           <select
             value={organizationType}
             onChange={(e) => setOrganizationType(e.target.value)}
-            className="px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white"
+            className="enterprise-select py-2.5"
           >
             <option value="IT_ENTERPRISE">IT_ENTERPRISE</option>
             <option value="LOGISTICS_PORT">LOGISTICS_PORT</option>
@@ -340,7 +346,7 @@ export function AdminOrganizationsPage() {
           <button
             type="submit"
             disabled={createOrgMutation.isPending}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold"
+            className="btn-primary py-2.5"
           >
             <Plus className="w-4 h-4" /> Add Organization
           </button>
@@ -351,22 +357,22 @@ export function AdminOrganizationsPage() {
         {(orgs || []).map((o: any) => (
           <div
             key={o.id}
-            className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2.5 text-xs"
+            className="p-5 enterprise-card space-y-2.5 text-xs"
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-white">{o.name}</h2>
-              <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-bold">
+              <h2 className="text-sm font-bold text-slate-900">{o.name}</h2>
+              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
                 {o.status}
               </span>
             </div>
-            <p className="text-slate-400">
+            <p className="text-slate-500">
               Type: {o.organization_type} • Members: {o.member_count}
             </p>
-            <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-              <p className="text-slate-300">
-                Tracking Mode: <strong className="text-cyan-300">{o.tracking_mode}</strong>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 space-y-1">
+              <p className="text-slate-700">
+                Tracking Mode: <strong className="text-blue-600">{o.tracking_mode}</strong>
               </p>
-              <p className="text-slate-400">
+              <p className="text-slate-500">
                 Retention: {o.retention_days} days • Require Explicit Consent:{' '}
                 {o.require_consent ? 'Yes' : 'No'}
               </p>
@@ -404,13 +410,13 @@ export function AdminComplaintsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+    <div className="space-y-5">
+      <div className="p-6 enterprise-card flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-white">
+          <h1 className="text-lg font-bold text-slate-900">
             Flagged Incident Complaints &amp; Dispute Queue
           </h1>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 mt-0.5">
             Review commuter flags for duplicate or inaccurate incident reports.
           </p>
         </div>
@@ -421,35 +427,35 @@ export function AdminComplaintsPage() {
         {(complaints || []).map((c: any) => (
           <div
             key={c.id}
-            className="p-5 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs"
+            className="p-5 enterprise-card flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs"
           >
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
+                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-bold">
                   {c.status}
                 </span>
                 <Link
                   to={`/app/incidents/${c.incident_id}`}
-                  className="font-bold text-sm text-white hover:text-cyan-300"
+                  className="font-bold text-sm text-slate-900 hover:text-blue-600"
                 >
                   {c.incident_title}
                 </Link>
               </div>
-              <p className="text-slate-300">{c.reason}</p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-slate-700">{c.reason}</p>
+              <p className="text-[11px] text-slate-500">
                 Flagged by {c.reporter_name} • Road: {c.road_name}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => updateComplaint.mutate({ id: c.id, status: 'ACTIONED' })}
-                className="px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold"
+                className="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 font-semibold"
               >
                 Mark Actioned
               </button>
               <button
                 onClick={() => updateComplaint.mutate({ id: c.id, status: 'DISMISSED' })}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300"
+                className="btn-secondary py-1.5 px-3"
               >
                 Dismiss
               </button>
@@ -472,18 +478,18 @@ export function AdminAuditLogsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="p-6 enterprise-card flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-white">Immutable System Audit Trail</h1>
-          <p className="text-xs text-slate-400">
+          <h1 className="text-lg font-bold text-slate-900">Immutable System Audit Trail</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
             Tracks confidence recalculations, authority decisions, employer data access, consent changes, and admin updates.
           </p>
         </div>
         <select
           value={entityType}
           onChange={(e) => setEntityType(e.target.value)}
-          className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white"
+          className="enterprise-select"
         >
           <option value="ALL">All Entity Types</option>
           <option value="INCIDENT">INCIDENT</option>
@@ -494,29 +500,29 @@ export function AdminAuditLogsPage() {
         </select>
       </div>
 
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 overflow-x-auto">
+      <div className="enterprise-card overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="border-b border-slate-800 text-slate-400">
-              <th className="py-2.5 px-3">Timestamp</th>
-              <th className="py-2.5 px-3">Action</th>
-              <th className="py-2.5 px-3">Entity</th>
-              <th className="py-2.5 px-3">Actor</th>
-              <th className="py-2.5 px-3">Metadata</th>
+            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
+              <th className="py-3 px-4 font-semibold">Timestamp</th>
+              <th className="py-3 px-3 font-semibold">Action</th>
+              <th className="py-3 px-3 font-semibold">Entity</th>
+              <th className="py-3 px-3 font-semibold">Actor</th>
+              <th className="py-3 px-4 font-semibold">Metadata</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/80">
+          <tbody className="divide-y divide-slate-100">
             {(logs || []).map((log: any) => (
-              <tr key={log.id}>
-                <td className="py-2.5 px-3 text-slate-400 whitespace-nowrap">
+              <tr key={log.id} className="hover:bg-slate-50">
+                <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">
                   {new Date(log.created_at).toLocaleString()}
                 </td>
-                <td className="py-2.5 px-3 font-mono font-bold text-cyan-300">{log.action}</td>
-                <td className="py-2.5 px-3 text-slate-300">{log.entity_type}</td>
-                <td className="py-2.5 px-3 text-white">
+                <td className="py-2.5 px-3 font-mono font-bold text-blue-700">{log.action}</td>
+                <td className="py-2.5 px-3 text-slate-600">{log.entity_type}</td>
+                <td className="py-2.5 px-3 font-medium text-slate-900">
                   {log.actor_name || 'System'} ({log.actor_role || 'AUTO'})
                 </td>
-                <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400 max-w-md truncate">
+                <td className="py-2.5 px-4 font-mono text-[11px] text-slate-500 max-w-md truncate">
                   {JSON.stringify(log.metadata)}
                 </td>
               </tr>
@@ -535,27 +541,27 @@ export function AdminSettingsPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-        <h1 className="text-xl font-bold text-white">
+    <div className="max-w-4xl mx-auto space-y-5">
+      <div className="p-6 enterprise-card space-y-4">
+        <h1 className="text-lg font-bold text-slate-900">
           System Configuration &amp; Verification Heuristic Weights
         </h1>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500">
           Current server-side configuration parameters persisted in PostgreSQL:
         </p>
         <div className="space-y-3">
           {(configs || []).map((cfg: any) => (
             <div
               key={cfg.key}
-              className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2 text-xs"
+              className="p-4 rounded-lg bg-slate-50 border border-slate-200 space-y-2 text-xs"
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono font-bold text-cyan-300">{cfg.key}</span>
+                <span className="font-mono font-bold text-blue-700">{cfg.key}</span>
                 <span className="text-slate-500">
                   Updated: {new Date(cfg.updated_at).toLocaleString()}
                 </span>
               </div>
-              <pre className="p-3 rounded-lg bg-slate-900 text-slate-200 overflow-x-auto font-mono text-[11px]">
+              <pre className="p-3 rounded-lg bg-white border border-slate-200 text-slate-800 overflow-x-auto font-mono text-[11px]">
                 {JSON.stringify(cfg.value, null, 2)}
               </pre>
             </div>

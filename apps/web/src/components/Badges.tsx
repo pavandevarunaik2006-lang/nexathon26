@@ -1,12 +1,21 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, CheckCircle2, Info, Sparkles } from 'lucide-react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { ShieldCheck, Database } from 'lucide-react';
 import { getConfidenceBandLabel } from '@roadalert/shared';
+import { AnimatedNumber, ENTERPRISE_EASE } from './MotionPrimitives';
 
-export function RoadAlertLogo({ collapsed = false }: { collapsed?: boolean }) {
+export function RoadAlertLogo({
+  collapsed = false,
+  variant = 'dark',
+}: {
+  collapsed?: boolean;
+  variant?: 'dark' | 'light';
+}) {
+  const isDark = variant === 'dark';
   return (
     <div className="flex items-center gap-2.5 select-none">
-      <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-slate-950 shadow-lg shadow-cyan-500/20">
-        {/* Route-Shield + Road-Pin SVG icon */}
+      <div className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-blue-600 text-white shadow-sm shrink-0">
+        {/* Clean Enterprise Route-Shield + Road-Pin SVG icon */}
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -20,19 +29,23 @@ export function RoadAlertLogo({ collapsed = false }: { collapsed?: boolean }) {
           <path d="M12 8v5" />
           <circle cx="12" cy="16" r="1" fill="currentColor" />
         </svg>
-        <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-950" />
       </div>
       {!collapsed && (
-        <div className="flex flex-col leading-none">
+        <div className="flex flex-col leading-tight min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="text-base font-extrabold tracking-tight text-white">
-              Road<span className="text-cyan-400">Alert</span>
-            </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
-              Coastal KN
+            <span
+              className={`text-sm font-bold tracking-tight ${
+                isDark ? 'text-white' : 'text-slate-900'
+              }`}
+            >
+              RoadAlert
             </span>
           </div>
-          <span className="text-[11px] text-slate-400 font-medium mt-0.5">
+          <span
+            className={`text-[11px] font-medium truncate ${
+              isDark ? 'text-slate-400' : 'text-slate-500'
+            }`}
+          >
             Incident &amp; Commute Intelligence
           </span>
         </div>
@@ -44,28 +57,27 @@ export function RoadAlertLogo({ collapsed = false }: { collapsed?: boolean }) {
 export function SeverityBadge({ severity }: { severity: string }) {
   const styles =
     severity === 'CRITICAL'
-      ? 'bg-red-500/15 text-red-300 border-red-500/40'
+      ? 'bg-red-50 text-red-700 border-red-200'
       : severity === 'HIGH'
-      ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
       : severity === 'MEDIUM'
-      ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
-      : 'bg-slate-700/40 text-slate-300 border-slate-600/50';
+      ? 'bg-sky-50 text-sky-700 border-sky-200'
+      : 'bg-slate-100 text-slate-700 border-slate-200';
+
+  const dotStyles =
+    severity === 'CRITICAL'
+      ? 'bg-red-600'
+      : severity === 'HIGH'
+      ? 'bg-amber-500'
+      : severity === 'MEDIUM'
+      ? 'bg-sky-500'
+      : 'bg-slate-400';
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${styles}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold border ${styles}`}
     >
-      <span
-        className={`w-1.5 h-1.5 rounded-full ${
-          severity === 'CRITICAL'
-            ? 'bg-red-400 animate-pulse'
-            : severity === 'HIGH'
-            ? 'bg-amber-400'
-            : severity === 'MEDIUM'
-            ? 'bg-cyan-400'
-            : 'bg-slate-400'
-        }`}
-      />
+      <span className={`w-1.5 h-1.5 rounded-full ${dotStyles}`} />
       {severity}
     </span>
   );
@@ -73,18 +85,18 @@ export function SeverityBadge({ severity }: { severity: string }) {
 
 export function StatusBadge({ status }: { status: string }) {
   const styles =
-    status === 'VERIFIED'
-      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-      : status === 'RESOLVED'
-      ? 'bg-teal-500/15 text-teal-300 border-teal-500/40'
+    status === 'VERIFIED' || status === 'RESOLVED'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
       : status === 'UNDER_REVIEW'
-      ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
       : status === 'DISPUTED' || status === 'REJECTED'
-      ? 'bg-red-500/15 text-red-300 border-red-500/40'
-      : 'bg-blue-500/15 text-blue-300 border-blue-500/40';
+      ? 'bg-red-50 text-red-700 border-red-200'
+      : 'bg-blue-50 text-blue-700 border-blue-200';
 
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border ${styles}`}>
+    <span
+      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${styles}`}
+    >
       {status.replace('_', ' ')}
     </span>
   );
@@ -99,36 +111,50 @@ export function ConfidenceMeter({
   authorityConfirmed?: boolean;
   compact?: boolean;
 }) {
+  const prefersReducedMotion = useReducedMotion();
   const band = getConfidenceBandLabel(score);
+  const clampedScore = Math.min(100, Math.max(0, score));
+
   const barColor =
     score >= 80
-      ? 'bg-emerald-500'
+      ? 'bg-emerald-600'
       : score >= 60
-      ? 'bg-cyan-500'
+      ? 'bg-blue-600'
       : score >= 35
       ? 'bg-amber-500'
-      : 'bg-slate-500';
+      : 'bg-slate-400';
 
   const textColor =
     score >= 80
-      ? 'text-emerald-300'
+      ? 'text-emerald-700'
       : score >= 60
-      ? 'text-cyan-300'
+      ? 'text-blue-700'
       : score >= 35
-      ? 'text-amber-300'
-      : 'text-slate-400';
+      ? 'text-amber-700'
+      : 'text-slate-600';
 
   if (compact) {
     return (
       <div className="inline-flex items-center gap-1.5">
-        <div className="w-14 h-2 rounded-full bg-slate-800 overflow-hidden">
-          <div className={`h-full ${barColor}`} style={{ width: `${Math.min(100, score)}%` }} />
+        <div className="w-14 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+          {prefersReducedMotion ? (
+            <div className={`h-full ${barColor}`} style={{ width: `${clampedScore}%` }} />
+          ) : (
+            <motion.div
+              className={`h-full ${barColor}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${clampedScore}%` }}
+              transition={{ duration: 0.45, ease: ENTERPRISE_EASE }}
+            />
+          )}
         </div>
-        <span className={`text-xs font-bold ${textColor}`}>{score}/100</span>
+        <span className={`text-xs font-semibold tabular-nums ${textColor}`}>
+          <AnimatedNumber value={score} suffix="%" />
+        </span>
         {authorityConfirmed && (
           <span
             title="Authorized Traffic Authority Confirmation"
-            className="inline-flex items-center text-emerald-400"
+            className="inline-flex items-center text-emerald-600"
           >
             <ShieldCheck className="w-3.5 h-3.5" />
           </span>
@@ -141,19 +167,29 @@ export function ConfidenceMeter({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
         <span className={`font-semibold ${textColor}`}>
-          Confidence Score: {score}/100 ({band})
+          Confidence Score:{' '}
+          <span className="font-bold tabular-nums">
+            <AnimatedNumber value={score} suffix="%" />
+          </span>{' '}
+          ({band})
         </span>
         {authorityConfirmed && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[11px]">
             <ShieldCheck className="w-3.5 h-3.5" /> Authority Confirmed
           </span>
         )}
       </div>
-      <div className="w-full h-2.5 rounded-full bg-slate-800 overflow-hidden">
-        <div
-          className={`h-full transition-all duration-300 ${barColor}`}
-          style={{ width: `${Math.min(100, score)}%` }}
-        />
+      <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+        {prefersReducedMotion ? (
+          <div className={`h-full ${barColor}`} style={{ width: `${clampedScore}%` }} />
+        ) : (
+          <motion.div
+            className={`h-full ${barColor}`}
+            initial={{ width: 0 }}
+            animate={{ width: `${clampedScore}%` }}
+            transition={{ duration: 0.5, ease: ENTERPRISE_EASE }}
+          />
+        )}
       </div>
     </div>
   );
@@ -164,9 +200,9 @@ export function DemoDataBadge({ isDemo = true }: { isDemo?: boolean }) {
   return (
     <span
       title="Seeded coastal Karnataka demonstration record clearly distinguished from live telemetry"
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200"
     >
-      <Sparkles className="w-3 h-3" /> Demo Seed Data
+      <Database className="w-3 h-3 text-slate-400" /> Seeded Data
     </span>
   );
 }

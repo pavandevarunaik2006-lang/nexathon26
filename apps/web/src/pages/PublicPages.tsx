@@ -4,15 +4,11 @@ import {
   ShieldCheck,
   MapPin,
   Navigation,
-  Briefcase,
-  BarChart3,
   ArrowRight,
   Lock,
-  CheckCircle2,
   AlertTriangle,
-  Sparkles,
   Play,
-  Mail,
+  Compass,
 } from 'lucide-react';
 import { RoadAlertLogo, DemoDataBadge } from '../components/Badges';
 import { useAuth, getDefaultHomeForRole } from '../context/AuthContext';
@@ -79,43 +75,37 @@ export function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[#f3f5f8] text-slate-900 flex flex-col">
       {/* Header */}
-      <header className="border-b border-slate-800/80 bg-navy-900/90 backdrop-blur-md sticky top-0 z-40">
+      <header className="border-b border-slate-200 bg-white sticky top-0 z-40 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <RoadAlertLogo />
+          <RoadAlertLogo variant="light" />
           <div className="flex items-center gap-3">
             <Link
               to="/privacy"
-              className="text-xs font-medium text-slate-300 hover:text-white hidden sm:inline"
+              className="text-xs font-medium text-slate-600 hover:text-slate-900 hidden sm:inline"
             >
               Privacy &amp; Consent Charter
             </Link>
             <Link
               to="/terms"
-              className="text-xs font-medium text-slate-300 hover:text-white hidden sm:inline"
+              className="text-xs font-medium text-slate-600 hover:text-slate-900 hidden sm:inline"
             >
               Terms
             </Link>
             {user ? (
               <Link
                 to={getDefaultHomeForRole(user.role)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-semibold text-xs"
+                className="btn-primary"
               >
-                Open Control Room <ArrowRight className="w-3.5 h-3.5" />
+                Open Control Center <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             ) : (
               <>
-                <Link
-                  to="/login"
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-xs font-semibold text-white"
-                >
+                <Link to="/login" className="btn-secondary">
                   Sign In
                 </Link>
-                <Link
-                  to="/register"
-                  className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold"
-                >
+                <Link to="/register" className="btn-primary">
                   Create Account
                 </Link>
               </>
@@ -125,20 +115,20 @@ export function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden py-14 lg:py-20 border-b border-slate-800/80 bg-gradient-to-b from-navy-900 to-slate-950">
+      <section className="relative overflow-hidden py-14 lg:py-20 border-b border-slate-200 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 grid lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-7 space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
+              <Compass className="w-3.5 h-3.5" />
               <span>Coastal Karnataka Traffic Intelligence • Mangaluru → Udupi NH-66</span>
             </div>
-            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 leading-tight">
               Evidence-Backed Traffic Verification, Commute Proof &amp; Corridor Analytics.
             </h1>
-            <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl">
+            <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-2xl">
               Ordinary navigation apps show a red line without explaining{' '}
-              <span className="text-white font-semibold">why</span> or{' '}
-              <span className="text-white font-semibold">how trustworthy</span> the alert is.
+              <span className="text-slate-900 font-semibold">why</span> or{' '}
+              <span className="text-slate-900 font-semibold">how trustworthy</span> the alert is.
               RoadAlert combines multi-level incident verification (0–100 confidence scoring),
               consent-first employee commute delay proof, and recurring infrastructure problem analysis.
             </p>
@@ -153,10 +143,10 @@ export function LandingPage() {
               ].map((w) => (
                 <div
                   key={w.step}
-                  className="p-3 rounded-xl bg-slate-900/90 border border-slate-800"
+                  className="p-3 rounded-xl bg-slate-50 border border-slate-200"
                 >
-                  <p className="text-xs font-bold text-cyan-400">{w.step}</p>
-                  <p className="text-xs text-slate-300 mt-0.5">{w.desc}</p>
+                  <p className="text-xs font-bold text-blue-600">{w.step}</p>
+                  <p className="text-xs text-slate-600 mt-0.5">{w.desc}</p>
                 </div>
               ))}
             </div>
@@ -164,28 +154,28 @@ export function LandingPage() {
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <Link
                 to="/login"
-                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20"
+                className="btn-primary py-3 px-5 text-sm"
               >
-                Launch Traffic Control Room <ArrowRight className="w-4 h-4" />
+                Launch Traffic Control Center <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
                 to="/privacy"
-                className="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 hover:border-slate-600 text-slate-200 font-semibold text-sm"
+                className="btn-secondary py-3 px-4 text-sm"
               >
-                <Lock className="w-4 h-4 text-emerald-400" /> Privacy-First Commute Charter
+                <Lock className="w-4 h-4 text-emerald-600" /> Privacy-First Commute Charter
               </Link>
             </div>
           </div>
 
           {/* Interactive One-Click Demo Role Switcher Card */}
-          <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="lg:col-span-5 enterprise-card p-6 shadow-elevated space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-white">
+                <h2 className="text-base font-bold text-slate-900">
                   Instant Evaluation Role Launcher
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  One-click sign-in to inspect all 5 roles with seeded Mangaluru–Udupi demo data
+                <p className="text-xs text-slate-500 mt-0.5">
+                  One-click sign-in to inspect all 5 roles with seeded Mangaluru–Udupi data
                 </p>
               </div>
               <DemoDataBadge />
@@ -197,20 +187,20 @@ export function LandingPage() {
                   key={acc.role}
                   disabled={Boolean(quickLoading)}
                   onClick={() => handleQuickDemoLogin(acc.email, acc.label)}
-                  className="w-full text-left p-3 rounded-xl bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center justify-between gap-3 group"
+                  className="w-full text-left p-3 rounded-xl bg-slate-50 hover:bg-blue-50/50 border border-slate-200 hover:border-blue-300 transition-all flex items-center justify-between gap-3 group"
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-white group-hover:text-cyan-300">
+                      <span className="text-xs font-bold text-slate-900 group-hover:text-blue-600">
                         {acc.label}
                       </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300">
+                      <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-blue-600">
                         {acc.role}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{acc.desc}</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{acc.desc}</p>
                   </div>
-                  <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-cyan-500/15 text-cyan-300 text-xs font-semibold group-hover:bg-cyan-500 group-hover:text-slate-950 transition-colors">
+                  <span className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold shadow-xs">
                     <Play className="w-3 h-3" />
                     {quickLoading === acc.email ? 'Opening...' : 'Enter'}
                   </span>
@@ -250,13 +240,13 @@ export function LandingPage() {
             return (
               <div
                 key={card.q}
-                className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-2.5"
+                className="p-5 enterprise-card space-y-2.5"
               >
-                <div className="w-9 h-9 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center">
                   <Icon className="w-4 h-4" />
                 </div>
-                <h3 className="text-sm font-bold text-white">{card.q}</h3>
-                <p className="text-xs text-slate-300 leading-relaxed">{card.a}</p>
+                <h3 className="text-sm font-bold text-slate-900">{card.q}</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">{card.a}</p>
               </div>
             );
           })}
@@ -296,30 +286,30 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md space-y-3 text-center">
+    <div className="min-h-screen bg-[#f3f5f8] text-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md space-y-2 text-center">
         <div className="flex justify-center">
           <Link to="/">
-            <RoadAlertLogo />
+            <RoadAlertLogo variant="light" />
           </Link>
         </div>
-        <h1 className="text-2xl font-bold text-white">Sign in to RoadAlert Control Room</h1>
-        <p className="text-xs text-slate-400">
+        <h1 className="text-2xl font-bold text-slate-900 pt-2">Sign in to RoadAlert Control Center</h1>
+        <p className="text-xs text-slate-500">
           Mangaluru–Udupi Coastal Karnataka Incident &amp; Commute Intelligence
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-lg">
-        <div className="bg-slate-900 border border-slate-800 py-6 px-6 shadow-2xl rounded-2xl space-y-6">
+      <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-lg">
+        <div className="enterprise-card py-6 px-6 shadow-elevated space-y-6">
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-xs font-medium">
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Email Address
               </label>
               <input
@@ -327,14 +317,14 @@ export function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                className="enterprise-input py-2.5 text-sm"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-300">Password</label>
-                <Link to="/forgot-password" className="text-xs text-cyan-400 hover:underline">
+                <label className="block text-xs font-semibold text-slate-700">Password</label>
+                <Link to="/forgot-password" className="text-xs font-medium text-blue-600 hover:underline">
                   Forgot password?
                 </Link>
               </div>
@@ -343,23 +333,23 @@ export function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white focus:outline-none focus:border-cyan-400"
+                className="enterprise-input py-2.5 text-sm"
               />
             </div>
 
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-bold text-sm shadow-lg shadow-cyan-500/20 transition-all"
+              className="btn-primary w-full py-2.5 text-sm"
             >
               {submitting ? 'Authenticating...' : 'Sign In'}
             </button>
           </form>
 
           {/* Development Demo Account Selector */}
-          <div className="pt-4 border-t border-slate-800 space-y-2.5">
+          <div className="pt-4 border-t border-slate-200 space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-300">
+              <span className="text-xs font-semibold text-slate-700">
                 Quick-Fill Seeded Demo Roles (Password: RoadAlert@2026)
               </span>
               <DemoDataBadge />
@@ -373,22 +363,22 @@ export function LoginPage() {
                     setEmail(acc.email);
                     setPassword('RoadAlert@2026');
                   }}
-                  className={`text-left px-3 py-2 rounded-xl border text-xs transition-all ${
+                  className={`text-left px-3 py-2 rounded-lg border text-xs transition-all ${
                     email === acc.email
-                      ? 'bg-cyan-500/15 border-cyan-500/50 text-cyan-200'
-                      : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      ? 'bg-blue-50 border-blue-400 text-blue-900'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
                   }`}
                 >
                   <div className="font-bold">{acc.role}</div>
-                  <div className="text-[11px] text-slate-400 truncate">{acc.email}</div>
+                  <div className="text-[11px] text-slate-500 truncate">{acc.email}</div>
                 </button>
               ))}
             </div>
           </div>
 
-          <p className="text-center text-xs text-slate-400">
+          <p className="text-center text-xs text-slate-500">
             New commuter or employee?{' '}
-            <Link to="/register" className="text-cyan-400 font-semibold hover:underline">
+            <Link to="/register" className="text-blue-600 font-semibold hover:underline">
               Create an account
             </Link>
           </p>
@@ -430,30 +420,30 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f3f5f8] text-slate-900 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md space-y-2 text-center">
         <div className="flex justify-center">
           <Link to="/">
-            <RoadAlertLogo />
+            <RoadAlertLogo variant="light" />
           </Link>
         </div>
-        <h1 className="text-2xl font-bold text-white">Create Your RoadAlert Account</h1>
-        <p className="text-xs text-slate-400">
+        <h1 className="text-2xl font-bold text-slate-900 pt-2">Create Your RoadAlert Account</h1>
+        <p className="text-xs text-slate-500">
           Report coastal Karnataka incidents, verify reports, or verify employee commutes
         </p>
       </div>
 
       <div className="mt-6 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-slate-900 border border-slate-800 py-6 px-6 shadow-2xl rounded-2xl space-y-5">
+        <div className="enterprise-card py-6 px-6 shadow-elevated space-y-5">
           {error && (
-            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-200 text-xs">
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
               <input
                 type="text"
                 required
@@ -461,12 +451,12 @@ export function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Deepak Hegde"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+                className="enterprise-input py-2.5 text-sm"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Email Address
               </label>
               <input
@@ -475,12 +465,12 @@ export function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="deepak@example.com"
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+                className="enterprise-input py-2.5 text-sm"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Password (min 8 chars)
               </label>
               <input
@@ -489,25 +479,25 @@ export function RegisterPage() {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+                className="enterprise-input py-2.5 text-sm"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Account Type
               </label>
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value as 'PASSENGER' | 'EMPLOYEE')}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+                className="enterprise-select w-full py-2.5 text-sm"
               >
                 <option value="PASSENGER">PASSENGER — Commuter &amp; Incident Reporter</option>
                 <option value="EMPLOYEE">
                   EMPLOYEE — Commuter + Consented Commute Verification
                 </option>
               </select>
-              <p className="text-[11px] text-slate-400 mt-1">
+              <p className="text-[11px] text-slate-500 mt-1">
                 Note: Authority, Employer, and Admin roles are provisioned by system administrators.
               </p>
             </div>
@@ -515,15 +505,15 @@ export function RegisterPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full py-2.5 px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm"
+              className="btn-primary w-full py-2.5 text-sm"
             >
               {submitting ? 'Creating Account...' : 'Register Account'}
             </button>
           </form>
 
-          <p className="text-center text-xs text-slate-400">
+          <p className="text-center text-xs text-slate-500">
             Already registered?{' '}
-            <Link to="/login" className="text-cyan-400 font-semibold hover:underline">
+            <Link to="/login" className="text-blue-600 font-semibold hover:underline">
               Sign in
             </Link>
           </p>
@@ -538,19 +528,19 @@ export function ForgotPasswordPage() {
   const [submitted, setSubmitted] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-12 px-4">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
-        <RoadAlertLogo />
-        <h1 className="text-xl font-bold text-white">Password Recovery</h1>
+    <div className="min-h-screen bg-[#f3f5f8] text-slate-900 flex flex-col justify-center py-12 px-4">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md enterprise-card p-6 shadow-elevated space-y-5">
+        <RoadAlertLogo variant="light" />
+        <h1 className="text-xl font-bold text-slate-900">Password Recovery</h1>
         {submitted ? (
-          <div className="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 text-xs space-y-2">
+          <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs space-y-2">
             <p className="font-bold">Recovery instructions queued</p>
             <p>
               If an account exists for <span className="font-mono">{email}</span>, a password reset
               token has been recorded. For local evaluation, use the seeded demo accounts on the Sign
               In page.
             </p>
-            <Link to="/login" className="inline-block text-cyan-400 font-semibold underline pt-1">
+            <Link to="/login" className="inline-block text-blue-600 font-semibold underline pt-1">
               Return to Sign In
             </Link>
           </div>
@@ -562,7 +552,7 @@ export function ForgotPasswordPage() {
             }}
             className="space-y-4"
           >
-            <p className="text-xs text-slate-300">
+            <p className="text-xs text-slate-600">
               Enter your registered email address to request a password reset link.
             </p>
             <input
@@ -571,16 +561,16 @@ export function ForgotPasswordPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@roadalert.in"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm text-white"
+              className="enterprise-input py-2.5 text-sm"
             />
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm"
+              className="btn-primary w-full py-2.5 text-sm"
             >
               Send Recovery Instructions
             </button>
             <div className="text-center">
-              <Link to="/login" className="text-xs text-cyan-400 hover:underline">
+              <Link to="/login" className="text-xs font-medium text-blue-600 hover:underline">
                 Back to Sign In
               </Link>
             </div>
@@ -593,23 +583,20 @@ export function ForgotPasswordPage() {
 
 export function PrivacyAndTermsPage({ mode }: { mode: 'privacy' | 'terms' }) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 py-12 px-4 sm:px-6">
-      <div className="max-w-4xl mx-auto bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+    <div className="min-h-screen bg-[#f3f5f8] text-slate-900 py-12 px-4 sm:px-6">
+      <div className="max-w-4xl mx-auto enterprise-card p-6 sm:p-8 shadow-elevated space-y-6">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
           <Link to="/">
-            <RoadAlertLogo />
+            <RoadAlertLogo variant="light" />
           </Link>
-          <Link
-            to="/login"
-            className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs"
-          >
-            Control Room Sign In
+          <Link to="/login" className="btn-primary">
+            Control Center Sign In
           </Link>
         </div>
 
         {mode === 'privacy' ? (
-          <div className="space-y-4 text-sm text-slate-300 leading-relaxed">
-            <h1 className="text-2xl font-bold text-white">
+          <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+            <h1 className="text-2xl font-bold text-slate-900">
               Privacy-First Commute Verification &amp; Data Protection Charter
             </h1>
             <p>
@@ -617,8 +604,8 @@ export function PrivacyAndTermsPage({ mode }: { mode: 'privacy' | 'terms' }) {
               while providing objective traffic delay verification.
             </p>
             <div className="grid sm:grid-cols-2 gap-4 pt-2">
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-                <h3 className="font-bold text-emerald-400 mb-1">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <h3 className="font-bold text-emerald-700 mb-1">
                   1. Zero 24/7 Background Tracking
                 </h3>
                 <p className="text-xs">
@@ -626,18 +613,18 @@ export function PrivacyAndTermsPage({ mode }: { mode: 'privacy' | 'terms' }) {
                   explicitly review the organization policy and start a session.
                 </p>
               </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-                <h3 className="font-bold text-cyan-400 mb-1">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <h3 className="font-bold text-blue-700 mb-1">
                   2. Persistent Indicator &amp; Instant Stop
                 </h3>
                 <p className="text-xs">
-                  While a commute session is active, a persistent green tracking banner is displayed
+                  While a commute session is active, a persistent status badge is displayed
                   in the header. Stopping the session or revoking consent immediately halts location
                   collection.
                 </p>
               </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-                <h3 className="font-bold text-amber-400 mb-1">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <h3 className="font-bold text-amber-700 mb-1">
                   3. Employer Data Minimization
                 </h3>
                 <p className="text-xs">
@@ -645,8 +632,8 @@ export function PrivacyAndTermsPage({ mode }: { mode: 'privacy' | 'terms' }) {
                   and intersecting traffic incidents. Precise GPS coordinates are redacted by default.
                 </p>
               </div>
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800">
-                <h3 className="font-bold text-indigo-400 mb-1">
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <h3 className="font-bold text-slate-900 mb-1">
                   4. Full Auditability &amp; Retention Limits
                 </h3>
                 <p className="text-xs">
@@ -657,22 +644,22 @@ export function PrivacyAndTermsPage({ mode }: { mode: 'privacy' | 'terms' }) {
             </div>
           </div>
         ) : (
-          <div className="space-y-4 text-sm text-slate-300 leading-relaxed">
-            <h1 className="text-2xl font-bold text-white">
+          <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+            <h1 className="text-2xl font-bold text-slate-900">
               Terms of Service &amp; Decision-Support Disclaimers
             </h1>
             <p>
-              1. <strong>Confidence Score Heuristic:</strong> The RoadAlert 0–100 Confidence Score is
+              1. <strong className="text-slate-900">Confidence Score Heuristic:</strong> The RoadAlert 0–100 Confidence Score is
               an explainable rule-based product heuristic combining independent reports, proximity,
               consented telemetry, media evidence, and authority review. It is not a statistically
               guaranteed probability.
             </p>
             <p>
-              2. <strong>Road Closure Safety:</strong> Users must never traverse barricaded, flooded,
+              2. <strong className="text-slate-900">Road Closure Safety:</strong> Users must never traverse barricaded, flooded,
               or closed roads. Always obey on-scene Traffic Police and NHAI/PWD instructions.
             </p>
             <p>
-              3. <strong>Infrastructure Problem Reports:</strong> Analytics suggestions (such as
+              3. <strong className="text-slate-900">Infrastructure Problem Reports:</strong> Analytics suggestions (such as
               drainage inspections or signal timing studies) are decision-support recommendations and
               do not replace formal civil engineering surveys.
             </p>
