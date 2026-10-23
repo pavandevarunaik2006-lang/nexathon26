@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 1440" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- Bright Atmospheric Coastal Sky & Ocean Gradients -->
+    <linearGradient id="bright-sky-ocean" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#e0f2fe" />
+      <stop offset="25%" stop-color="#bae6fd" />
+      <stop offset="55%" stop-color="#7dd3fc" />
+      <stop offset="80%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+
+    <!-- Tropical Cyan & Azure Waters -->
+    <linearGradient id="coastal-turquoise-depth" x1="0%" y1="20%" x2="100%" y2="80%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.7" />
+      <stop offset="35%" stop-color="#06b6d4" stop-opacity="0.6" />
+      <stop offset="70%" stop-color="#0891b2" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#0e7490" stop-opacity="0.4" />
+    </linearGradient>
+
+    <linearGradient id="shallow-surf-waters" x1="0%" y1="0%" x2="80%" y2="100%">
+      <stop offset="0%" stop-color="#ecfeff" stop-opacity="0.85" />
+      <stop offset="40%" stop-color="#cffafe" stop-opacity="0.75" />
+      <stop offset="75%" stop-color="#a5f3fc" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.3" />
+    </linearGradient>
+
+    <!-- Inshore Sand & Coastal Terrain Tones -->
+    <linearGradient id="sand-beach-tones" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#fef3c7" stop-opacity="0.45" />
+      <stop offset="45%" stop-color="#fde68a" stop-opacity="0.3" />
+      <stop offset="85%" stop-color="#6ee7b7" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Warm Coastal Sunlight Bloom -->
+    <radialGradient id="sun-horizon-bloom" cx="20%" cy="15%" r="65%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.55" />
+      <stop offset="30%" stop-color="#f0f9ff" stop-opacity="0.35" />
+      <stop offset="65%" stop-color="#e0f2fe" stop-opacity="0.15" />
+      <stop offset="100%" stop-color="#bae6fd" stop-opacity="0" />
+    </radialGradient>
+
+    <radialGradient id="ocean-light-sparkle" cx="75%" cy="65%" r="55%">
+      <stop offset="0%" stop-color="#67e8f9" stop-opacity="0.38" />
+      <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Topographic & Coastal Elevation Contour Gradients -->
+    <linearGradient id="topo-contour-bright-1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" stop-opacity="0.16" />
+      <stop offset="50%" stop-color="#0891b2" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#0369a1" stop-opacity="0.05" />
+    </linearGradient>
+
+    <linearGradient id="topo-contour-bright-2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.14" />
+      <stop offset="60%" stop-color="#0284c7" stop-opacity="0.09" />
+      <stop offset="100%" stop-color="#0c4a6e" stop-opacity="0.03" />
+    </linearGradient>
+
+    <!-- Geographic Coordinates & Coastal Navigation Grid -->
+    <pattern id="coastal-geo-grid" width="160" height="160" patternUnits="userSpaceOnUse">
+      <path d="M 160 0 L 0 0 0 160" fill="none" stroke="#0284c7" stroke-width="0.75" stroke-opacity="0.05" />
+      <circle cx="0" cy="0" r="1.5" fill="#0284c7" fill-opacity="0.09" />
+    </pattern>
+  </defs>
+
+  <!-- 1. Base Bright Sky & Open Sea Canvas -->
+  <rect width="2560" height="1440" fill="url(#bright-sky-ocean)" />
+
+  <!-- 2. Radiant Coastal Sunlight & Ambient Lighting -->
+  <rect width="2560" height="1440" fill="url(#sun-horizon-bloom)" />
+  <rect width="2560" height="1440" fill="url(#ocean-light-sparkle)" />
+
+  <!-- 3. Faint Nautical Navigation Grid -->
+  <rect width="2560" height="1440" fill="url(#coastal-geo-grid)" />
+
+  <!-- 4. Graceful Coastal Formations (Arabian Sea Shoreline & Canara Coast) -->
+  <!-- Outer Sea Shelf Layer -->
+  <path d="M -100,520 Q 420,440 920,620 T 1840,660 T 2660,540 L 2660,1540 L -100,1540 Z" fill="url(#coastal-turquoise-depth)" />
+
+  <!-- Inshore Shallows & Sand Shelf -->
+  <path d="M -100,720 C 380,620 780,800 1320,730 C 1880,660 2280,820 2660,740 L 2660,1540 L -100,1540 Z" fill="url(#shallow-surf-waters)" />
+
+  <!-- Beach & Lowland Terrace Formation -->
+  <path d="M -100,940 C 460,840 980,1020 1560,940 C 2100,860 2420,1020 2660,950 L 2660,1540 L -100,1540 Z" fill="url(#sand-beach-tones)" />
+
+  <!-- 5. Surf & Shoreline Highlights -->
+  <!-- Primary Coastal Highway Shoreline Vector -->
+  <path d="M -50,480 C 350,420 680,560 1140,490 C 1620,430 2080,570 2620,470" fill="none" stroke="#ffffff" stroke-width="3" stroke-opacity="0.38" />
+  <path d="M -50,488 C 350,428 680,568 1140,498 C 1620,438 2080,578 2620,478" fill="none" stroke="#e0f2fe" stroke-width="1.5" stroke-opacity="0.25" />
+
+  <!-- Inshore Surf Line 2 -->
+  <path d="M -60,680 C 380,610 820,760 1280,690 C 1780,620 2240,780 2640,690" fill="none" stroke="#ffffff" stroke-width="2" stroke-opacity="0.28" />
+
+  <!-- 6. Topographic Elevation & Coastal Highway Contour Lines -->
+  <!-- Elevation Contour 1 -->
+  <path d="M -80,260 C 360,220 780,330 1220,270 C 1700,210 2160,340 2640,260" fill="none" stroke="url(#topo-contour-bright-1)" stroke-width="1.2" />
+
+  <!-- Elevation Contour 2 -->
+  <path d="M -60,360 C 400,310 820,440 1280,370 C 1760,300 2200,430 2640,350" fill="none" stroke="url(#topo-contour-bright-1)" stroke-width="1.4" />
+
+  <!-- Bathymetric Line 3 -->
+  <path d="M -80,580 C 340,530 760,670 1220,590 C 1720,510 2180,660 2640,570" fill="none" stroke="url(#topo-contour-bright-2)" stroke-width="1.2" stroke-dasharray="12 8" />
+
+  <!-- Contour 4 -->
+  <path d="M -100,820 C 420,740 920,910 1440,830 C 1960,750 2340,920 2660,840" fill="none" stroke="url(#topo-contour-bright-1)" stroke-width="1.2" />
+
+  <!-- Contour 5 (Western Ghats Coastal Plain Foothills) -->
+  <path d="M -80,1020 C 460,930 1020,1110 1600,1020 C 2140,930 2480,1100 2660,1030" fill="none" stroke="url(#topo-contour-bright-2)" stroke-width="1.4" stroke-dasharray="16 10" />
+
+  <!-- Contour 6 -->
+  <path d="M -60,1220 C 500,1120 1080,1300 1680,1200 C 2200,1110 2520,1280 2660,1210" fill="none" stroke="url(#topo-contour-bright-1)" stroke-width="1.2" />
+
+  <!-- 7. Gentle Atmospheric Skylight Vignette -->
+  <radialGradient id="bright-vignette" cx="50%" cy="50%" r="75%">
+    <stop offset="60%" stop-color="#ffffff" stop-opacity="0" />
+    <stop offset="90%" stop-color="#bae6fd" stop-opacity="0.15" />
+    <stop offset="100%" stop-color="#7dd3fc" stop-opacity="0.25" />
+  </radialGradient>
+  <rect width="2560" height="1440" fill="url(#bright-vignette)" />
+</svg>

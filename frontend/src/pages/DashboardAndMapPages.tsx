@@ -274,22 +274,22 @@ export function PassengerDashboardPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="glass-container p-5 md:p-6 space-y-6">
       {/* Control Center Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold text-slate-900 tracking-tight">
+            <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
               Corridor Operations Control Center
             </h1>
             <DemoDataBadge />
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-600 mt-0.5">
             Mangaluru → Udupi (NH-66) • Synchronized incident verification, live corridor telemetry &amp; route intelligence
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <Link to="/app/routes" className="btn-secondary">
             <Navigation className="w-3.5 h-3.5 text-blue-600" /> Route Planner
           </Link>
@@ -299,8 +299,8 @@ export function PassengerDashboardPage() {
         </div>
       </div>
 
-      {/* Row 1: Neumorphic Tactile 6-Card KPI Row */}
-      <StaggerGrid className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      {/* Row 1: Frosted Glass 6-Card KPI Row (Exact match to reference UI) */}
+      <StaggerGrid className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
         {/* Card 1: Active Incidents */}
         <StaggerItem className="h-full">
           <button
@@ -309,26 +309,26 @@ export function PassengerDashboardPage() {
               setCategoryFilter('ALL');
               setSeverityFilter('ALL');
             }}
-            className={`w-full min-h-[96px] h-full text-left p-3.5 neu-card-interactive flex flex-col justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
+            className={`w-full min-h-[105px] h-full text-left p-4 rounded-2xl glass-card flex flex-col justify-between transition-all focus-visible:outline-none ${
               categoryFilter === 'ALL' && severityFilter === 'ALL'
-                ? 'ring-2 ring-blue-600/30 border-blue-500/80 bg-blue-50/20'
-                : 'hover:border-slate-300'
+                ? 'ring-2 ring-blue-500/60 border-blue-400 bg-white/75 shadow-lg'
+                : 'border-white/70 shadow-md hover:bg-white/70'
             }`}
           >
             <div className="flex items-center justify-between gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 whitespace-nowrap truncate">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap truncate">
                 Active Incidents
               </span>
-              <span className="p-1.5 rounded-xl bg-blue-500/10 text-blue-600 shrink-0 shadow-xs">
-                <Activity className="w-3.5 h-3.5" />
+              <span className="w-8 h-8 rounded-full bg-blue-100/90 text-blue-600 flex items-center justify-center shrink-0 shadow-xs">
+                <Activity className="w-4 h-4" />
               </span>
             </div>
             <div className="mt-2 flex items-end justify-between gap-1.5 min-w-0">
               <div>
-                <span className="text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
+                <span className="text-3xl font-extrabold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
                   <AnimatedNumber value={activeIncidents.length} />
                 </span>
-                <p className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded-md mt-1 inline-block whitespace-nowrap">
+                <p className="text-[11px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-200/80 px-2 py-0.5 rounded-full mt-1.5 inline-block whitespace-nowrap">
                   {verifiedCount} verified
                 </p>
               </div>
@@ -346,30 +346,30 @@ export function PassengerDashboardPage() {
                 prev === 'ACCIDENTS_GROUP' ? 'ALL' : 'ACCIDENTS_GROUP'
               )
             }
-            className={`w-full min-h-[96px] h-full text-left p-3.5 neu-card-interactive flex flex-col justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 ${
+            className={`w-full min-h-[105px] h-full text-left p-4 rounded-2xl glass-card flex flex-col justify-between transition-all focus-visible:outline-none ${
               categoryFilter === 'ACCIDENTS_GROUP'
-                ? 'ring-2 ring-red-600/30 border-red-500/80 bg-red-50/20'
-                : 'hover:border-slate-300'
+                ? 'ring-2 ring-rose-500/60 border-rose-400 bg-white/75 shadow-lg'
+                : 'border-white/70 shadow-md hover:bg-white/70'
             }`}
           >
             <div className="flex items-center justify-between gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 whitespace-nowrap truncate">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap truncate">
                 Accidents
               </span>
-              <span className="p-1.5 rounded-xl bg-red-500/10 text-red-600 shrink-0 shadow-xs">
-                <AlertTriangle className="w-3.5 h-3.5" />
+              <span className="w-8 h-8 rounded-full bg-rose-100/90 text-rose-600 flex items-center justify-center shrink-0 shadow-xs">
+                <AlertTriangle className="w-4 h-4" />
               </span>
             </div>
             <div className="mt-2 flex items-end justify-between gap-1.5 min-w-0">
               <div>
-                <span className="text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
+                <span className="text-3xl font-extrabold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
                   <AnimatedNumber value={accidentsCount} />
                 </span>
-                <p className="text-[11px] text-slate-500 whitespace-nowrap truncate mt-1">
+                <p className="text-[11px] font-medium text-slate-600 whitespace-nowrap truncate mt-1.5">
                   Collisions / stalls
                 </p>
               </div>
-              <MiniSparkline values={[1, accidentsCount, Math.max(1, accidentsCount - 1), accidentsCount, accidentsCount + 1]} colorClass="bg-red-500" />
+              <MiniSparkline values={[1, accidentsCount, Math.max(1, accidentsCount - 1), accidentsCount, accidentsCount + 1]} colorClass="bg-rose-500" />
             </div>
           </button>
         </StaggerItem>
@@ -383,26 +383,26 @@ export function PassengerDashboardPage() {
                 prev === 'ROADWORKS_GROUP' ? 'ALL' : 'ROADWORKS_GROUP'
               )
             }
-            className={`w-full min-h-[96px] h-full text-left p-3.5 neu-card-interactive flex flex-col justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/30 ${
+            className={`w-full min-h-[105px] h-full text-left p-4 rounded-2xl glass-card flex flex-col justify-between transition-all focus-visible:outline-none ${
               categoryFilter === 'ROADWORKS_GROUP'
-                ? 'ring-2 ring-amber-500/30 border-amber-500/80 bg-amber-50/20'
-                : 'hover:border-slate-300'
+                ? 'ring-2 ring-amber-500/60 border-amber-400 bg-white/75 shadow-lg'
+                : 'border-white/70 shadow-md hover:bg-white/70'
             }`}
           >
             <div className="flex items-center justify-between gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 whitespace-nowrap truncate">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap truncate">
                 Roadworks
               </span>
-              <span className="p-1.5 rounded-xl bg-amber-500/10 text-amber-600 shrink-0 shadow-xs">
-                <Wrench className="w-3.5 h-3.5" />
+              <span className="w-8 h-8 rounded-full bg-amber-100/90 text-amber-600 flex items-center justify-center shrink-0 shadow-xs">
+                <Wrench className="w-4 h-4" />
               </span>
             </div>
             <div className="mt-2 flex items-end justify-between gap-1.5 min-w-0">
               <div>
-                <span className="text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
+                <span className="text-3xl font-extrabold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
                   <AnimatedNumber value={roadworksCount} />
                 </span>
-                <p className="text-[11px] text-slate-500 whitespace-nowrap truncate mt-1">
+                <p className="text-[11px] font-medium text-slate-600 whitespace-nowrap truncate mt-1.5">
                   Closures / repair
                 </p>
               </div>
@@ -420,55 +420,55 @@ export function PassengerDashboardPage() {
                 prev === 'SLOWDOWNS_GROUP' ? 'ALL' : 'SLOWDOWNS_GROUP'
               )
             }
-            className={`w-full min-h-[96px] h-full text-left p-3.5 neu-card-interactive flex flex-col justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/30 ${
+            className={`w-full min-h-[105px] h-full text-left p-4 rounded-2xl glass-card flex flex-col justify-between transition-all focus-visible:outline-none ${
               categoryFilter === 'SLOWDOWNS_GROUP'
-                ? 'ring-2 ring-sky-500/30 border-sky-500/80 bg-sky-50/20'
-                : 'hover:border-slate-300'
+                ? 'ring-2 ring-purple-500/60 border-purple-400 bg-white/75 shadow-lg'
+                : 'border-white/70 shadow-md hover:bg-white/70'
             }`}
           >
             <div className="flex items-center justify-between gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 whitespace-nowrap truncate">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap truncate">
                 Slowdowns
               </span>
-              <span className="p-1.5 rounded-xl bg-sky-500/10 text-sky-600 shrink-0 shadow-xs">
-                <Radio className="w-3.5 h-3.5" />
+              <span className="w-8 h-8 rounded-full bg-purple-100/90 text-purple-600 flex items-center justify-center shrink-0 shadow-xs">
+                <Radio className="w-4 h-4" />
               </span>
             </div>
             <div className="mt-2 flex items-end justify-between gap-1.5 min-w-0">
               <div>
-                <span className="text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
+                <span className="text-3xl font-extrabold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
                   <AnimatedNumber value={slowdownsCount} />
                 </span>
-                <p className="text-[11px] text-slate-500 whitespace-nowrap truncate mt-1">
+                <p className="text-[11px] font-medium text-slate-600 whitespace-nowrap truncate mt-1.5">
                   Congestion / signals
                 </p>
               </div>
-              <MiniSparkline values={[slowdownsCount + 1, slowdownsCount, slowdownsCount + 2, slowdownsCount, Math.max(1, slowdownsCount - 1)]} colorClass="bg-sky-500" />
+              <MiniSparkline values={[slowdownsCount + 1, slowdownsCount, slowdownsCount + 2, slowdownsCount, Math.max(1, slowdownsCount - 1)]} colorClass="bg-purple-500" />
             </div>
           </button>
         </StaggerItem>
 
         {/* Card 5: Est. Avg Delay */}
         <StaggerItem className="h-full">
-          <div className="w-full min-h-[96px] h-full p-3.5 neu-card-interactive flex flex-col justify-between">
+          <div className="w-full min-h-[105px] h-full p-4 rounded-2xl glass-card flex flex-col justify-between border-white/70 shadow-md">
             <div className="flex items-center justify-between gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 whitespace-nowrap truncate">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap truncate">
                 Est. Avg Delay
               </span>
-              <span className="p-1.5 rounded-xl bg-amber-500/10 text-amber-600 shrink-0 shadow-xs">
-                <Clock className="w-3.5 h-3.5" />
+              <span className="w-8 h-8 rounded-full bg-emerald-100/90 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+                <Clock className="w-4 h-4" />
               </span>
             </div>
             <div className="mt-2 flex items-end justify-between gap-1.5 min-w-0">
               <div>
-                <span className="text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
+                <span className="text-3xl font-extrabold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
                   <AnimatedNumber value={avgDelayMinutes} prefix="+" suffix=" min" />
                 </span>
-                <p className="text-[11px] text-slate-500 whitespace-nowrap truncate mt-1">
+                <p className="text-[11px] font-medium text-slate-600 whitespace-nowrap truncate mt-1.5">
                   Corridor mean
                 </p>
               </div>
-              <MiniSparkline values={[8, 12, avgDelayMinutes, avgDelayMinutes + 3, avgDelayMinutes]} colorClass="bg-amber-500" />
+              <MiniSparkline values={[8, 12, avgDelayMinutes, avgDelayMinutes + 3, avgDelayMinutes]} colorClass="bg-emerald-500" />
             </div>
           </div>
         </StaggerItem>
@@ -482,30 +482,30 @@ export function PassengerDashboardPage() {
                 prev === 'WEATHER_GROUP' ? 'ALL' : 'WEATHER_GROUP'
               )
             }
-            className={`w-full min-h-[96px] h-full text-left p-3.5 neu-card-interactive flex flex-col justify-between focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
+            className={`w-full min-h-[105px] h-full text-left p-4 rounded-2xl glass-card flex flex-col justify-between transition-all focus-visible:outline-none ${
               categoryFilter === 'WEATHER_GROUP'
-                ? 'ring-2 ring-blue-600/30 border-blue-500/80 bg-blue-50/20'
-                : 'hover:border-slate-300'
+                ? 'ring-2 ring-sky-500/60 border-sky-400 bg-white/75 shadow-lg'
+                : 'border-white/70 shadow-md hover:bg-white/70'
             }`}
           >
             <div className="flex items-center justify-between gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 whitespace-nowrap truncate">
+              <span className="text-xs font-bold text-slate-600 whitespace-nowrap truncate">
                 Weather Impact
               </span>
-              <span className="p-1.5 rounded-xl bg-blue-500/10 text-blue-600 shrink-0 shadow-xs">
-                <CloudRain className="w-3.5 h-3.5" />
+              <span className="w-8 h-8 rounded-full bg-sky-100/90 text-sky-600 flex items-center justify-center shrink-0 shadow-xs">
+                <CloudRain className="w-4 h-4" />
               </span>
             </div>
             <div className="mt-2 flex items-end justify-between gap-1.5 min-w-0">
               <div>
-                <span className="text-2xl font-bold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
+                <span className="text-3xl font-extrabold text-slate-900 whitespace-nowrap shrink-0 tabular-nums leading-none tracking-tight">
                   <AnimatedNumber value={weatherIncidentsCount} />
                 </span>
-                <p className="text-[11px] text-slate-500 whitespace-nowrap truncate mt-1">
+                <p className="text-[11px] font-medium text-slate-600 whitespace-nowrap truncate mt-1.5">
                   Rain / flood reports
                 </p>
               </div>
-              <MiniSparkline values={[0, weatherIncidentsCount, 1, weatherIncidentsCount, weatherIncidentsCount + 1]} colorClass="bg-blue-400" />
+              <MiniSparkline values={[0, weatherIncidentsCount, 1, weatherIncidentsCount, weatherIncidentsCount + 1]} colorClass="bg-sky-400" />
             </div>
           </button>
         </StaggerItem>
@@ -514,8 +514,8 @@ export function PassengerDashboardPage() {
       {/* Row 2: Main Geospatial Workspace (Left 8 Cols) + Selected Incident Panel (Right 4 Cols) */}
       <div className="grid lg:grid-cols-12 gap-4 items-start">
         <div className="lg:col-span-8 space-y-3">
-          {/* Neumorphic Filter Toolbar */}
-          <div className="p-3 neu-card flex flex-wrap items-center justify-between gap-2.5">
+          {/* Frosted Glass Filter Toolbar */}
+          <div className="p-3 rounded-2xl glass-card flex flex-wrap items-center justify-between gap-2.5 border-white/70 shadow-md">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 pl-1">
                 <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" /> Filters:
@@ -525,7 +525,7 @@ export function PassengerDashboardPage() {
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 aria-label="Filter incidents by category"
-                className="enterprise-select py-1.5 rounded-xl border-slate-200/90 shadow-neu-inset-sm"
+                className="py-1.5 px-3 rounded-xl glass-pill border-white/70 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none cursor-pointer"
               >
                 <option value="ALL">All Categories ({activeIncidents.length})</option>
                 <option value="ACCIDENTS_GROUP">Accidents &amp; Breakdowns ({accidentsCount})</option>
@@ -541,7 +541,7 @@ export function PassengerDashboardPage() {
                 </optgroup>
               </select>
 
-              <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-neu-inset-sm">
+              <div className="flex items-center gap-1 glass-inset p-1 rounded-xl border border-white/60">
                 {(['ALL', 'CRITICAL', 'HIGH', 'MEDIUM'] as const).map((sev) => {
                   const isActive = severityFilter === sev;
                   return (
@@ -549,9 +549,9 @@ export function PassengerDashboardPage() {
                       key={sev}
                       type="button"
                       onClick={() => setSeverityFilter(sev)}
-                      className={`relative px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                      className={`relative px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                         isActive
-                          ? 'text-blue-700 shadow-neu-raised-sm'
+                          ? 'text-white shadow-md'
                           : 'text-slate-600 hover:text-slate-900'
                       }`}
                     >
@@ -559,7 +559,7 @@ export function PassengerDashboardPage() {
                         <motion.span
                           layoutId="dashboard-severity-filter-pill"
                           transition={SPRING_SNAPPY}
-                          className="absolute inset-0 bg-white rounded-lg shadow-sm"
+                          className="absolute inset-0 bg-gradient-to-r from-blue-600 to-blue-500 rounded-lg shadow-[0_2px_10px_rgba(37,99,235,0.4)]"
                         />
                       )}
                       <span className="relative z-10">{sev}</span>
@@ -577,14 +577,14 @@ export function PassengerDashboardPage() {
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
                   placeholder="Filter road..."
-                  className="pl-8 pr-2.5 py-1.5 rounded-xl bg-slate-100/80 border border-slate-200/90 text-xs text-slate-900 w-36 focus:outline-none focus:bg-white focus:border-blue-600 shadow-neu-inset-sm"
+                  className="pl-8 pr-3 py-1.5 rounded-xl glass-pill border-white/70 text-xs text-slate-900 w-36 placeholder:text-slate-500 focus:outline-none shadow-sm"
                 />
               </div>
 
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="btn-secondary py-1.5 px-3 rounded-xl neu-btn"
+                className="btn-secondary py-1.5 px-3.5 rounded-xl glass-pill border-white/70 text-xs font-bold text-slate-800 hover:bg-white/80 shadow-sm transition-all flex items-center gap-1.5"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${isFetching ? 'animate-spin' : ''}`} />
                 Sync
@@ -623,8 +623,8 @@ export function PassengerDashboardPage() {
       {/* Row 3: Lower Intelligence Section — Recent Incidents Table + Trends & Corridor Summary */}
       <div className="grid lg:grid-cols-12 gap-4 items-start">
         {/* Recent Incidents Table (7 Cols) */}
-        <div className="lg:col-span-7 neu-card overflow-hidden">
-          <div className="px-4 py-3.5 bg-slate-50/70 border-b border-slate-200/80 flex items-center justify-between">
+        <div className="lg:col-span-7 glass-card overflow-hidden border-white/70 shadow-md">
+          <div className="px-4 py-3.5 bg-slate-50/60 backdrop-blur-md border-b border-white/60 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-slate-900">
                 Recent Corridor Incidents ({filteredIncidents.length})
@@ -654,7 +654,7 @@ export function PassengerDashboardPage() {
           ) : (
             <div className="overflow-x-auto max-h-[340px]">
               <table className="w-full text-left border-collapse text-xs">
-                <thead className="bg-slate-50/90 border-b border-slate-200/90 text-slate-500 sticky top-0 backdrop-blur-xs">
+                <thead className="bg-slate-50/70 border-b border-white/60 text-slate-500 sticky top-0 backdrop-blur-md">
                   <tr>
                     <th className="py-2.5 px-4 font-semibold">Incident &amp; Location</th>
                     <th className="py-2.5 px-3 font-semibold">Category</th>
@@ -663,7 +663,7 @@ export function PassengerDashboardPage() {
                     <th className="py-2.5 px-4 font-semibold text-right">Confidence</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-white/40">
                   {filteredIncidents.map((inc) => {
                     const isSelected = inc.id === effectiveSelectedId;
                     return (
@@ -673,7 +673,7 @@ export function PassengerDashboardPage() {
                         className={`cursor-pointer transition-colors ${
                           isSelected
                             ? 'bg-blue-50/80 font-medium'
-                            : 'hover:bg-slate-50/80'
+                            : 'hover:bg-white/60'
                         }`}
                       >
                         <td className="py-2.5 px-4">
@@ -712,7 +712,7 @@ export function PassengerDashboardPage() {
         {/* Right 5 Cols: Incident Trend Chart + Corridor Status & Route Recommendations */}
         <div className="lg:col-span-5 space-y-4">
           {/* Cumulative Delay by Category Chart */}
-          <div className="neu-card p-4 space-y-3">
+          <div className="glass-card p-4 space-y-3 border-white/70 shadow-md">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <BarChart3 className="w-4 h-4 text-blue-600" />
@@ -760,7 +760,7 @@ export function PassengerDashboardPage() {
           {/* Corridor Status Summary & Alternative Route Recommendations */}
           <div className="grid sm:grid-cols-2 gap-3">
             {/* Bottleneck Hotspots */}
-            <div className="neu-card p-3.5 space-y-2.5">
+            <div className="glass-card p-3.5 space-y-2.5 border-white/70 shadow-md">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <Flame className="w-3.5 h-3.5 text-amber-500" /> Corridor Hotspots
@@ -775,7 +775,7 @@ export function PassengerDashboardPage() {
                     key={hs.roadName}
                     type="button"
                     onClick={() => setMapFocusCoords([Number(hs.lat), Number(hs.lng)])}
-                    className="w-full text-left p-2 rounded-xl bg-slate-50 hover:bg-slate-100/90 border border-slate-200/80 flex items-center justify-between gap-2 transition-all shadow-neu-raised-sm"
+                    className="w-full text-left p-2 rounded-xl glass-pill hover:bg-white/80 border-white/60 flex items-center justify-between gap-2 transition-all shadow-xs"
                   >
                     <div className="min-w-0">
                       <p className="text-xs font-semibold text-slate-800 truncate">{hs.roadName}</p>
@@ -790,7 +790,7 @@ export function PassengerDashboardPage() {
             </div>
 
             {/* Commute Verification & Alternative Routing Card */}
-            <div className="neu-card p-3.5 flex flex-col justify-between space-y-2.5">
+            <div className="glass-card p-3.5 flex flex-col justify-between space-y-2.5 border-white/70 shadow-md">
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -890,9 +890,9 @@ export function InteractiveMapPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="glass-container p-5 md:p-6 space-y-5">
       {/* Top Geospatial Filter & Telemetry Bar */}
-      <div className="p-3.5 enterprise-card flex flex-wrap items-center justify-between gap-3">
+      <div className="p-3.5 glass-card flex flex-wrap items-center justify-between gap-3 border-white/70 shadow-md">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 mr-1">
             <Filter className="w-4 h-4 text-blue-600" /> Live Map Filters:
@@ -905,7 +905,7 @@ export function InteractiveMapPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Filter road or keyword..."
-              className="pl-8 pr-3 py-1.5 rounded-lg bg-slate-50 border border-slate-300 text-xs text-slate-900 w-48 focus:outline-none focus:bg-white focus:border-blue-600"
+              className="pl-8 pr-3 py-1.5 rounded-xl glass-pill border-white/70 text-xs text-slate-900 w-48 placeholder:text-slate-500 focus:outline-none shadow-sm"
             />
           </div>
 
@@ -913,7 +913,7 @@ export function InteractiveMapPage() {
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             aria-label="Filter by incident category"
-            className="enterprise-select py-1.5"
+            className="py-1.5 px-3 rounded-xl glass-pill border-white/70 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none cursor-pointer"
           >
             <option value="ALL">All 15 Categories</option>
             {INCIDENT_CATEGORIES.map((cat) => (
@@ -927,7 +927,7 @@ export function InteractiveMapPage() {
             value={severity}
             onChange={(e) => setSeverity(e.target.value)}
             aria-label="Filter by severity"
-            className="enterprise-select py-1.5"
+            className="py-1.5 px-3 rounded-xl glass-pill border-white/70 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none cursor-pointer"
           >
             <option value="ALL">All Severities</option>
             {INCIDENT_SEVERITIES.map((sev) => (
@@ -941,7 +941,7 @@ export function InteractiveMapPage() {
             value={verificationStatus}
             onChange={(e) => setVerificationStatus(e.target.value)}
             aria-label="Filter by verification status"
-            className="enterprise-select py-1.5"
+            className="py-1.5 px-3 rounded-xl glass-pill border-white/70 text-xs font-semibold text-slate-800 shadow-sm focus:outline-none cursor-pointer"
           >
             <option value="ALL">All Verification Tiers</option>
             <option value="HIGH_CONFIDENCE">High Confidence (80–100)</option>
@@ -952,12 +952,12 @@ export function InteractiveMapPage() {
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold">
+          <span className="px-3 py-1.5 rounded-xl glass-pill border-white/70 text-slate-800 text-xs font-bold shadow-sm">
             {incidents.length} Pin(s)
           </span>
           <button
             onClick={() => refetch()}
-            className="btn-primary py-1.5"
+            className="btn-primary py-1.5 px-3.5 rounded-xl shadow-md"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
             Refresh Map
@@ -992,7 +992,7 @@ export function InteractiveMapPage() {
             }
           />
 
-          <div className="p-3.5 enterprise-card space-y-2">
+          <div className="p-4 glass-card rounded-2xl border-white/70 shadow-md space-y-2.5">
             <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
               Synchronized Map Pins ({incidents.length})
             </p>
@@ -1005,10 +1005,10 @@ export function InteractiveMapPage() {
                     key={inc.id}
                     type="button"
                     onClick={() => handleSelectIncident(inc)}
-                    className={`w-full text-left p-2.5 rounded-lg border text-xs transition-all flex items-center justify-between gap-2 ${
+                    className={`w-full text-left p-2.5 rounded-xl border text-xs transition-all flex items-center justify-between gap-2 ${
                       effectiveSelectedId === inc.id
-                        ? 'bg-blue-50 border-blue-400 text-slate-900'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                        ? 'bg-blue-50/90 border-blue-400 text-slate-900 font-medium shadow-xs'
+                        : 'glass-pill border-white/60 text-slate-700 hover:bg-white/80'
                     }`}
                   >
                     <div className="min-w-0">

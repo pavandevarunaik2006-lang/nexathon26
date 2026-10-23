@@ -195,20 +195,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const unreadCount = notifData?.unreadCount || 0;
 
   return (
-    <div className="min-h-screen bg-[#eef2f6] text-slate-900 flex flex-col md:flex-row">
-      {/* Desktop Deep Navy Sidebar with Frosted Glass Overlay */}
+    <div className="min-h-screen text-slate-900 flex flex-col md:flex-row p-3 md:p-5 gap-4 md:gap-5 overflow-x-hidden">
+      {/* Floating Frosted Glass Sidebar (Exact Match to Reference UI) */}
       <aside
-        className={`no-print hidden md:flex flex-col bg-[#0c162c] text-slate-300 border-r border-slate-800/80 transition-all duration-200 shrink-0 shadow-lg ${
-          sidebarCollapsed ? 'w-16' : 'w-64'
+        className={`no-print hidden md:flex flex-col glass-sidebar text-slate-800 transition-all duration-300 shrink-0 ${
+          sidebarCollapsed ? 'w-20 p-2.5' : 'w-64 p-3.5'
         }`}
       >
-        <div className="h-16 px-4 flex items-center justify-between border-b border-slate-800/80 bg-gradient-to-r from-navy-950/40 to-transparent">
-          <Link to={getDefaultHomeForRole(user.role)}>
-            <RoadAlertLogo collapsed={sidebarCollapsed} variant="dark" />
+        {/* Top Logo Glass Pill */}
+        <div className="p-3 rounded-2xl glass-pill mb-4 flex items-center justify-between border-white/80">
+          <Link to={getDefaultHomeForRole(user.role)} className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center shrink-0 shadow-md shadow-blue-500/40">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            {!sidebarCollapsed && (
+              <div className="min-w-0 leading-tight">
+                <span className="font-extrabold text-sm tracking-tight text-slate-900 block truncate">
+                  RoadAlert
+                </span>
+                <span className="text-[9px] text-slate-600 font-medium block truncate">
+                  Incident &amp; Commute Intelligence
+                </span>
+              </div>
+            )}
           </Link>
           <button
             onClick={() => setSidebarCollapsed((c) => !c)}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
+            className="p-1 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-white/50 transition-colors"
             aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {sidebarCollapsed ? (
@@ -219,12 +232,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-6">
+        {/* Navigation Section */}
+        <nav className="flex-1 overflow-y-auto space-y-5 pr-1">
           {navSections.map((group) => (
             <div key={group.section}>
               {!sidebarCollapsed && (
-                <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400/80 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500/60 inline-block" />
+                <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                   {group.section}
                 </p>
               )}
@@ -237,10 +250,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       key={item.to}
                       to={item.to}
                       className={({ isActive }) =>
-                        `relative flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                        `relative flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all ${
                           isActive
-                            ? 'text-white font-semibold shadow-sm'
-                            : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                            ? 'text-white'
+                            : 'text-slate-700 hover:text-slate-900 hover:bg-white/40'
                         }`
                       }
                       title={sidebarCollapsed ? item.label : undefined}
@@ -249,12 +262,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         <>
                           {isActive &&
                             (prefersReducedMotion ? (
-                              <span className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 shadow-md shadow-blue-600/30" />
+                              <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 shadow-[0_4px_20px_rgba(37,99,235,0.45)] border border-white/50" />
                             ) : (
                               <motion.span
                                 layoutId="sidebar-active-pill"
                                 transition={SPRING_SNAPPY}
-                                className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 shadow-md shadow-blue-600/30"
+                                className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 shadow-[0_4px_20px_rgba(37,99,235,0.45)] border border-white/50"
                               />
                             ))}
                           <div className="relative z-10 flex items-center gap-2.5 min-w-0">
@@ -264,7 +277,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             )}
                           </div>
                           {!sidebarCollapsed && isAlertsItem && (
-                            <span className="relative z-10 px-1.5 py-0.5 rounded-full bg-red-500/90 text-white text-[10px] font-bold">
+                            <span className="relative z-10 px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold shadow-xs">
                               {unreadCount}
                             </span>
                           )}
@@ -278,35 +291,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className="p-3 border-t border-slate-800/80 bg-navy-950/30">
-          {!sidebarCollapsed && (
-            <div className="mb-2 p-3 rounded-xl bg-[#132242]/90 border border-slate-700/60 shadow-sm">
-              <div className="flex items-center justify-between gap-1.5">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-sm">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-white truncate leading-tight">{user.name}</p>
-                    <p className="text-[10px] text-slate-400 truncate leading-tight mt-0.5">{user.email}</p>
-                  </div>
-                </div>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ring-4 ring-emerald-400/20" title="Online Telemetry" />
-              </div>
-              <div className="mt-2 pt-2 border-t border-slate-700/50 flex items-center justify-between">
-                <span className="inline-block px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-blue-500/20 text-blue-200 border border-blue-400/30">
-                  {user.role.replace('_', ' ')}
-                </span>
-                <span className="text-[10px] text-slate-400">NH-66 Station</span>
-              </div>
-            </div>
-          )}
+        {/* User Card & Sign Out at Bottom */}
+        <div className="pt-3 mt-auto border-t border-white/40">
           <button
             onClick={async () => {
               await logout();
               navigate('/login');
             }}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/80 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-2xl text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-white/50 transition-all glass-pill"
           >
             <LogOut className="w-3.5 h-3.5" />
             {!sidebarCollapsed && <span>Sign Out</span>}
@@ -316,47 +308,49 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Frosted Glass Floating Top Navigation */}
-        <header className="no-print h-16 bg-white/80 backdrop-blur-md border-b border-slate-200/80 px-4 lg:px-6 flex items-center justify-between gap-3 sticky top-0 z-40 shadow-glass-sm">
+        {/* Frosted Glass Floating Top Navigation Capsules */}
+        <header className="no-print mb-3 flex items-center justify-between gap-3 sticky top-0 z-40 px-0.5 py-1">
           <div className="flex items-center gap-3 flex-1 max-w-2xl">
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:bg-slate-100 neu-btn"
+              className="md:hidden p-2 rounded-2xl glass-pill text-slate-700 hover:text-slate-900 border-white/70 shadow-sm"
               aria-label="Open navigation menu"
             >
               <Menu className="w-5 h-5" />
             </button>
 
-            {/* Global Search with Neumorphic Inset Well & Shortcut Key */}
+            {/* Global Search with Translucent Glass Capsule & Shortcut Key */}
             <div ref={searchRef} className="relative flex-1 max-w-md">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                value={globalSearchQuery}
-                onFocus={() => setSearchFocused(true)}
-                onChange={(e) => {
-                  setGlobalSearchQuery(e.target.value);
-                  setSearchFocused(true);
-                }}
-                placeholder="Search corridor incidents, roads, coordinates..."
-                aria-label="Search corridor incidents"
-                className="w-full pl-9 pr-14 py-2 rounded-xl bg-slate-100/90 border border-slate-200/80 focus:bg-white focus:border-blue-600 focus:shadow-neu-inset text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none transition-all shadow-neu-inset-sm"
-              />
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                {globalSearchQuery ? (
-                  <button
-                    type="button"
-                    onClick={() => setGlobalSearchQuery('')}
-                    className="p-1 rounded-md text-slate-400 hover:text-slate-600"
-                    aria-label="Clear search"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                ) : (
-                  <kbd className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-slate-200/80 text-[10px] font-mono text-slate-500 font-semibold border border-slate-300/60">
-                    ⌘K
-                  </kbd>
-                )}
+              <div className="relative flex items-center w-full rounded-2xl glass-pill border-white/70 shadow-sm px-3.5 py-2">
+                <Search className="w-3.5 h-3.5 text-slate-500 mr-2 shrink-0" />
+                <input
+                  type="text"
+                  value={globalSearchQuery}
+                  onFocus={() => setSearchFocused(true)}
+                  onChange={(e) => {
+                    setGlobalSearchQuery(e.target.value);
+                    setSearchFocused(true);
+                  }}
+                  placeholder="Search corridor incidents, roads, coordinates..."
+                  aria-label="Search corridor incidents"
+                  className="w-full bg-transparent text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none"
+                />
+                <div className="ml-2 flex items-center gap-1 shrink-0">
+                  {globalSearchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => setGlobalSearchQuery('')}
+                      className="p-0.5 rounded text-slate-400 hover:text-slate-700"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <kbd className="hidden sm:inline-block px-1.5 py-0.5 rounded-lg bg-white/70 text-[10px] font-mono text-slate-600 font-bold border border-white/90 shadow-2xs">
+                      ⌘K
+                    </kbd>
+                  )}
+                </div>
               </div>
 
               {/* Live Search Results Popover */}
@@ -367,9 +361,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     initial="hidden"
                     animate="visible"
                     exit="exit"
-                    className="absolute left-0 right-0 mt-1.5 rounded-xl bg-white border border-slate-200 shadow-elevated overflow-hidden z-50"
+                    className="absolute left-0 right-0 mt-2 rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/80 shadow-2xl overflow-hidden z-50"
                   >
-                    <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    <div className="px-3.5 py-2 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                       <span>Matching Corridor Incidents</span>
                       <span>{searchResults?.items?.length || 0} found</span>
                     </div>
@@ -383,7 +377,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                               setSearchFocused(false);
                               navigate(`/app/incidents/${inc.id}`);
                             }}
-                            className="w-full text-left p-2.5 hover:bg-slate-50 transition-colors flex items-start justify-between gap-2"
+                            className="w-full text-left p-2.5 hover:bg-slate-50/80 transition-colors flex items-start justify-between gap-2"
                           >
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
@@ -412,10 +406,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </AnimatePresence>
             </div>
 
-            {/* Corridor Selector Pill */}
-            <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/90 text-xs text-slate-700 shadow-neu-raised-sm">
+            {/* Corridor Selector Glass Pill */}
+            <div className="hidden lg:flex items-center gap-1.5 px-3.5 py-2 rounded-2xl glass-pill text-xs text-slate-800 border-white/70 shadow-sm">
               <Compass className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span className="text-slate-500 font-medium">Corridor:</span>
+              <span className="text-slate-600 font-medium">Corridor:</span>
               <select
                 value={selectedCorridor}
                 onChange={(e) => {
@@ -435,9 +429,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Live Data Status Indicator Pill */}
+            {/* Live Data Status Indicator Glass Pill */}
             <div
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 text-[11px] font-semibold shadow-sm"
+              className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl glass-pill text-emerald-800 text-[11px] font-bold border-white/70 shadow-sm"
               title="Connected to live PostgreSQL incident & verification telemetry"
             >
               <span className="relative flex h-2 w-2">
@@ -447,11 +441,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span>Live Data</span>
             </div>
 
-            {/* Persistent Privacy Tracking Indicator */}
+            {/* Persistent Privacy Tracking Indicator Glass Pill */}
             {activeCommuteSession && (
               <Link
                 to="/app/journeys"
-                className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/25 text-blue-700 text-[11px] font-semibold shadow-sm"
+                className="hidden xl:flex items-center gap-1.5 px-3.5 py-2 rounded-2xl glass-pill text-blue-700 text-[11px] font-bold border-white/70 shadow-sm"
                 title="Click to inspect or stop your active consented commute session"
               >
                 <Radio className="w-3.5 h-3.5 text-blue-600 animate-pulse" />
@@ -459,19 +453,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Link>
             )}
 
-            {/* Notification Center */}
+            {/* Notification Center Glass Pill */}
             <div className="relative">
               <button
                 onClick={() => {
                   setNotifDrawerOpen((o) => !o);
                   setProfileMenuOpen(false);
                 }}
-                className="relative p-2 rounded-xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 shadow-neu-raised-sm hover:shadow-neu-raised transition-all"
+                className="relative p-2.5 rounded-2xl glass-pill text-slate-700 hover:text-slate-900 border-white/70 shadow-sm transition-all hover:bg-white/70"
                 aria-label="Open notifications"
               >
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white">
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-white shadow-xs">
                     {unreadCount}
                   </span>
                 )}
@@ -484,9 +478,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     initial="hidden"
                     animate="visible"
                     exit="exit"
-                    className="absolute right-0 mt-2 w-80 sm:w-96 rounded-xl bg-white border border-slate-200 shadow-elevated z-50 overflow-hidden"
+                    className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/80 shadow-2xl z-50 overflow-hidden"
                   >
-                    <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                    <div className="px-4 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
                       <div>
                         <h3 className="text-xs font-bold text-slate-900">Notifications</h3>
                         <p className="text-[11px] text-slate-500">
@@ -550,16 +544,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </AnimatePresence>
             </div>
 
-            {/* Profile Dropdown Menu */}
+            {/* Profile Dropdown Menu Glass Pill */}
             <div className="relative">
               <button
                 onClick={() => {
                   setProfileMenuOpen((p) => !p);
                   setNotifDrawerOpen(false);
                 }}
-                className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl bg-white border border-slate-200/90 hover:bg-slate-50 text-xs shadow-neu-raised-sm hover:shadow-neu-raised transition-all"
+                className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-2xl glass-pill text-xs border-white/70 shadow-sm hover:bg-white/70 transition-all"
               >
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-[11px] shadow-sm">
+                <div className="w-6 h-6 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-[11px] shadow-sm">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="hidden lg:flex flex-col items-start leading-tight">
@@ -567,7 +561,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     {user.name}
                   </span>
                 </div>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
               </button>
 
               <AnimatePresence>
@@ -577,12 +571,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     initial="hidden"
                     animate="visible"
                     exit="exit"
-                    className="absolute right-0 mt-2 w-56 rounded-xl bg-white border border-slate-200 shadow-elevated z-50 p-1.5 space-y-1 text-xs"
+                    className="absolute right-0 mt-2 w-56 rounded-2xl bg-white/95 backdrop-blur-2xl border border-white/80 shadow-2xl z-50 p-1.5 space-y-1 text-xs"
                   >
                     <div className="px-3 py-2 border-b border-slate-100">
                       <p className="font-bold text-slate-900 truncate">{user.name}</p>
                       <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
-                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-semibold text-[10px]">
                         {user.role}
                       </span>
                     </div>
@@ -633,13 +627,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 animate={{ x: 0 }}
                 exit={{ x: -260 }}
                 transition={SPRING_SNAPPY}
-                className="relative w-64 max-w-full bg-[#0c162c] text-slate-200 border-r border-slate-800 h-full flex flex-col z-10"
+                className="relative w-64 max-w-full bg-white/95 backdrop-blur-2xl text-slate-800 border-r border-white/70 h-full flex flex-col z-10 shadow-2xl"
               >
-                <div className="h-14 px-4 flex items-center justify-between border-b border-slate-800">
-                  <RoadAlertLogo variant="dark" />
+                <div className="h-14 px-4 flex items-center justify-between border-b border-slate-100">
+                  <RoadAlertLogo variant="light" />
                   <button
                     onClick={() => setMobileMenuOpen(false)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-white"
+                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900"
+                    aria-label="Close mobile navigation"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -647,7 +642,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <nav className="flex-1 overflow-y-auto p-3 space-y-4">
                   {navSections.map((group) => (
                     <div key={group.section}>
-                      <p className="px-2.5 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <p className="px-2.5 mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                         {group.section}
                       </p>
                       <div className="space-y-1">
@@ -659,10 +654,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                               to={item.to}
                               onClick={() => setMobileMenuOpen(false)}
                               className={({ isActive }) =>
-                                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium ${
+                                `flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
                                   isActive
-                                    ? 'bg-blue-600 text-white font-semibold'
-                                    : 'text-slate-300 hover:bg-slate-800'
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
+                                    : 'text-slate-700 hover:bg-slate-100/80'
                                 }`
                               }
                             >

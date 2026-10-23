@@ -158,10 +158,10 @@ export function IncidentInvestigationPanel({
         initial={prefersReducedMotion ? false : 'hidden'}
         animate="visible"
         exit="exit"
-        className="neu-card overflow-hidden rounded-2xl"
+        className="glass-card overflow-hidden rounded-2xl border-white/70 shadow-xl"
       >
         {/* Panel Header */}
-        <div className="px-4 py-3.5 bg-slate-50/80 backdrop-blur-xs border-b border-slate-200/90 flex items-center justify-between gap-2">
+        <div className="px-4 py-3.5 bg-slate-50/60 backdrop-blur-md border-b border-white/60 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
             <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -176,23 +176,23 @@ export function IncidentInvestigationPanel({
           <div className="flex flex-wrap items-center gap-1.5">
             <SeverityBadge severity={incident.severity} />
             <StatusBadge status={incident.status} />
-            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200/90 text-slate-700 text-[11px] font-semibold">
+            <span className="px-2 py-0.5 rounded-lg glass-pill border-white/70 text-slate-700 text-[11px] font-semibold">
               {incident.category}
             </span>
             {verificationState === 'CONFIRMED_OBSTRUCTION' ? (
-              <span className="px-2 py-0.5 rounded-md bg-red-600 text-white text-[10.5px] font-bold inline-flex items-center gap-1 shadow-xs">
+              <span className="px-2 py-0.5 rounded-lg bg-red-600 text-white text-[10.5px] font-bold inline-flex items-center gap-1 shadow-xs">
                 <Lock className="w-3 h-3" /> CONFIRMED OBSTRUCTION
               </span>
             ) : verificationState === 'VERIFIED_INCIDENT' ? (
-              <span className="px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-[10.5px] font-bold inline-flex items-center gap-1 shadow-xs">
+              <span className="px-2 py-0.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-[10.5px] font-bold inline-flex items-center gap-1 shadow-xs">
                 <ShieldCheck className="w-3 h-3" /> VERIFIED (PASSABLE)
               </span>
             ) : verificationState === 'RESOLVED_OBSTRUCTION' ? (
-              <span className="px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10.5px] font-bold inline-flex items-center gap-1 shadow-xs">
+              <span className="px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10.5px] font-bold inline-flex items-center gap-1 shadow-xs">
                 <CheckCircle2 className="w-3 h-3" /> RESOLVED / CLEARED
               </span>
             ) : (
-              <span className="px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[10.5px] font-bold shadow-xs">
+              <span className="px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10.5px] font-bold shadow-xs">
                 UNVERIFIED OBSERVATION
               </span>
             )}
@@ -221,8 +221,8 @@ export function IncidentInvestigationPanel({
             {incident.description}
           </p>
 
-          {/* Smooth Investigation Tab Bar with Neumorphic Well */}
-          <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-neu-inset-sm">
+          {/* Smooth Investigation Tab Bar with Frosted Well */}
+          <div className="flex items-center gap-1 glass-inset p-1 rounded-xl border border-white/60">
             {(
               [
                 { id: 'overview', label: 'Verification' },
@@ -237,17 +237,17 @@ export function IncidentInvestigationPanel({
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
                   className={`relative flex-1 py-1 px-2 rounded-lg text-[11px] font-semibold transition-all ${
-                    isTabActive ? 'text-blue-700' : 'text-slate-600 hover:text-slate-900'
+                    isTabActive ? 'text-blue-700 font-bold' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   {isTabActive &&
                     (prefersReducedMotion ? (
-                      <span className="absolute inset-0 bg-white rounded-lg shadow-neu-raised-sm" />
+                      <span className="absolute inset-0 bg-white/90 rounded-lg shadow-sm" />
                     ) : (
                       <motion.span
                         layoutId="incident-investigation-tab-pill"
                         transition={SPRING_SNAPPY}
-                        className="absolute inset-0 bg-white rounded-lg shadow-neu-raised-sm"
+                        className="absolute inset-0 bg-white/90 rounded-lg shadow-sm"
                       />
                     ))}
                   <span className="relative z-10">{tab.label}</span>
@@ -267,7 +267,7 @@ export function IncidentInvestigationPanel({
                 className="space-y-3"
               >
                 {/* Explainable Confidence Breakdown Visualization */}
-                <div className="p-3.5 rounded-xl bg-slate-50/70 border border-slate-200/80 shadow-neu-inset-sm space-y-2.5">
+                <div className="p-3.5 rounded-xl glass-inset border-white/60 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Verification Score Breakdown
@@ -319,7 +319,7 @@ export function IncidentInvestigationPanel({
                       return (
                         <div
                           key={p.label}
-                          className="p-1.5 rounded-xl bg-white border border-slate-200/80 shadow-neu-raised-sm space-y-1"
+                          className="p-1.5 rounded-xl bg-white/70 backdrop-blur-xs border border-white/80 shadow-xs space-y-1"
                         >
                           <div className="text-[9px] font-semibold text-slate-500 truncate">
                             {p.label}

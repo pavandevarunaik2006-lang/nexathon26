@@ -379,6 +379,7 @@ export function CorridorIntelligenceMap({
   const { showToast } = useToast();
   const prefersReducedMotion = Boolean(useReducedMotion());
 
+  const [mapStyle, setMapStyle] = useState<'map' | 'satellite' | 'terrain'>('map');
   const [darkTacticalTiles, setDarkTacticalTiles] = useState(false);
   const [showCorridorLine, setShowCorridorLine] = useState(true);
   const [showCongestionLayer, setShowCongestionLayer] = useState(true);
@@ -865,9 +866,22 @@ export function CorridorIntelligenceMap({
     (v) => v.status === 'HELD_AT_CLOSURE'
   ).length;
 
+  const tileUrl = useMemo(() => {
+    if (mapStyle === 'satellite') {
+      return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+    }
+    if (mapStyle === 'terrain') {
+      return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
+    }
+    return (
+      import.meta.env.VITE_MAP_TILE_URL ||
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+    );
+  }, [mapStyle]);
+
   return (
     <div
-      className={`relative rounded-2xl overflow-hidden border border-slate-200/90 bg-white shadow-neu-raised ${
+      className={`relative rounded-2xl overflow-hidden glass-card p-0 shadow-2xl border-white/70 ${
         darkTacticalTiles ? 'map-tiles-dark' : 'map-tiles-light'
       }`}
     >
@@ -876,7 +890,7 @@ export function CorridorIntelligenceMap({
         {/* Left Telemetry & Simulation Mode Status Pill */}
         <div
           data-testid="map-simulation-status-pill"
-          className="pointer-events-auto flex flex-wrap items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-white/60 text-xs font-semibold text-slate-800 shadow-glass-sm"
+          className="pointer-events-auto flex flex-wrap items-center gap-2 px-3.5 py-1.5 rounded-2xl glass-pill border-white/70 text-xs font-semibold text-slate-800 shadow-sm"
         >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -887,18 +901,18 @@ export function CorridorIntelligenceMap({
           <span className="text-blue-600 font-bold">{mergedIncidents.length} Incidents</span>
           <span className="text-slate-300">|</span>
           <span
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-sky-500/15 border border-sky-500/25 text-sky-800 text-[10px] font-bold uppercase tracking-wider"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-sky-500/15 border border-sky-500/25 text-sky-800 text-[10px] font-bold uppercase tracking-wider"
             title="Deterministic road-following vehicle simulation (never claimed as live GPS)"
           >
             Simulation Mode • {showVehicles ? totalVehiclesCount : 0} Vehicles
           </span>
           {reroutedVehiclesCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-500/15 border border-purple-500/25 text-purple-800 text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-purple-500/15 border border-purple-500/25 text-purple-800 text-[10px] font-bold">
               <GitBranch className="w-3 h-3" /> {reroutedVehiclesCount} Rerouted
             </span>
           )}
           {heldVehiclesCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-500/15 border border-red-500/25 text-red-800 text-[10px] font-bold">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-red-500/15 border border-red-500/25 text-red-800 text-[10px] font-bold">
               <Lock className="w-3 h-3" /> {heldVehiclesCount} Held at Closure
             </span>
           )}
@@ -918,10 +932,10 @@ export function CorridorIntelligenceMap({
                 setDraftIncidentCoords(null);
               }
             }}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shadow-neu-button transition-all active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 ${
+            className={`px-3.5 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 shadow-md transition-all active:scale-[0.97] focus-visible:outline-none ${
               isPlacementMode
                 ? 'bg-gradient-to-r from-red-600 to-red-700 border-red-500 text-white'
-                : 'bg-gradient-to-r from-blue-600 to-blue-700 border-blue-500 text-white hover:from-blue-500 hover:to-blue-600'
+                : 'bg-gradient-to-r from-red-600 to-rose-600 border-rose-500 text-white hover:from-red-500 hover:to-rose-500 shadow-rose-500/30'
             }`}
             title="Pin and report a new road incident directly on the map"
           >
@@ -934,10 +948,10 @@ export function CorridorIntelligenceMap({
             type="button"
             data-testid="toggle-vehicles-btn"
             onClick={() => setShowVehicles((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1 shadow-neu-raised-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
               showVehicles
-                ? 'bg-sky-600 border-sky-600 text-white hover:bg-sky-700'
-                : 'bg-white/90 backdrop-blur-md border-slate-200/90 text-slate-700 hover:bg-slate-50'
+                ? 'bg-sky-600 text-white border-sky-500 shadow-sky-500/30'
+                : 'text-slate-700 hover:bg-white/70'
             }`}
             title="Show or hide simulated corridor vehicles"
           >
@@ -950,10 +964,10 @@ export function CorridorIntelligenceMap({
             type="button"
             data-testid="toggle-congestion-btn"
             onClick={() => setShowCongestionLayer((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1 shadow-neu-raised-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
               showCongestionLayer
-                ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-700'
-                : 'bg-white/90 backdrop-blur-md border-slate-200/90 text-slate-700 hover:bg-slate-50'
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/30'
+                : 'text-slate-700 hover:bg-white/70'
             }`}
             title="Toggle segment-level traffic density & confirmed road closure layer"
           >
@@ -966,10 +980,10 @@ export function CorridorIntelligenceMap({
             type="button"
             data-testid="toggle-scenarios-btn"
             onClick={() => setShowScenarioBar((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1 shadow-neu-raised-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
               showScenarioBar
-                ? 'bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700'
-                : 'bg-white/90 backdrop-blur-md border-slate-200/90 text-slate-700 hover:bg-slate-50'
+                ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/30'
+                : 'text-slate-700 hover:bg-white/70'
             }`}
             title="Open repeatable incident & rerouting test scenarios"
           >
@@ -982,10 +996,10 @@ export function CorridorIntelligenceMap({
             type="button"
             data-testid="toggle-incidents-btn"
             onClick={() => setShowIncidents((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1 shadow-neu-raised-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
               showIncidents
-                ? 'bg-white/95 border-blue-500 text-blue-700 hover:bg-blue-50'
-                : 'bg-white/90 backdrop-blur-md border-slate-200/90 text-slate-500 hover:bg-slate-50'
+                ? 'bg-white/80 border-blue-400 text-blue-700'
+                : 'text-slate-500 hover:bg-white/70'
             }`}
             title="Show or hide incident markers on the map"
           >
@@ -1004,7 +1018,7 @@ export function CorridorIntelligenceMap({
             }}
             defaultValue=""
             aria-label="Jump to corridor checkpoint"
-            className="px-2.5 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-slate-200/90 hover:border-slate-300 text-xs font-semibold text-slate-700 shadow-neu-raised-sm focus:outline-none transition-all cursor-pointer"
+            className="px-2.5 py-1.5 rounded-2xl glass-pill border-white/70 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none transition-all cursor-pointer"
           >
             <option value="" disabled>
               Jump to Location...
@@ -1027,10 +1041,10 @@ export function CorridorIntelligenceMap({
                 return next;
               });
             }}
-            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1 shadow-neu-raised-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
               showCorridorLine
-                ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
-                : 'bg-white/90 backdrop-blur-md border-slate-200/90 text-slate-700 hover:bg-slate-50'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
+                : 'text-slate-700 hover:bg-white/70'
             }`}
             title="Toggle NH-66 Corridor Route Highlight"
           >
@@ -1040,10 +1054,10 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setEnableClustering((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1 shadow-neu-raised-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
               enableClustering
-                ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
-                : 'bg-white/90 backdrop-blur-md border-slate-200/90 text-slate-700 hover:bg-slate-50'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
+                : 'text-slate-700 hover:bg-white/70'
             }`}
             title="Toggle Spatial Marker Clustering"
           >
@@ -1053,11 +1067,11 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setDarkTacticalTiles((v) => !v)}
-            className="px-2.5 py-1.5 rounded-xl bg-white/90 backdrop-blur-md border border-slate-200/90 text-xs font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.97] focus-visible:outline-none shadow-neu-raised-sm flex items-center gap-1 transition-all"
+            className="px-2.5 py-1.5 rounded-2xl glass-pill border-white/70 text-xs font-semibold text-slate-700 hover:bg-white/70 active:scale-[0.97] focus-visible:outline-none shadow-sm flex items-center gap-1 transition-all"
             title="Switch Daylight / Dark Map Style"
           >
             <Compass className="w-3.5 h-3.5 text-blue-600" />
-            {darkTacticalTiles ? 'Dark Map' : 'Standard Map'}
+            {darkTacticalTiles ? 'Dark Map' : 'Standard'}
           </button>
         </div>
       </div>
@@ -1225,13 +1239,50 @@ export function CorridorIntelligenceMap({
         onIncidentCreated={handleIncidentCreatedOnMap}
       />
 
-      {/* Right-Side Neumorphic Zoom & Locate Controls */}
-      <div className="absolute bottom-14 right-3 z-[400] flex flex-col gap-1.5 pointer-events-auto">
-        <div className="flex flex-col rounded-xl bg-white/95 backdrop-blur-md border border-white/80 shadow-neu-button overflow-hidden">
+      {/* Bottom-Left Map Style Thumbnail Switcher (Exact match to reference UI) */}
+      <div className="absolute bottom-4 left-4 z-[400] flex items-center gap-1 p-1 rounded-2xl glass-pill border-white/80 shadow-lg pointer-events-auto">
+        <button
+          type="button"
+          onClick={() => setMapStyle('map')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            mapStyle === 'map'
+              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/40'
+              : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <span>Map</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMapStyle('satellite')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            mapStyle === 'satellite'
+              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/40'
+              : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <span>Satellite</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMapStyle('terrain')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+            mapStyle === 'terrain'
+              ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-md shadow-blue-500/40'
+              : 'text-slate-700 hover:text-slate-900 hover:bg-white/60'
+          }`}
+        >
+          <span>Terrain</span>
+        </button>
+      </div>
+
+      {/* Right-Side Frosted Glass Zoom & Locate Controls */}
+      <div className="absolute bottom-4 right-4 z-[400] flex flex-col gap-2 pointer-events-auto">
+        <div className="flex flex-col rounded-2xl glass-pill border-white/80 shadow-md overflow-hidden p-0.5">
           <button
             type="button"
             onClick={() => setZoomAction('in')}
-            className="p-2.5 text-slate-700 hover:bg-blue-50 hover:text-blue-600 active:bg-blue-100 focus-visible:outline-none border-b border-slate-100 transition-colors"
+            className="p-2 text-slate-700 hover:bg-white/70 hover:text-blue-600 active:bg-white/90 focus-visible:outline-none border-b border-white/60 transition-colors"
             title="Zoom in"
             aria-label="Zoom in"
           >
@@ -1240,7 +1291,7 @@ export function CorridorIntelligenceMap({
           <button
             type="button"
             onClick={() => setZoomAction('out')}
-            className="p-2.5 text-slate-700 hover:bg-blue-50 hover:text-blue-600 active:bg-blue-100 focus-visible:outline-none transition-colors"
+            className="p-2 text-slate-700 hover:bg-white/70 hover:text-blue-600 active:bg-white/90 focus-visible:outline-none transition-colors"
             title="Zoom out"
             aria-label="Zoom out"
           >
@@ -1250,7 +1301,7 @@ export function CorridorIntelligenceMap({
         <button
           type="button"
           onClick={handleLocateMe}
-          className="p-2.5 rounded-xl bg-white/95 backdrop-blur-md border border-white/80 text-blue-600 hover:bg-blue-50 active:scale-[0.96] focus-visible:outline-none shadow-neu-button transition-all"
+          className="p-2.5 rounded-2xl glass-pill border-white/80 text-blue-600 hover:text-blue-700 hover:bg-white/80 active:scale-[0.96] focus-visible:outline-none shadow-md transition-all"
           title="Center on my location"
           aria-label="Center on my location"
         >
@@ -1259,7 +1310,7 @@ export function CorridorIntelligenceMap({
       </div>
 
       {tileError && (
-        <div className="absolute top-14 left-3 right-3 z-[400] p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs shadow-sm">
+        <div className="absolute top-14 left-3 right-3 z-[400] p-2.5 rounded-xl bg-amber-50/90 backdrop-blur-md border border-amber-200 text-amber-800 text-xs shadow-sm">
           Map tile service unreachable; displaying coordinate vector layer and synchronized incident markers.
         </div>
       )}
@@ -1271,11 +1322,9 @@ export function CorridorIntelligenceMap({
         zoomControl={false}
       >
         <TileLayer
+          key={mapStyle}
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url={
-            import.meta.env.VITE_MAP_TILE_URL ||
-            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-          }
+          url={tileUrl}
           eventHandlers={{
             tileerror: () => setTileError(true),
           }}
