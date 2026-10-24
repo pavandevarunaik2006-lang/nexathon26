@@ -17,6 +17,7 @@ import { notificationsRouter } from './routes/notifications.js';
 import { adminRouter } from './routes/admin.js';
 import { emergencyIntelligenceRouter } from './routes/emergencyIntelligence.js';
 import { assistantRouter } from './routes/assistant.js';
+import { passengerJourneysRouter } from './routes/passengerJourneys.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { openApiSpec } from './swagger.js';
 
@@ -102,6 +103,7 @@ export function createApp() {
   app.use('/api/v1/admin', adminRouter);
   app.use('/api/v1', emergencyIntelligenceRouter);
   app.use('/api/v1/assistant', assistantRouter);
+  app.use('/api/v1/passenger/journeys', passengerJourneysRouter);
 
   // Centralized error handler
   app.use(errorHandler);

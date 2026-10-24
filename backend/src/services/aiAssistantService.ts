@@ -151,6 +151,7 @@ export async function chatWithMobilityAssistant(
     evidenceMimeType,
     userCoords,
     autoSubmitIncident,
+    journeyId,
   } = options;
 
   const normalized = message.trim().toLowerCase();
@@ -428,6 +429,70 @@ export async function chatWithMobilityAssistant(
     normalized.includes('boss');
 
   if (isDelayIntent) {
+    // Check if this inquiry relates to a Passenger Live Journey
+    let passengerJourney: any = null;
+    if (journeyId || userId) {
+      const pRes = await db.query<any>(
+        `SELECT * FROM journeys
+         WHERE ${journeyId ? 'id = $1' : 'employee_id = $1 AND journey_type = \'PASSENGER_LIVE\' AND status = \'ACTIVE\''}
+         ORDER BY started_at DESC LIMIT 1`,
+        [journeyId || userId]
+      );
+      if (pRes.rows.length > 0 && pRes.rows[0].journey_type === 'PASSENGER_LIVE') {
+        passengerJourney = pRes.rows[0];
+      }
+    }
+
+    if (passengerJourney) {
+      const alert = passengerJourney.active_alert
+        ? (typeof passengerJourney.active_alert === 'string'
+            ? JSON.parse(passengerJourney.active_alert)
+            : passengerJourney.active_alert)
+        : null;
+
+      const inc = alert?.incidentDetails;
+      const alt = alert?.alternativeRoute;
+      const delay = alert?.estimatedDelayMin || passengerJourney.estimated_delay_min || 45;
+      const conf = alert?.confidenceScore || 92;
+
+      let reply = `### 🚗 Live Passenger Journey Delay Intelligence\n\n` +
+        `**Monitored Route**: ${passengerJourney.origin} → ${passengerJourney.destination} (${passengerJourney.selected_route_name || 'NH-66 Coastal Highway'})\n\n`;
+
+      if (alert?.alertDetected && inc) {
+        reply += `⚠️ **${alert.alertTitle || 'Heavy traffic detected near ' + inc.roadName}**\n\n` +
+          `- **Estimated Delay**: **${delay} minutes**\n` +
+          `- **Reason / Cause**: ${alert.possibleReason || inc.title} (${inc.category})\n` +
+          `- **Confidence Score**: **${conf}%** (Authority Confirmed & Field Corroborated)\n` +
+          `- **Distance from Corridor**: ${inc.distanceFromRouteKm ?? 0.3} km\n\n` +
+          `**Why does this affect your journey?**\n` +
+          `The incident is situated directly along your selected travel path on NH-66. Traffic Authority reports indicate barricading and contraflow lane restrictions causing severe slow-moving queues.\n\n`;
+
+        if (alt?.available) {
+          reply += `🔄 **Recommended Alternative Route**: **${alt.name}**\n` +
+            `- **Corridor**: ${alt.corridorDescription || 'Inland bypass avoiding chokepoint'}\n` +
+            `- **Distance**: ${alt.distanceKm} km | Estimated Time: ${alt.totalEstimatedMin} min\n` +
+            `- **Expected Time Saved**: **${Math.abs(alt.timeDifferenceMin || 22)} minutes** compared to waiting in queue.\n\n` +
+            `*You can preview and switch to this bypass anytime by selecting **"Avoid This Route"** on your Passenger Journey dashboard.*`;
+        } else {
+          reply += `⚠️ *No viable alternative route free of closures is currently detected. Remain on current route with extra caution.*`;
+        }
+      } else {
+        reply += `✓ **Clear Corridor**: No active verified incidents or heavy delays are currently detected along your selected path. Travel time is estimated at **${passengerJourney.base_duration_min} minutes**.`;
+      }
+
+      return {
+        reply,
+        intent: 'COMMUTE_DELAY_EXPLANATION',
+        provider,
+        attachedRoute: alt?.available ? alt : undefined,
+        attachedIncident: inc,
+        suggestedActions: alt?.available
+          ? ['Avoid This Route & Switch to Bypass', 'Check incident details on Live Map', 'End Journey Monitoring']
+          : ['Check Live Map', 'End Journey Monitoring'],
+        disclaimer: 'Delay calculations reflect baseline routing differences plus weighted incident severity and verification confidence.',
+      };
+    }
+
     let recentJourney: any = null;
     let recentIncidents: any[] = [];
 

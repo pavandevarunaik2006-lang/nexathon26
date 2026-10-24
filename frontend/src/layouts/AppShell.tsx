@@ -54,6 +54,7 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
   const mainItems: NavItem[] = [
     { label: 'Dashboard', to: getDefaultHomeForRole(role), icon: LayoutDashboard },
     { label: 'Live Map', to: '/app/map', icon: MapPin },
+    { label: 'Passenger Journey', to: '/app/passenger-journey', icon: Compass },
     { label: 'AI Mobility Assistant', to: '/app/assistant', icon: Sparkles },
     { label: 'Route Planner', to: '/app/routes', icon: Navigation },
     { label: 'Impact Simulator', to: '/app/impact-simulator', icon: GitCompareArrows },
@@ -63,21 +64,23 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
     { label: 'Lifeline Reachability', to: '/app/impact-simulator?tab=reachability', icon: HeartPulse },
     { label: 'Corridor Fragility', to: '/app/impact-simulator?tab=fragility', icon: ShieldAlert },
     { label: 'Verification Engine', to: '/app/verification', icon: ShieldCheck },
-    {
-      label: 'Incident Investigation',
-      to: role === 'TRAFFIC_AUTHORITY' || role === 'ADMIN' ? '/authority/incidents' : '/app/map',
-      icon: Search,
-    },
   ];
+
+  if (role === 'TRAFFIC_AUTHORITY' || role === 'ADMIN') {
+    emergencyIntelligenceItems.push({
+      label: 'Incident Investigation',
+      to: '/authority/incidents',
+      icon: Search,
+    });
+  }
 
   const operationsItems: NavItem[] = [
     { label: 'Report Incident', to: '/app/report-incident', icon: AlertOctagon },
     { label: 'Traffic Alerts', to: '/app/alerts', icon: Bell },
-    { label: 'Commute Proof', to: '/app/journeys', icon: Briefcase },
     {
-      label: 'Vehicle Tracking',
+      label: role === 'EMPLOYER' ? 'Vehicle Tracking' : 'Commute Proof',
       to: role === 'EMPLOYER' ? '/employer/journeys' : '/app/journeys',
-      icon: Car,
+      icon: role === 'EMPLOYER' ? Car : Briefcase,
     },
   ];
 
@@ -123,6 +126,21 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
   sections.push({ section: 'SYSTEM', items: systemItems });
 
   return sections;
+}
+
+function isItemActive(itemTo: string, currentPath: string, currentSearch: string): boolean {
+  const [itemPath, itemQuery] = itemTo.split('?');
+  if (currentPath !== itemPath) return false;
+  if (!itemQuery) {
+    const searchParams = new URLSearchParams(currentSearch);
+    return !searchParams.has('tab');
+  }
+  const itemParams = new URLSearchParams(itemQuery);
+  const searchParams = new URLSearchParams(currentSearch);
+  for (const [key, val] of itemParams.entries()) {
+    if (searchParams.get(key) !== val) return false;
+  }
+  return true;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -247,22 +265,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {group.items.map((item) => {
                   const Icon = item.icon;
                   const isAlertsItem = item.to === '/app/alerts' && unreadCount > 0;
+                  const active = isItemActive(item.to, location.pathname, location.search);
                   return (
                     <NavLink
-                      key={item.to}
+                      key={`${item.label}-${item.to}`}
                       to={item.to}
-                      className={({ isActive }) =>
+                      className={
                         `relative flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all ${
-                          isActive
+                          active
                             ? 'text-white'
                             : 'text-slate-700 hover:text-slate-900 hover:bg-white/40'
                         }`
                       }
                       title={sidebarCollapsed ? item.label : undefined}
                     >
-                      {({ isActive }) => (
+                      {() => (
                         <>
-                          {isActive &&
+                          {active &&
                             (prefersReducedMotion ? (
                               <span className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 shadow-[0_4px_20px_rgba(37,99,235,0.45)] border border-white/50" />
                             ) : (
@@ -650,14 +669,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <div className="space-y-1">
                         {group.items.map((item) => {
                           const Icon = item.icon;
+                          const active = isItemActive(item.to, location.pathname, location.search);
                           return (
                             <NavLink
-                              key={item.to}
+                              key={`${item.label}-${item.to}`}
                               to={item.to}
                               onClick={() => setMobileMenuOpen(false)}
-                              className={({ isActive }) =>
+                              className={
                                 `flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                                  isActive
+                                  active
                                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/30'
                                     : 'text-slate-700 hover:bg-slate-100/80'
                                 }`

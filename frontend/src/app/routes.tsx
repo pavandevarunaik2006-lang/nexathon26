@@ -14,6 +14,7 @@ import {
 import { PassengerDashboardPage } from '../features/dashboard';
 import { InteractiveMapPage } from '../features/maps';
 import { RoutePlannerPage } from '../features/routes';
+import { PassengerJourneyPage } from '../features/passenger';
 import { ImpactSimulatorPage } from '../features/simulation';
 import { AiMobilityAssistantPage } from '../features/assistant';
 import {
@@ -98,6 +99,14 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <InteractiveMapPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/passenger-journey"
+        element={
+          <ProtectedRoute>
+            <PassengerJourneyPage />
           </ProtectedRoute>
         }
       />

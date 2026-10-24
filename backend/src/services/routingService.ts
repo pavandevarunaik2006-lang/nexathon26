@@ -60,7 +60,7 @@ export interface RouteCalculationOptions {
  * Compute minimum distance from an incident point [lat, lng] to a polyline of [lat, lng] coordinates,
  * checking both vertices and segment projections.
  */
-function minDistanceToPolylineKm(lat: number, lng: number, polyline: [number, number][]): number {
+export function minDistanceToPolylineKm(lat: number, lng: number, polyline: [number, number][]): number {
   if (!polyline || polyline.length === 0) return Infinity;
   let minKm = Infinity;
 
@@ -355,7 +355,7 @@ export async function calculateRoutesWithIncidents(
     const graphInland = buildCorridorGraphRoute(
       originCoords,
       destCoords,
-      new Set(['edge_kuloor_baikampady', 'edge_kuntikan_kuloor']),
+      new Set(['edge_kuloor_baikampady', 'edge_kuntikan_kuloor', 'edge_kinnigoli_mulki', 'edge_surathkal_mulki', 'edge_mulki_padubidri']),
       'node_bajpe'
     );
     if (graphInland && graphInland.geometry.length >= 2) {
