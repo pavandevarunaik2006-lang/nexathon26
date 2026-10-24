@@ -47,6 +47,7 @@ import {
   AdminAuditLogsPage,
   AdminSettingsPage,
 } from '../features/admin';
+
 function ProtectedRoute({
   allowedRoles,
   children,
@@ -120,7 +121,7 @@ export function AppRoutes() {
         }
       />
       <Route
-        path="/app/impact-simulator"
+        path="/app/simulator"
         element={
           <ProtectedRoute>
             <ImpactSimulatorPage />
@@ -128,7 +129,7 @@ export function AppRoutes() {
         }
       />
       <Route
-        path="/app/simulator"
+        path="/app/impact-simulator"
         element={
           <ProtectedRoute>
             <ImpactSimulatorPage />
