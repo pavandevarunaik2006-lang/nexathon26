@@ -117,7 +117,7 @@ assistantRouter.post(
  */
 assistantRouter.post(
   '/upload-evidence',
-  authenticate,
+  optionalAuthenticate,
   uploadFlexible,
   async (req: Request, res: Response, next: NextFunction) => {
     try {

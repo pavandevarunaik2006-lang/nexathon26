@@ -116,42 +116,39 @@ export function AiMobilityAssistantPage() {
 
     setIsUploadingImage(true);
     try {
-      const res = await fetch(`${API_BASE}/assistant/upload-evidence`, {
+      const data = await apiRequest<{
+        filePath: string;
+        url: string;
+        originalName: string;
+        mimeType: string;
+      }>('/assistant/upload-evidence', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('roadalert_token') || ''}`,
-        },
         body: formData,
       });
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && json.data) {
-          setAttachedImage((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  filePath: json.data.filePath,
-                  serverUrl: json.data.url,
-                  originalName: json.data.originalName,
-                  mimeType: json.data.mimeType,
-                }
-              : null
-          );
-          showToast({
-            type: 'success',
-            title: 'Evidence Uploaded',
-            message: 'Image ready to attach to your inquiry.',
-          });
-        }
-      } else {
-        throw new Error('Upload failed');
+      if (data) {
+        setAttachedImage((prev) =>
+          prev
+            ? {
+                ...prev,
+                filePath: data.filePath,
+                serverUrl: data.url,
+                originalName: data.originalName,
+                mimeType: data.mimeType,
+              }
+            : null
+        );
+        showToast({
+          type: 'success',
+          title: 'Evidence Uploaded',
+          message: 'Image ready to attach to your inquiry.',
+        });
       }
-    } catch {
+    } catch (err: any) {
       showToast({
         type: 'error',
         title: 'Upload Error',
-        message: 'Could not upload evidence image. You can still send text messages.',
+        message: err?.message || 'Could not upload evidence image. You can still send text messages.',
       });
     } finally {
       setIsUploadingImage(false);
