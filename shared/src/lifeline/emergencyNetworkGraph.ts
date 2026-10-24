@@ -597,14 +597,83 @@ export interface CorridorFragilityRank {
   geometry: [number, number][];
 }
 
+export interface StandardRouteDef {
+  routeId: string;
+  name: string;
+  originNodeId: string;
+  destinationNodeId: string;
+  corridorType: 'COASTAL_ARTERIAL' | 'INTER_CITY' | 'HEALTHCARE_LIFELINE' | 'PORT_LOGISTICS' | 'REGIONAL_FEEDER';
+}
+
+export const STANDARD_ANALYZED_ROUTES: StandardRouteDef[] = [
+  {
+    routeId: 'route_surathkal_pumpwell',
+    name: 'Surathkal NITK to Mangaluru South (Pumpwell)',
+    originNodeId: 'node_surathkal',
+    destinationNodeId: 'node_pumpwell',
+    corridorType: 'COASTAL_ARTERIAL',
+  },
+  {
+    routeId: 'route_udupi_hampankatta',
+    name: 'Udupi Gateway to Mangaluru CBD (Hampankatta)',
+    originNodeId: 'node_udupi',
+    destinationNodeId: 'node_hampankatta',
+    corridorType: 'INTER_CITY',
+  },
+  {
+    routeId: 'route_surathkal_kuntikan',
+    name: 'Surathkal NITK to AJ Hospital Trauma Center (Kuntikan)',
+    originNodeId: 'node_surathkal',
+    destinationNodeId: 'node_kuntikan',
+    corridorType: 'HEALTHCARE_LIFELINE',
+  },
+  {
+    routeId: 'route_baikampady_nanthoor',
+    name: 'Baikampady Port to Nanthoor Junction',
+    originNodeId: 'node_baikampady',
+    destinationNodeId: 'node_nanthoor',
+    corridorType: 'PORT_LOGISTICS',
+  },
+  {
+    routeId: 'route_manipal_surathkal',
+    name: 'Manipal Health Apex to Surathkal NITK',
+    originNodeId: 'node_manipal',
+    destinationNodeId: 'node_surathkal',
+    corridorType: 'INTER_CITY',
+  },
+  {
+    routeId: 'route_mulki_pumpwell',
+    name: 'Mulki Estuary to Mangaluru South (Pumpwell)',
+    originNodeId: 'node_mulki',
+    destinationNodeId: 'node_pumpwell',
+    corridorType: 'COASTAL_ARTERIAL',
+  },
+  {
+    routeId: 'route_padubidri_kpt',
+    name: 'Padubidri Junction to KPT Airport Cross',
+    originNodeId: 'node_padubidri',
+    destinationNodeId: 'node_kpt',
+    corridorType: 'REGIONAL_FEEDER',
+  },
+  {
+    routeId: 'route_udupi_manipal',
+    name: 'Udupi Karavali Bypass to Manipal Tiger Circle',
+    originNodeId: 'node_udupi',
+    destinationNodeId: 'node_manipal',
+    corridorType: 'HEALTHCARE_LIFELINE',
+  },
+];
+
 /**
- * Dijkstra shortest path solver over the Mangaluru-Udupi Emergency Road Graph
+ * Dijkstra shortest path solver over the Mangaluru-Udupi Emergency Road Graph.
+ * Supports bidirectional edges, edge delays, total closures, and directional restrictions.
  */
 export function solveGraphShortestPath(
   fromNodeId: string,
   toNodeId: string,
   blockedEdgeIds: Set<string>,
-  edgeDelayMinutes: Map<string, number> = new Map()
+  edgeDelayMinutes: Map<string, number> = new Map(),
+  blockedDirectedEdges: Set<string> = new Set()
 ): {
   path: string[];
   edgeIds: string[];
@@ -615,7 +684,7 @@ export function solveGraphShortestPath(
     return { path: [fromNodeId], edgeIds: [], totalTimeMin: 0, totalDistanceKm: 0 };
   }
 
-  // Build adjacency graph (bidirectional for road network corridors)
+  // Build adjacency graph (bidirectional for road network corridors, with directional restriction checking)
   const adj: Record<string, { to: string; edge: GraphEdge; weight: number }[]> = {};
   for (const nodeKey of Object.keys(CORRIDOR_GRAPH_NODES)) {
     adj[nodeKey] = [];
@@ -628,10 +697,13 @@ export function solveGraphShortestPath(
     const addedDelay = edgeDelayMinutes.get(edge.id) || 0;
     const weight = edge.baseTimeMin + addedDelay;
 
-    if (adj[edge.fromNode]) {
+    const fwdKey = `${edge.fromNode}->${edge.toNode}`;
+    const revKey = `${edge.toNode}->${edge.fromNode}`;
+
+    if (!blockedDirectedEdges.has(fwdKey) && adj[edge.fromNode]) {
       adj[edge.fromNode].push({ to: edge.toNode, edge, weight });
     }
-    if (adj[edge.toNode]) {
+    if (!blockedDirectedEdges.has(revKey) && adj[edge.toNode]) {
       adj[edge.toNode].push({ to: edge.fromNode, edge, weight });
     }
   }

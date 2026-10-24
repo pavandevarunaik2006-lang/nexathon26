@@ -185,6 +185,12 @@ export const HypotheticalDisruptionSchema = z.object({
     .default('CONFIRMED_CLOSURE'),
   associatedIncidentId: z.string().optional().nullable(),
   notes: z.string().max(500).optional(),
+  incidentType: z.string().optional(),
+  closureCondition: z.enum(['COMPLETE_CLOSURE', 'PARTIAL_RESTRICTION']).optional(),
+  capacityReductionPercent: z.number().min(0).max(100).optional(),
+  durationMinutes: z.number().min(0).max(1440).optional(),
+  direction: z.enum(['BOTH', 'NORTHBOUND_ONLY', 'SOUTHBOUND_ONLY']).optional(),
+  startTime: z.string().optional(),
 });
 
 export const RunImpactSimulationSchema = z.object({
@@ -198,4 +204,9 @@ export const RunImpactSimulationSchema = z.object({
   testOriginNodeId: z.string().optional(),
   testDestinationNodeId: z.string().optional(),
   alternateInterventionEdgeId: z.string().optional(),
+  durationMinutes: z.number().min(0).max(1440).optional(),
+  direction: z.enum(['BOTH', 'NORTHBOUND_ONLY', 'SOUTHBOUND_ONLY']).optional(),
+  timeHorizonMinutes: z.number().min(0).max(1440).optional(),
+  selectedIncidentId: z.string().optional().nullable(),
 });
+

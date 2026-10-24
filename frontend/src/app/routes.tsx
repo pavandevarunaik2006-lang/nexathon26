@@ -47,6 +47,8 @@ import {
   AdminAuditLogsPage,
   AdminSettingsPage,
 } from '../features/admin';
+import { ImpactSimulatorPage } from '../features/simulation';
+
 
 function ProtectedRoute({
   allowedRoles,
@@ -121,7 +123,11 @@ export function AppRoutes() {
         }
       />
       <Route
+<<<<<<< Updated upstream
         path="/app/impact-simulator"
+=======
+        path="/app/simulator"
+>>>>>>> Stashed changes
         element={
           <ProtectedRoute>
             <ImpactSimulatorPage />
@@ -167,6 +173,8 @@ export function AppRoutes() {
             <AiMobilityAssistantPage />
           </ProtectedRoute>
         }
+        path="/app/impact-simulator"
+        element={<Navigate to="/app/simulator" replace />}
       />
       <Route
         path="/app/report-incident"

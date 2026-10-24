@@ -17,7 +17,7 @@ export type RippleImpactClass =
   | 'UNAFFECTED';
 
 export interface HypotheticalDisruption {
-  id: string;
+  id?: string;
   edgeId: string;
   roadName: string;
   disruptionType: DisruptionType;
@@ -26,17 +26,27 @@ export interface HypotheticalDisruption {
   verificationAssumption: 'CONFIRMED_CLOSURE' | 'UNVERIFIED_ASSUMPTION';
   associatedIncidentId?: string | null;
   notes?: string;
+  incidentType?: string;
+  closureCondition?: 'COMPLETE_CLOSURE' | 'PARTIAL_RESTRICTION';
+  capacityReductionPercent?: number;
+  durationMinutes?: number;
+  direction?: 'BOTH' | 'NORTHBOUND_ONLY' | 'SOUTHBOUND_ONLY';
+  startTime?: string;
 }
 
 export interface ScenarioDefinition {
-  id: string;
+  id?: string;
   name: string;
-  description: string;
+  description?: string;
   disruptions: HypotheticalDisruption[];
   focusHospitalId?: string;
   testOriginNodeId?: string;
   testDestinationNodeId?: string;
   alternateInterventionEdgeId?: string; // Optional intervention edge tested
+  durationMinutes?: number;
+  direction?: 'BOTH' | 'NORTHBOUND_ONLY' | 'SOUTHBOUND_ONLY';
+  timeHorizonMinutes?: number;
+  selectedIncidentId?: string | null;
 }
 
 export interface RippleEffectSegment {
@@ -51,6 +61,48 @@ export interface RippleEffectSegment {
   isBridgeOrEstuary: boolean;
   absorptionRole?: string; // e.g., 'Primary Detour Bypass for NH-66 traffic'
   geometry: [number, number][];
+}
+
+export interface AnalyzedRouteImpact {
+  routeId: string;
+  name: string;
+  originNodeId: string;
+  destinationNodeId: string;
+  originName: string;
+  destinationName: string;
+  baselineTimeMin: number;
+  simulatedTimeMin: number;
+  delayDeltaMin: number;
+  baselineDistanceKm: number;
+  simulatedDistanceKm: number;
+  classification:
+    | 'DIRECTLY_AFFECTED'
+    | 'INDIRECTLY_AFFECTED'
+    | 'POTENTIALLY_AFFECTED'
+    | 'NO_MODELED_IMPACT'
+    | 'SEVERED';
+  alternativeAvailable: boolean;
+  alternativeRouteName?: string;
+  explanation: string;
+  baselinePath: string[];
+  simulatedPath: string[];
+  baselineEdgeIds: string[];
+  simulatedEdgeIds: string[];
+  geometry?: [number, number][];
+}
+
+export interface DestinationAccessibilitySummary {
+  nodeId: string;
+  name: string;
+  populationZone: string;
+  corridor: string;
+  baselineAvgTimeMin: number;
+  simulatedAvgTimeMin: number;
+  delayDeltaMin: number;
+  accessibilityStatus: 'REACHABLE_NORMAL' | 'REACHABLE_DELAYED' | 'SEVERED_UNREACHABLE';
+  isSevered: boolean;
+  reachableOriginsCount: number;
+  totalOriginsCount: number;
 }
 
 export interface HospitalImpactAssessment {
@@ -94,6 +146,18 @@ export interface ExplainableRecommendation {
   triggerConditionsForChange: string;
 }
 
+export interface RelevantIncidentSummary {
+  id: string;
+  title: string;
+  category: string;
+  severity: string;
+  roadName: string;
+  verificationStatus: string;
+  proximityNote: string;
+  latitude?: number;
+  longitude?: number;
+}
+
 export interface SimulationResult {
   scenarioId: string;
   scenarioName: string;
@@ -129,6 +193,12 @@ export interface SimulationResult {
   severedPopulationZonesCount: number;
   recommendation: ExplainableRecommendation;
   limitationsNotice: string[];
+  // Extended Impact Intelligence metrics
+  analyzedRoutes?: AnalyzedRouteImpact[];
+  destinationsAccessibility?: DestinationAccessibilitySummary[];
+  affectedRoutesAnalyzedCount?: number;
+  destinationsWithChangedAccessibilityCount?: number;
+  relevantIncidentsAlongRoutes?: RelevantIncidentSummary[];
 }
 
 export interface ScenarioComparisonMatrix {
@@ -144,6 +214,17 @@ export interface ScenarioComparisonMatrix {
     hospitalsImpactedCount: number;
     viableRouteExists: boolean;
     recommendedIntervention: string;
+    // Decision Intelligence Comparison Table Fields
+    affectedRoad?: string;
+    closureCondition?: string;
+    duration?: string;
+    baselineTravelTime?: string;
+    simulatedTravelTime?: string;
+    additionalTravelTime?: string;
+    alternativeRouteAvailable?: string;
+    affectedRoutesAnalyzed?: number;
+    destinationsWithChangedAccessibility?: number;
   }>;
   summaryVerdict: string;
 }
+

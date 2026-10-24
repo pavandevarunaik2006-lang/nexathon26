@@ -33,6 +33,8 @@ export async function listIncidentsFiltered(query: Record<string, any>) {
     minConfidence,
     search,
     demoOnly,
+    dateFrom,
+    dateTo,
     page = '1',
     limit = '50',
   } = query;
@@ -58,6 +60,28 @@ export async function listIncidentsFiltered(query: Record<string, any>) {
   }
   if (demoOnly === 'true') {
     conditions.push(`i.demo_data = TRUE`);
+  }
+  if (dateFrom && String(dateFrom).trim() !== '') {
+    try {
+      const dFrom = new Date(String(dateFrom));
+      if (!isNaN(dFrom.getTime())) {
+        params.push(dFrom.toISOString());
+        conditions.push(`i.reported_at >= $${params.length}`);
+      }
+    } catch {
+      // ignore invalid date
+    }
+  }
+  if (dateTo && String(dateTo).trim() !== '') {
+    try {
+      const dTo = new Date(String(dateTo));
+      if (!isNaN(dTo.getTime())) {
+        params.push(dTo.toISOString());
+        conditions.push(`i.reported_at <= $${params.length}`);
+      }
+    } catch {
+      // ignore invalid date
+    }
   }
   if (search && String(search).trim() !== '') {
     params.push(`%${String(search).trim()}%`);

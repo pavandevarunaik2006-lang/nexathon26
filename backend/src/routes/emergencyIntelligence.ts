@@ -8,6 +8,7 @@ import {
 import {
   runImpactSimulation,
   compareScenarios,
+  buildStandardComparisonSuite,
 } from '../services/impactSimulationService.js';
 import { evaluateHospitalReachability } from '../services/lifelineReachabilityService.js';
 import {
@@ -20,6 +21,111 @@ import { evaluateIncidentTrust } from '../services/incidentTrustService.js';
 import { optionalAuthenticate } from '../middleware/auth.js';
 
 export const emergencyIntelligenceRouter = Router();
+
+export const SIMULATION_PRESETS = [
+  {
+    id: 'kuloor-bridge-severance',
+    name: 'Kuloor Bridge Severance (NH-66 Coastal Link)',
+    description: 'Structural failure / emergency closure of the primary Gurupura River crossing.',
+    category: 'INFRASTRUCTURE',
+    disruptions: [
+      {
+        id: 'dis-kuloor',
+        edgeId: 'edge_kuntikan_kuloor',
+        roadName: 'NH-66 Kuntikan to Kuloor Bridge Causeway',
+        disruptionType: 'COMPLETE_CLOSURE',
+        closureCondition: 'COMPLETE_CLOSURE',
+        severity: 'CRITICAL',
+        delayPenaltyMinutes: 999,
+        durationMinutes: 120,
+        verificationAssumption: 'CONFIRMED_CLOSURE',
+      },
+    ],
+    testOriginNodeId: 'node_surathkal',
+    testDestinationNodeId: 'node_nanthoor',
+    focusHospitalId: 'hosp-aj-mangaluru',
+  },
+  {
+    id: 'mulki-estuary-flood',
+    name: 'Mulki Estuary Inundation (Monsoon Flooding)',
+    description: 'High-tide coastal storm surge submerges the NH-66 Shambhavi river causeway.',
+    category: 'FLOODING',
+    disruptions: [
+      {
+        id: 'dis-mulki',
+        edgeId: 'edge_surathkal_mulki',
+        roadName: 'NH-66 Surathkal to Mulki River Bridge',
+        disruptionType: 'PARTIAL_RESTRICTION',
+        closureCondition: 'PARTIAL_RESTRICTION',
+        severity: 'HIGH',
+        delayPenaltyMinutes: 45,
+        capacityReductionPercent: 60,
+        durationMinutes: 60,
+        verificationAssumption: 'CONFIRMED_CLOSURE',
+      },
+    ],
+    testOriginNodeId: 'node_surathkal',
+    testDestinationNodeId: 'node_udupi',
+    focusHospitalId: 'hosp-kmc-manipal',
+  },
+  {
+    id: 'surathkal-chokepoint',
+    name: 'Surathkal Chokepoint & Petrochemical Spill',
+    description: 'Hazardous tanker spill restricts coastal expressway to single lane alternating traffic.',
+    category: 'OBSTRUCTION',
+    disruptions: [
+      {
+        id: 'dis-surathkal',
+        edgeId: 'edge_baikampady_surathkal',
+        roadName: 'NH-66 Baikampady to Surathkal NITK',
+        disruptionType: 'PARTIAL_RESTRICTION',
+        closureCondition: 'PARTIAL_RESTRICTION',
+        severity: 'MODERATE',
+        delayPenaltyMinutes: 25,
+        capacityReductionPercent: 50,
+        durationMinutes: 30,
+        verificationAssumption: 'CONFIRMED_CLOSURE',
+      },
+    ],
+    testOriginNodeId: 'node_pumpwell',
+    testDestinationNodeId: 'node_padubidri',
+    focusHospitalId: 'hosp-wenlock-mangaluru',
+  },
+  {
+    id: 'manipal-dual-severance',
+    name: 'Udupi-Manipal Dual Severance (Lifeline Isolation)',
+    description: 'Simultaneous landslip on NH-169A and bridge damage on Eastern Karkala Lifeline.',
+    category: 'DISASTER',
+    disruptions: [
+      {
+        id: 'dis-manipal-1',
+        edgeId: 'edge_udupi_manipal',
+        roadName: 'NH-169A Udupi-Manipal Apex Lifeline',
+        disruptionType: 'COMPLETE_CLOSURE',
+        closureCondition: 'COMPLETE_CLOSURE',
+        severity: 'CRITICAL',
+        delayPenaltyMinutes: 999,
+        durationMinutes: 120,
+        verificationAssumption: 'CONFIRMED_CLOSURE',
+      },
+      {
+        id: 'dis-manipal-2',
+        edgeId: 'edge_karkala_manipal',
+        roadName: 'Karkala-Hiriadka-Manipal Eastern Lifeline',
+        disruptionType: 'COMPLETE_CLOSURE',
+        closureCondition: 'COMPLETE_CLOSURE',
+        severity: 'CRITICAL',
+        delayPenaltyMinutes: 999,
+        durationMinutes: 120,
+        verificationAssumption: 'CONFIRMED_CLOSURE',
+      },
+    ],
+    testOriginNodeId: 'node_surathkal',
+    testDestinationNodeId: 'node_manipal',
+    focusHospitalId: 'hosp-kmc-manipal',
+  },
+];
+
 
 /**
  * Feature 1: Lifeline Hospitals List
@@ -195,6 +301,21 @@ emergencyIntelligenceRouter.get(
 );
 
 /**
+ * Flagship Feature: Preset What-If Scenarios
+ */
+emergencyIntelligenceRouter.get(
+  '/simulation/presets',
+  (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      data: {
+        presets: SIMULATION_PRESETS,
+      },
+    });
+  }
+);
+
+/**
  * Flagship Feature: Run Impact Simulation
  * Evaluates hypothetical network closures and returns ripple effect & hospital accessibility intelligence
  */
@@ -213,6 +334,10 @@ emergencyIntelligenceRouter.post(
         testOriginNodeId: parsed.testOriginNodeId,
         testDestinationNodeId: parsed.testDestinationNodeId,
         alternateInterventionEdgeId: parsed.alternateInterventionEdgeId,
+        durationMinutes: parsed.durationMinutes,
+        direction: parsed.direction,
+        timeHorizonMinutes: parsed.timeHorizonMinutes,
+        selectedIncidentId: parsed.selectedIncidentId,
       });
 
       res.json({
@@ -256,3 +381,44 @@ emergencyIntelligenceRouter.post(
     }
   }
 );
+
+/**
+ * Flagship Feature: Compare Standard Preset Suite (Baseline vs Scenario A vs Scenario B)
+ * For a given corridor or incident
+ */
+emergencyIntelligenceRouter.post(
+  '/simulation/compare-presets',
+  optionalAuthenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { edgeId, roadName, incidentTitle } = req.body;
+      if (!edgeId) {
+        res.status(400).json({
+          success: false,
+          error: {
+            code: 'MISSING_EDGE_ID',
+            message: 'edgeId is required to generate a comparison suite',
+          },
+        });
+        return;
+      }
+
+      const targetEdge = CORRIDOR_GRAPH_EDGES.find((e) => e.id === edgeId);
+      const effectiveRoad = roadName || targetEdge?.roadName || 'Primary Corridor';
+
+      const suite = buildStandardComparisonSuite(edgeId, effectiveRoad, incidentTitle);
+      const comparison = await compareScenarios(suite);
+
+      res.json({
+        success: true,
+        data: {
+          scenariosEvaluated: suite,
+          matrix: comparison,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+

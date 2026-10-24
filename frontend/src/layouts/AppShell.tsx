@@ -35,6 +35,7 @@ import {
   ShieldAlert,
   Car,
   Sparkles,
+  FlaskConical,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -75,6 +76,7 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
   }
 
   const operationsItems: NavItem[] = [
+    { label: 'Impact Simulator', to: '/app/simulator', icon: FlaskConical },
     { label: 'Report Incident', to: '/app/report-incident', icon: AlertOctagon },
     { label: 'Traffic Alerts', to: '/app/alerts', icon: Bell },
     {
@@ -96,12 +98,19 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
   ];
 
   const authorityAdminItems: NavItem[] = [
+  const authorityItems: NavItem[] = [
+    { label: 'Dashboard', to: '/authority/dashboard', icon: LayoutDashboard },
+    { label: 'Incident Management', to: '/authority/incidents', icon: AlertOctagon },
+    { label: 'Road Impact Simulator', to: '/app/simulator', icon: FlaskConical },
     { label: 'Corridor Hotspots', to: '/authority/hotspots', icon: Flame },
     { label: 'Analytics & Reports', to: '/authority/analytics', icon: BarChart3 },
     { label: 'Problem Dossiers', to: '/authority/problem-reports', icon: FileText },
   ];
 
   const adminItems: NavItem[] = [
+    { label: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
+    { label: 'Incident Management', to: '/admin/incidents', icon: AlertOctagon },
+    { label: 'Road Impact Simulator', to: '/app/simulator', icon: FlaskConical },
     { label: 'Users & Roles', to: '/admin/users', icon: Users },
     { label: 'Organizations', to: '/admin/organizations', icon: Building2 },
     { label: 'Flagged Complaints', to: '/admin/complaints', icon: Scale },
@@ -121,6 +130,25 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
     sections.push({ section: 'ADMINISTRATION', items: authorityAdminItems });
   } else if (role === 'ADMIN') {
     sections.push({ section: 'ADMINISTRATION', items: adminItems });
+    return [
+      { section: 'Commuter & Employee Ops', items: commuterItems.slice(0, 7) },
+      { section: 'Admin & Authority', items: employerItems },
+      { section: 'System', items: systemItems },
+    ];
+  }
+  if (role === 'TRAFFIC_AUTHORITY') {
+    return [
+      { section: 'Commuter & Employee Ops', items: commuterItems },
+      { section: 'Admin & Authority', items: authorityItems },
+      { section: 'System', items: systemItems },
+    ];
+  }
+  if (role === 'ADMIN') {
+    return [
+      { section: 'Commuter & Employee Ops', items: commuterItems },
+      { section: 'Admin & Authority', items: adminItems },
+      { section: 'System', items: systemItems },
+    ];
   }
 
   sections.push({ section: 'SYSTEM', items: systemItems });
