@@ -18,6 +18,7 @@ build/
 # Local embedded database & uploaded evidence files
 backend/data/
 backend/uploads/
+uploads/
 .pglite-data/
 apps/
 
