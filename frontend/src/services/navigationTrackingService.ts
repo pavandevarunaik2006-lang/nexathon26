@@ -16,4 +16,7 @@ export {
   detectCoordinateOrder,
   normalizeCoordinateToLatLng,
   normalizePolylineGeometry,
+  type NavigationOriginMode,
+  type NavigationPositioningState,
+  resolveNavigationPositioning,
 } from '@roadalert/shared';

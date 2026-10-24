@@ -25,6 +25,14 @@ const EnvSchema = z.object({
   MAX_UPLOAD_SIZE_MB: z.coerce.number().positive().default(10),
   OSRM_BASE_URL: z.string().default('https://router.project-osrm.org'),
   AI_PROVIDER: z.string().default('heuristic'),
+  ROAD_DAMAGE_MODEL_PATH: z.string().default('./models/best.onnx'),
+  ROAD_DAMAGE_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.25),
+  ROAD_DAMAGE_IMAGE_SIZE: z.coerce.number().int().positive().default(640),
+  ROAD_DAMAGE_ENABLED: z
+    .string()
+    .transform((val) => val === 'true' || val === '1')
+    .or(z.boolean())
+    .default(true),
 });
 
 const parsedEnv = EnvSchema.safeParse(process.env);

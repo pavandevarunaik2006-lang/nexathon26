@@ -2,12 +2,14 @@ import { env } from './config/env.js';
 import { createApp } from './app.js';
 import { db } from './db/index.js';
 import { seedDatabase } from './db/seedData.js';
+import { initRoadDamageService } from './services/roadDamageInferenceService.js';
 
 const PORT = env.PORT;
 
 async function bootstrap() {
   await db.init();
   await seedDatabase({ force: false });
+  await initRoadDamageService();
 
   const app = createApp();
   const server = app.listen(PORT, () => {

@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import path from 'path';
+import { env } from '../config/env.js';
 import { db } from '../db/index.js';
 import { ApiError } from '../middleware/errorHandler.js';
 import {
@@ -11,6 +13,10 @@ import {
   recalculateIncidentConfidence,
   haversineDistanceKm,
 } from './verificationEngine.js';
+import {
+  detectRoadDamage,
+  RoadDamageAnalysisResult,
+} from './roadDamageInferenceService.js';
 import {
   CreateIncidentSchema,
   PatchIncidentSchema,
@@ -396,6 +402,18 @@ export async function attachIncidentEvidence(
   }
 
   const storageKey = file ? file.filename : body?.storageKey || 'uploaded-evidence.jpg';
+
+  // Run road damage detection asynchronously on uploaded photo evidence
+  let roadDamageAnalysis: RoadDamageAnalysisResult | undefined;
+  if (file && evidenceType === 'PHOTO') {
+    try {
+      const filePath = file.path || path.resolve(process.cwd(), env.UPLOAD_DIR, file.filename);
+      roadDamageAnalysis = await detectRoadDamage(filePath);
+    } catch (err: any) {
+      console.warn(`[RoadDamageDetector] Detection skipped on evidence upload: ${err.message}`);
+    }
+  }
+
   const metadata = {
     originalName: file?.originalname || body?.caption || 'Scene evidence',
     mimeType: file?.mimetype || 'image/jpeg',
@@ -403,6 +421,19 @@ export async function attachIncidentEvidence(
     caption: body?.caption || 'User submitted verification evidence',
     latitude: body?.latitude ? Number(body.latitude) : undefined,
     longitude: body?.longitude ? Number(body.longitude) : undefined,
+    ...(roadDamageAnalysis
+      ? {
+          roadDamageAnalysis: {
+            analyzed: roadDamageAnalysis.analyzed,
+            modelLoaded: roadDamageAnalysis.modelLoaded,
+            modelName: roadDamageAnalysis.modelName,
+            damageDetected: roadDamageAnalysis.damageDetected,
+            detectionsCount: roadDamageAnalysis.detectionsCount,
+            detections: roadDamageAnalysis.detections,
+            statusNote: roadDamageAnalysis.statusNote,
+          },
+        }
+      : {}),
   };
 
   const evidenceId = crypto.randomUUID();
@@ -428,6 +459,7 @@ export async function attachIncidentEvidence(
       evidenceId,
       evidenceType,
       storageKey,
+      damageDetected: roadDamageAnalysis?.damageDetected ?? false,
     },
   });
 
@@ -448,6 +480,7 @@ export async function attachIncidentEvidence(
     url: evidenceUrl,
     evidenceUrl,
     confidenceBreakdown: breakdown,
+    roadDamageAnalysis,
   };
 }
 

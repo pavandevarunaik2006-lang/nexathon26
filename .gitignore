@@ -28,3 +28,15 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
+
+# AI Datasets & Large Model Checkpoints
+data/
+*.pt
+*.pth
+*.onnx
+*.bin
+*.tar.gz
+*.zip
+checkpoints/
+.cache/
+
