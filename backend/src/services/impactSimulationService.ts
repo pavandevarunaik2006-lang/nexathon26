@@ -17,6 +17,7 @@ import {
 } from '@roadalert/shared';
 import { db } from '../db/index.js';
 import { findClosestEdgeForIncident } from './lifelineReachabilityService.js';
+import { haversineDistanceKm } from './verificationEngine.js';
 
 export const SIMULATION_ENGINE_VERSION = 'v1.5.0-deterministic-network';
 
@@ -611,8 +612,8 @@ export async function runImpactSimulation(
         proximityNote: affectedAndDetourEdgeIds.has(matchedEdge.id)
           ? `On corridor segment: ${matchedEdge.roadName}`
           : `Within 2.0 km of affected transit corridor`,
-        latitude: !isNaN(lat) && lat !== 0 ? lat : undefined,
-        longitude: !isNaN(lng) && lng !== 0 ? lng : undefined,
+        latitude: !isNaN(incLat) && incLat !== 0 ? incLat : undefined,
+        longitude: !isNaN(incLng) && incLng !== 0 ? incLng : undefined,
       });
     }
   }

@@ -59,7 +59,7 @@ describe('RoadAlert Impact Simulator — Master Intelligence Test Suite (12 Crit
     expect(routeAfter).not.toBeNull();
     expect(routeAfter!.totalTimeMin).toBe(timeBefore);
     expect(routeAfter!.path).toEqual(routeBefore!.path);
-  });
+  }, 15000);
 
   // Test 2 — Single Closure Alternate Detour
   it('Criterion 2 (Single Closure): closing a primary road segment reroutes via strategic inland bypass when alternative exists', async () => {

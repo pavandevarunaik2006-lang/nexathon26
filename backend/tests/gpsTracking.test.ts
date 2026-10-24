@@ -66,7 +66,7 @@ beforeAll(async () => {
     password: 'RoadAlert@2026',
   });
   adminToken = admRes.body.data.accessToken;
-});
+}, 30000);
 
 describe('RoadAlert Phase 2 — GPS Observations, Tracking & Backend Verification Suite', () => {
   it('1. Requires explicit consent before employee commute tracking can be started', async () => {

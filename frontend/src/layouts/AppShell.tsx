@@ -98,7 +98,6 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
   ];
 
   const authorityAdminItems: NavItem[] = [
-  const authorityItems: NavItem[] = [
     { label: 'Dashboard', to: '/authority/dashboard', icon: LayoutDashboard },
     { label: 'Incident Management', to: '/authority/incidents', icon: AlertOctagon },
     { label: 'Road Impact Simulator', to: '/app/simulator', icon: FlaskConical },
@@ -130,25 +129,6 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
     sections.push({ section: 'ADMINISTRATION', items: authorityAdminItems });
   } else if (role === 'ADMIN') {
     sections.push({ section: 'ADMINISTRATION', items: adminItems });
-    return [
-      { section: 'Commuter & Employee Ops', items: commuterItems.slice(0, 7) },
-      { section: 'Admin & Authority', items: employerItems },
-      { section: 'System', items: systemItems },
-    ];
-  }
-  if (role === 'TRAFFIC_AUTHORITY') {
-    return [
-      { section: 'Commuter & Employee Ops', items: commuterItems },
-      { section: 'Admin & Authority', items: authorityItems },
-      { section: 'System', items: systemItems },
-    ];
-  }
-  if (role === 'ADMIN') {
-    return [
-      { section: 'Commuter & Employee Ops', items: commuterItems },
-      { section: 'Admin & Authority', items: adminItems },
-      { section: 'System', items: systemItems },
-    ];
   }
 
   sections.push({ section: 'SYSTEM', items: systemItems });
