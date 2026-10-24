@@ -16,6 +16,8 @@ import { InteractiveMapPage } from '../features/maps';
 import { RoutePlannerPage } from '../features/routes';
 import { PassengerJourneyPage } from '../features/passenger';
 import { ImpactSimulatorPage } from '../features/simulation';
+import { LifelineReachabilityPage } from '../features/lifeline';
+import { CorridorFragilityPage } from '../features/fragility';
 import { AiMobilityAssistantPage } from '../features/assistant';
 import {
   ReportIncidentPage,
@@ -123,6 +125,38 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <ImpactSimulatorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/lifeline"
+        element={
+          <ProtectedRoute>
+            <LifelineReachabilityPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/lifeline-reachability"
+        element={
+          <ProtectedRoute>
+            <LifelineReachabilityPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/fragility"
+        element={
+          <ProtectedRoute>
+            <CorridorFragilityPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/corridor-fragility"
+        element={
+          <ProtectedRoute>
+            <CorridorFragilityPage />
           </ProtectedRoute>
         }
       />

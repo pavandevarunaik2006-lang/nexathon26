@@ -61,8 +61,8 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
   ];
 
   const emergencyIntelligenceItems: NavItem[] = [
-    { label: 'Lifeline Reachability', to: '/app/impact-simulator?tab=reachability', icon: HeartPulse },
-    { label: 'Corridor Fragility', to: '/app/impact-simulator?tab=fragility', icon: ShieldAlert },
+    { label: 'Lifeline Reachability', to: '/app/lifeline', icon: HeartPulse },
+    { label: 'Corridor Fragility', to: '/app/fragility', icon: ShieldAlert },
     { label: 'Verification Engine', to: '/app/verification', icon: ShieldCheck },
   ];
 
