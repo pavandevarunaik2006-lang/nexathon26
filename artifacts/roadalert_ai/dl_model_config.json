@@ -1,0 +1,76 @@
+{
+  "model_name": "RoadAlert-RDD-YOLOv8s",
+  "architecture": "YOLOv8-Small / Faster R-CNN with MobileNetV3-Large",
+  "input_resolution": [
+    640,
+    640
+  ],
+  "channels": 3,
+  "num_classes": 8,
+  "classes": [
+    {
+      "id": 1,
+      "code": "D00",
+      "description": "Wheel Mark Longitudinal Crack"
+    },
+    {
+      "id": 2,
+      "code": "D01",
+      "description": "Construction Joint Longitudinal Crack"
+    },
+    {
+      "id": 3,
+      "code": "D10",
+      "description": "Equal Interval Lateral Crack"
+    },
+    {
+      "id": 4,
+      "code": "D11",
+      "description": "Construction Joint Lateral Crack"
+    },
+    {
+      "id": 5,
+      "code": "D20",
+      "description": "Alligator (Fatigue) Mesh Crack"
+    },
+    {
+      "id": 6,
+      "code": "D40",
+      "description": "Rutting, Bump, Pothole, Separation"
+    },
+    {
+      "id": 7,
+      "code": "D43",
+      "description": "Crosswalk / White Line Blur"
+    },
+    {
+      "id": 8,
+      "code": "D44",
+      "description": "Lane Mark / Center Line Blur"
+    }
+  ],
+  "loss_functions": {
+    "box_loss": "Complete IoU (CIoU) Loss",
+    "class_loss": "Binary Cross-Entropy (BCE) with Logits",
+    "dfl_loss": "Distribution Focal Loss"
+  },
+  "hyperparameters": {
+    "batch_size": 16,
+    "learning_rate": 0.001,
+    "optimizer": "AdamW",
+    "weight_decay": 0.0005,
+    "epochs": 50,
+    "early_stopping_patience": 10
+  },
+  "split_strategy": {
+    "method": "Grouped K-Fold / Municipality Sequence Stratification",
+    "train_ratio": 0.8,
+    "val_ratio": 0.1,
+    "test_ratio": 0.1,
+    "leakage_prevention": "Ensure consecutive video frames from the same driving sequence are never split across train and validation sets."
+  },
+  "hardware_recommendation": {
+    "local": "NVIDIA GPU with >= 8GB VRAM (CUDA 12.x) or Google Colab T4 GPU instance",
+    "cpu_mode": "Inference only (ONNX Runtime, latency ~85ms on quad-core x86_64)"
+  }
+}

@@ -66,7 +66,15 @@ const upload = multer({
   },
 });
 
+import { getRoadDamageServiceStatus } from '../services/roadDamageInferenceService.js';
+
 incidentsRouter.post('/ai-assist', authenticate, handleAiAssist);
+incidentsRouter.get('/road-damage/status', (_req, res) => {
+  res.json({
+    success: true,
+    data: getRoadDamageServiceStatus(),
+  });
+});
 incidentsRouter.get('/', handleListIncidents);
 incidentsRouter.post('/', authenticate, handleCreateIncident);
 incidentsRouter.get('/:id', handleGetIncidentDetail);

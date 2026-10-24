@@ -1,0 +1,37 @@
+{
+  "dataset_name": "DSTI/traffic-accidents-reports-800",
+  "license": "MIT",
+  "task": "5W1H Structured Input -> Single-Paragraph Incident Report (Text2Text Generation)",
+  "splits": {
+    "train": 629,
+    "eval": 70,
+    "test": 100
+  },
+  "samples": [
+    {
+      "index": 0,
+      "input": "What: rear-end collision, 2 vehicles\nWhen: Occurrence: July 6, 2024, 21:55; Discovery: July 6, 2024, 21:58\nWhere: North Highway near exit 45\nWho: Ms. Sophia Lin \u2013 Vehicle A (SUV), rear driver; Mr. David Carter \u2013 Vehicle B (compact car), injured\nHow: Vehicle A failed to brake in time, rear-ending Vehicle B in slow traffic\nWhy: Driver inattention by Vehicle A\nContingencyActions: Police notified, paramedics dispatched, debris cleared from highway",
+      "target": "On July 6, 2024, at 21:55, a rear-end collision occurred on North Highway near exit 45. Ms. Sophia Lin, driving Vehicle A (an SUV), failed to react to slowing traffic and struck Vehicle B (a compact car) operated by Mr. David Carter. Mr. Carter sustained mild whiplash. Police and paramedics responded quickly and highway debris was removed."
+    },
+    {
+      "index": 1,
+      "input": "What: Sideswipe incident between Vehicle A (car) and Vehicle B (bicycle)\nWhen: Occurrence: July 2, 2024, 18:15\nWhere: Broadway near 5th Street\nWho: Vehicle A: Mr. John Oliver, car driver; Vehicle B: Ms. Maria Lopez, cyclist\nHow: Car sideswiped bicycle in passing maneuver\nWhy: Car failed to observe bicycle during lane shift\nContingencyActions: First aid administered to cyclist, bike lane closed temporarily, police notified",
+      "target": "On July 2, 2024, at 18:15, Vehicle A (car) driven by Mr. John Oliver sideswiped Vehicle B (bicycle) ridden by Ms. Maria Lopez while passing on Broadway near 5th Street. The car failed to safely clear the bicycle during a lane shift. Passersby administered first aid to Ms. Lopez and contacted police. The bike lane was closed for 20 minutes."
+    },
+    {
+      "index": 2,
+      "input": "What: Car lost control, collided with van in wet conditions\nWhen: Occurrence: July 3, 2024, 20:40; Discovery: Immediate\nWhere: Elm St underpass, Boston\nWho: Ms. Gina Choi \u2013 Vehicle A, compact car, skidded; Mr. Ted Morales \u2013 Vehicle B, delivery van, hit by car\nHow: Compact car lost traction in heavy rain, slid into van\nWhy: Reduced traction due to wet road\nContingencyActions: Police and tow truck called, occupants checked, roadway cleared",
+      "target": "On July 3, 2024, at 8:40 p.m., Vehicle A, a compact car driven by Gina Choi, lost control on Elm St underpass during heavy rain, skidding into Vehicle B, a delivery van operated by Ted Morales. No injuries reported, but traffic was delayed. Police and a tow truck responded promptly and ensured occupants were safe."
+    },
+    {
+      "index": 3,
+      "input": "What: T-bone collision at intersection\nWhen: Occurrence: May 18, 2024, 21:10\nWhere: Lexington Avenue and 8th Street, New York\nWho: Mr. Thomas Reid \u2013 taxi cab (Vehicle A); Mr. Leo Kim \u2013 coupe (Vehicle B)\nHow: Vehicle B ran red light, Vehicle A had green light\nWhy: Red light violation by Vehicle B\nContingencyActions: Police and EMT response; intersection blocked, traffic detoured, medical aid to Mr. Kim",
+      "target": "On May 18, 2024, at 21:10, Mr. Leo Kim (Vehicle B) ran a red light at Lexington Avenue and 8th Street in New York, colliding side-on with a taxi cab driven by Mr. Thomas Reid (Vehicle A). Emergency services arrived quickly, detouring traffic and providing first aid to Mr. Kim for moderate injuries. The intersection was cleared within 40 minutes."
+    },
+    {
+      "index": 4,
+      "input": "What: single-vehicle rollover involving car (A)\nWhen: Occurrence: March 12, 2024, 23:45\nWhere: Forest Road, near mile marker 8\nWho: Ms. Petra Lee \u2013 compact car driver (Vehicle A)\nHow: Lost control on wet curve, vehicle flipped\nWhy: Slippery road surface after rain\nContingencyActions: Passerby called 911, fire and ambulance arrived, vehicle stabilized",
+      "target": "On March 12, 2024, at 23:45, Ms. Petra Lee lost control of her compact car (A) on a wet curve along Forest Rd, resulting in a rollover. She was assisted by passersby and emergency crews responded, stabilized vehicle, and transported her to hospital for observation."
+    }
+  ]
+}
