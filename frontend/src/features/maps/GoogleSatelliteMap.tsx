@@ -26,6 +26,8 @@ export interface GoogleSatelliteMapProps {
   showCongestionLayer?: boolean;
   primaryRoute?: { points: [number, number][]; summary?: string; roadClosureAvoided?: boolean } | null;
   alternativeRoutes?: { points: [number, number][]; summary?: string }[] | null;
+  activeRouteGeometry?: [number, number][] | null;
+  alternateRouteGeometry?: [number, number][] | null;
   mapType?: 'satellite' | 'hybrid' | 'roadmap';
   onMapTypeChange?: (type: 'satellite' | 'hybrid' | 'roadmap') => void;
 }
@@ -48,6 +50,8 @@ export function GoogleSatelliteMap({
   showCongestionLayer = true,
   primaryRoute,
   alternativeRoutes,
+  activeRouteGeometry,
+  alternateRouteGeometry,
   mapType = 'satellite',
   onMapTypeChange,
 }: GoogleSatelliteMapProps) {
@@ -349,11 +353,17 @@ export function GoogleSatelliteMap({
       });
     }
 
-    // 5. Render Primary Route (High-Contrast Cyan Casing)
-    if (primaryRoute?.points && primaryRoute.points.length > 1) {
+    // 5. Render Primary / Active Navigation Route (High-Contrast Cyan Casing)
+    const effectivePrimaryPoints = activeRouteGeometry && activeRouteGeometry.length > 1
+      ? activeRouteGeometry
+      : primaryRoute?.points && primaryRoute.points.length > 1
+      ? primaryRoute.points
+      : null;
+
+    if (effectivePrimaryPoints) {
       // Dark underlay casing for readability against bright satellite roofs/roads
       const underlay = new google.maps.Polyline({
-        path: primaryRoute.points.map(([lat, lng]) => ({ lat, lng })),
+        path: effectivePrimaryPoints.map(([lat, lng]) => ({ lat, lng })),
         map,
         strokeColor: '#0f172a',
         strokeOpacity: 0.8,
@@ -362,7 +372,7 @@ export function GoogleSatelliteMap({
       });
       // Cyan Core Line
       const coreLine = new google.maps.Polyline({
-        path: primaryRoute.points.map(([lat, lng]) => ({ lat, lng })),
+        path: effectivePrimaryPoints.map(([lat, lng]) => ({ lat, lng })),
         map,
         strokeColor: '#06b6d4',
         strokeOpacity: 1,
@@ -374,7 +384,17 @@ export function GoogleSatelliteMap({
     }
 
     // 6. Render Alternative Routes (High-Contrast Amber)
-    if (alternativeRoutes && alternativeRoutes.length > 0) {
+    if (alternateRouteGeometry && alternateRouteGeometry.length > 1) {
+      const altLine = new google.maps.Polyline({
+        path: alternateRouteGeometry.map(([lat, lng]) => ({ lat, lng })),
+        map,
+        strokeColor: '#f59e0b',
+        strokeOpacity: 0.85,
+        strokeWeight: 4,
+        zIndex: 590,
+      });
+      polylinesRef.current.push(altLine);
+    } else if (alternativeRoutes && alternativeRoutes.length > 0) {
       alternativeRoutes.forEach((alt) => {
         if (!alt.points || alt.points.length < 2) return;
         const altLine = new google.maps.Polyline({
@@ -428,6 +448,8 @@ export function GoogleSatelliteMap({
     trafficSegments,
     primaryRoute,
     alternativeRoutes,
+    activeRouteGeometry,
+    alternateRouteGeometry,
     showVehicles,
     vehicles,
     mapReady,

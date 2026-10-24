@@ -426,3 +426,153 @@ export async function handleGetEmployerActiveLocations(
     next(err);
   }
 }
+
+export async function handleListEmployerDelayReports(req: Request, res: Response, next: NextFunction) {
+  try {
+    const requestedOrgId = req.query.organizationId ? String(req.query.organizationId) : undefined;
+    const orgIds = await getAuthorizedOrgIds(req.user!.userId, req.user!.role, requestedOrgId);
+
+    if (orgIds.length === 0) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+
+    const primaryOrgId = orgIds[0];
+
+    const reportsRes = await db.query<any>(
+      `SELECT cdr.*, u.name as employee_name, u.email as employee_email,
+              j.origin, j.destination, j.started_at, j.ended_at, j.estimated_delay_min,
+              rev.name as reviewer_name
+       FROM commute_delay_reports cdr
+       JOIN users u ON u.id = cdr.employee_id
+       LEFT JOIN journeys j ON j.id = cdr.journey_id
+       LEFT JOIN tracking_consents tc ON tc.id = j.consent_record_id
+       LEFT JOIN users rev ON rev.id = cdr.reviewer_id
+       WHERE tc.organization_id = $1
+       ORDER BY cdr.created_at DESC`,
+      [primaryOrgId]
+    );
+
+    const data = reportsRes.rows.map((r: any) => ({
+      id: r.id,
+      journeyId: r.journey_id,
+      employeeId: r.employee_id,
+      employeeName: r.employee_name,
+      employeeEmail: r.employee_email,
+      origin: r.origin || 'Commute Route',
+      destination: r.destination || 'Workplace',
+      startedAt: r.started_at,
+      endedAt: r.ended_at,
+      delayReason: r.delay_reason,
+      delayMinutes: Number(r.delay_minutes || 15),
+      status: r.status,
+      reviewerId: r.reviewer_id,
+      reviewerName: r.reviewer_name,
+      reviewerNotes: r.reviewer_notes,
+      reviewedAt: r.reviewed_at,
+      createdAt: r.created_at,
+      evidenceUrl: r.evidence_file_path ? `/uploads/${r.evidence_file_path.split(/[\\/]/).pop()}` : null,
+      evidenceOriginalName: r.evidence_original_name,
+      evidenceMimeType: r.evidence_mime_type,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        reports: data,
+        list: data,
+      },
+      reports: data,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function handleReviewEmployerDelayReport(req: Request, res: Response, next: NextFunction) {
+  try {
+    const reportId = String(req.params.id);
+    const decision = req.body?.decision || req.body?.action;
+    const notes = req.body?.notes;
+
+    if (!['APPROVE', 'REQUEST_EVIDENCE', 'DISPUTE', 'EVIDENCE_REQUESTED', 'NEEDS_EVIDENCE'].includes(decision)) {
+      throw new ApiError(400, 'INVALID_DECISION', 'Decision must be APPROVE, REQUEST_EVIDENCE, or DISPUTE.');
+    }
+
+    const orgIds = await getAuthorizedOrgIds(req.user!.userId, req.user!.role);
+    if (orgIds.length === 0) {
+      throw new ApiError(403, 'FORBIDDEN', 'No authorized organization found for reviewer.');
+    }
+
+    // Verify report belongs to an employee under reviewer's organization
+    const reportRes = await db.query<any>(
+      `SELECT cdr.*, tc.organization_id, j.id as journey_ref_id
+       FROM commute_delay_reports cdr
+       LEFT JOIN journeys j ON j.id = cdr.journey_id
+       LEFT JOIN tracking_consents tc ON tc.id = j.consent_record_id
+       WHERE cdr.id = $1`,
+      [reportId]
+    );
+
+    if (reportRes.rows.length === 0) {
+      throw new ApiError(404, 'REPORT_NOT_FOUND', 'Delay report not found.');
+    }
+
+    const report = reportRes.rows[0];
+    if (report.organization_id && !orgIds.includes(report.organization_id)) {
+      throw new ApiError(403, 'ORGANIZATION_ISOLATION_VIOLATION', 'Cannot review report belonging to another organization.');
+    }
+
+    const newStatus =
+      decision === 'APPROVE' ? 'APPROVED' :
+      (decision === 'REQUEST_EVIDENCE' || decision === 'EVIDENCE_REQUESTED' || decision === 'NEEDS_EVIDENCE') ? 'EVIDENCE_REQUESTED' : 'DISPUTED';
+
+    await db.query(
+      `UPDATE commute_delay_reports
+       SET status = $1, reviewer_id = $2, reviewer_notes = $3, reviewed_at = NOW(), updated_at = NOW()
+       WHERE id = $4`,
+      [newStatus, req.user!.userId, notes || null, reportId]
+    );
+
+    // If approved, update verified_delay_min on the journey record
+    if (decision === 'APPROVE' && report.journey_ref_id) {
+      await db.query(
+        `UPDATE journeys SET verified_delay_min = $1, manual_self_reported = TRUE, manual_status_note = $2
+         WHERE id = $3`,
+        [Number(report.delay_minutes || 15), `Employer approved delay: ${report.delay_reason}`, report.journey_ref_id]
+      );
+    }
+
+    // Log audit trail
+    await db.query(
+      `INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, metadata)
+       VALUES ($1, $2, 'REVIEW_COMMUTE_DELAY_REPORT', 'COMMUTE_DELAY_REPORT', $3, $4)`,
+      [
+        crypto.randomUUID(),
+        req.user!.userId,
+        reportId,
+        JSON.stringify({ decision, newStatus, reviewerNotes: notes, delayMinutes: Number(report.delay_minutes || 15) }),
+      ]
+    );
+
+    const updatedReport = {
+      id: reportId,
+      status: newStatus,
+      reviewer_id: req.user!.userId,
+      reviewer_notes: notes || null,
+      reviewed_at: new Date().toISOString(),
+      delay_minutes: Number(report.delay_minutes || 15),
+    };
+
+    res.json({
+      success: true,
+      data: {
+        report: updatedReport,
+        ...updatedReport,
+      },
+      report: updatedReport,
+    });
+  } catch (err) {
+    next(err);
+  }
+}

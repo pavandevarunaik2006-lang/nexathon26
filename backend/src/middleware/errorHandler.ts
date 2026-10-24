@@ -47,6 +47,17 @@ export function errorHandler(
     return;
   }
 
+  if (err?.code === 'LIMIT_UNEXPECTED_FILE') {
+    res.status(400).json({
+      success: false,
+      error: {
+        code: 'INVALID_FILE_TYPE',
+        message: err.message || 'Unexpected upload field or file',
+      },
+    });
+    return;
+  }
+
   if (err?.code === 'LIMIT_FILE_SIZE') {
     res.status(400).json({
       success: false,

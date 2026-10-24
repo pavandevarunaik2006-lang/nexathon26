@@ -5,8 +5,24 @@ import {
   Lock,
   Download,
   Printer,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  HelpCircle,
+  Clock,
+  Eye,
+  X,
+  Check,
+  FileImage,
+  ExternalLink,
+  MessageSquare,
+  AlertTriangle,
+  Send,
+  Loader2,
+  ShieldCheck,
+  Building2,
 } from 'lucide-react';
-import { apiRequest, downloadAuthenticatedCsv } from '../lib/api';
+import { apiRequest, downloadAuthenticatedCsv, API_BASE } from '../lib/api';
 import { useToast } from '../context/ToastContext';
 import { DemoDataBadge, SeverityBadge, ConfidenceMeter } from '../components/Badges';
 import { AnimatedNumber, StaggerGrid, StaggerItem } from '../components/MotionPrimitives';
@@ -17,6 +33,11 @@ export function EmployerDashboardPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['employer-dashboard'],
     queryFn: () => apiRequest<any>('/employer/dashboard'),
+  });
+
+  const { data: delayReportsData } = useQuery({
+    queryKey: ['employer-delay-reports'],
+    queryFn: () => apiRequest<{ reports: any[] }>('/employer/delay-reports'),
   });
 
   if (isLoading) {
@@ -31,6 +52,7 @@ export function EmployerDashboardPage() {
   const metrics = data?.metrics || {};
   const journeys = data?.activeJourneys || [];
   const incidents = data?.relevantCorridorIncidents || [];
+  const pendingDelayReports = (delayReportsData?.reports || []).filter((r: any) => r.status === 'PENDING');
 
   const handleExportCsv = async () => {
     try {
@@ -86,6 +108,30 @@ export function EmployerDashboardPage() {
           </Link>
         </div>
       </div>
+
+      {pendingDelayReports.length > 0 && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 flex-shrink-0">
+              <Sparkles className="w-5 h-5 text-amber-700" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-amber-950">
+                {pendingDelayReports.length} Employee Commute Delay {pendingDelayReports.length === 1 ? 'Claim' : 'Claims'} Awaiting Review
+              </p>
+              <p className="text-[11px] text-amber-800">
+                Submitted through AI Mobility Assistant with photo evidence and corridor correlation.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/employer/journeys"
+            className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors"
+          >
+            Review Claims Now →
+          </Link>
+        </div>
+      )}
 
       {/* KPI Row */}
       <StaggerGrid className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -287,12 +333,463 @@ export function EmployerEmployeesPage() {
   );
 }
 
+export function EmployerDelayReportsSection() {
+  const { showToast } = useToast();
+  const queryClient = useQueryClient();
+  const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DISPUTED' | 'EVIDENCE_REQUESTED'>('ALL');
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
+  const [reviewNote, setReviewNote] = useState<string>('');
+  const [selectedPhoto, setSelectedPhoto] = useState<{
+    url: string;
+    name: string;
+    employeeName: string;
+    reason: string;
+    delayMinutes: number;
+  } | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['employer-delay-reports'],
+    queryFn: () => apiRequest<{ reports: any[] }>('/employer/delay-reports'),
+  });
+
+  const reports = data?.reports || [];
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ id, action, notes }: { id: string; action: string; notes?: string }) =>
+      apiRequest(`/employer/delay-reports/${id}/review`, {
+        method: 'POST',
+        body: JSON.stringify({ action, notes }),
+      }),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['employer-delay-reports'] });
+      queryClient.invalidateQueries({ queryKey: ['employer-journeys'] });
+      queryClient.invalidateQueries({ queryKey: ['employer-dashboard'] });
+      setActiveReviewId(null);
+      setReviewNote('');
+      showToast({
+        type: 'success',
+        title: 'Review Decision Submitted',
+        message: `Report marked as ${vars.action}. Audit trail recorded.`,
+      });
+    },
+    onError: (err: any) => {
+      showToast({
+        type: 'error',
+        title: 'Review Action Failed',
+        message: err.message || 'Could not update review status',
+      });
+    },
+  });
+
+  const filteredReports = reports.filter((r) => filter === 'ALL' || r.status === filter);
+  const pendingCount = reports.filter((r) => r.status === 'PENDING').length;
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'APPROVED':
+        return (
+          <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            Approved
+          </span>
+        );
+      case 'DISPUTED':
+        return (
+          <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200 flex items-center gap-1">
+            <XCircle className="w-3.5 h-3.5 text-rose-600" />
+            Disputed
+          </span>
+        );
+      case 'EVIDENCE_REQUESTED':
+        return (
+          <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+            <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
+            Evidence Requested
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
+            Pending Review
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header & Filter Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <button
+            onClick={() => setFilter('ALL')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              filter === 'ALL'
+                ? 'bg-slate-900 text-white'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            All Reports ({reports.length})
+          </button>
+          <button
+            onClick={() => setFilter('PENDING')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+              filter === 'PENDING'
+                ? 'bg-amber-600 text-white'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Pending Review
+            {pendingCount > 0 && (
+              <span className="px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded-full text-[10px] font-bold">
+                {pendingCount}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setFilter('APPROVED')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              filter === 'APPROVED'
+                ? 'bg-emerald-600 text-white'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Approved
+          </button>
+          <button
+            onClick={() => setFilter('EVIDENCE_REQUESTED')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              filter === 'EVIDENCE_REQUESTED'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Evidence Requested
+          </button>
+          <button
+            onClick={() => setFilter('DISPUTED')}
+            className={`px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              filter === 'DISPUTED'
+                ? 'bg-rose-600 text-white'
+                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            Disputed
+          </button>
+        </div>
+
+        <div className="text-xs text-slate-500 flex items-center gap-1">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+          <span>Strict organization isolation active</span>
+        </div>
+      </div>
+
+      {/* Reports List */}
+      {isLoading ? (
+        <div className="p-8 text-center text-xs text-slate-500">
+          Loading commute delay evidence submissions...
+        </div>
+      ) : filteredReports.length === 0 ? (
+        <div className="p-8 neu-card rounded-2xl text-center text-xs text-slate-500">
+          No commute delay reports found matching this filter.
+        </div>
+      ) : (
+        <div className="grid gap-3.5">
+          {filteredReports.map((report: any) => {
+            const photoUrl = report.evidence_file_path
+              ? report.evidence_file_path.startsWith('http')
+                ? report.evidence_file_path
+                : `${API_BASE.replace('/api/v1', '')}${report.evidence_file_path}`
+              : null;
+
+            return (
+              <div
+                key={report.id}
+                className="p-5 neu-card rounded-2xl border border-slate-200 bg-white space-y-4"
+              >
+                {/* Header row */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-900">
+                        {report.employee_name || 'Enrolled Employee'}
+                      </span>
+                      <span className="text-xs text-slate-500">({report.employee_email})</span>
+                      {getStatusBadge(report.status)}
+                    </div>
+                    <p className="text-xs text-blue-600 font-semibold">
+                      {report.origin || 'Commute Route'} → {report.destination || 'Workplace'}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Submitted: {new Date(report.created_at).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-right">
+                      <span className="text-[10px] text-amber-700 block font-medium">Claimed Delay</span>
+                      <span className="font-extrabold text-amber-900 text-sm">
+                        +{report.delay_minutes} min
+                      </span>
+                    </div>
+                    {report.journey_delay_min !== undefined && (
+                      <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-right">
+                        <span className="text-[10px] text-slate-500 block font-medium">Verified Delay</span>
+                        <span className="font-bold text-emerald-700 text-sm">
+                          +{report.journey_delay_min} min
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stated Reason */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs text-slate-700">
+                  <span className="font-semibold text-slate-900 block mb-1">Employee Reason:</span>
+                  <p className="whitespace-pre-line leading-relaxed">{report.delay_reason}</p>
+                </div>
+
+                {/* Photo Evidence Section */}
+                {photoUrl && (
+                  <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        onClick={() =>
+                          setSelectedPhoto({
+                            url: photoUrl,
+                            name: report.evidence_original_name || 'delay-evidence.jpg',
+                            employeeName: report.employee_name,
+                            reason: report.delay_reason,
+                            delayMinutes: report.delay_minutes,
+                          })
+                        }
+                        className="relative w-16 h-16 rounded-lg overflow-hidden border border-slate-300 bg-slate-200 cursor-pointer group flex-shrink-0"
+                      >
+                        <img
+                          src={photoUrl}
+                          alt="Delay evidence"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Eye className="w-4 h-4 text-white" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <FileImage className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="text-xs font-semibold text-slate-800">
+                            {report.evidence_original_name || 'Incident Evidence Photo'}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-slate-500 block">
+                          Format: {report.evidence_mime_type || 'image/jpeg'} • Attached from AI Assistant
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedPhoto({
+                          url: photoUrl,
+                          name: report.evidence_original_name || 'delay-evidence.jpg',
+                          employeeName: report.employee_name,
+                          reason: report.delay_reason,
+                          delayMinutes: report.delay_minutes,
+                        })
+                      }
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> View Photo Evidence
+                    </button>
+                  </div>
+                )}
+
+                {/* Previous Review Feedback (if any) */}
+                {report.reviewed_at && (
+                  <div className="p-3 rounded-xl bg-slate-100/60 border border-slate-200 text-xs text-slate-600 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-slate-800">Employer Review Decision:</span>
+                      <span className="text-[11px] text-slate-500">
+                        Evaluated {new Date(report.reviewed_at).toLocaleString()}
+                      </span>
+                    </div>
+                    {report.reviewer_notes ? (
+                      <p className="text-slate-700 italic">"{report.reviewer_notes}"</p>
+                    ) : (
+                      <p className="text-slate-400 italic">No additional reviewer comments provided.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Review Action Controls */}
+                <div className="pt-2 border-t border-slate-100">
+                  {activeReviewId === report.id ? (
+                    <div className="space-y-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Reviewer Comments / Decision Notes (Optional):
+                        </label>
+                        <input
+                          type="text"
+                          value={reviewNote}
+                          onChange={(e) => setReviewNote(e.target.value)}
+                          placeholder="e.g. Verified against NH-66 tree fall incident log."
+                          className="enterprise-input py-2 text-xs"
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={reviewMutation.isPending}
+                          onClick={() =>
+                            reviewMutation.mutate({
+                              id: report.id,
+                              action: 'APPROVE',
+                              notes: reviewNote,
+                            })
+                          }
+                          className="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          Approve Delay (+{report.delay_minutes}m)
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={reviewMutation.isPending}
+                          onClick={() =>
+                            reviewMutation.mutate({
+                              id: report.id,
+                              action: 'REQUEST_EVIDENCE',
+                              notes: reviewNote,
+                            })
+                          }
+                          className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        >
+                          <HelpCircle className="w-3.5 h-3.5" />
+                          Request More Evidence
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={reviewMutation.isPending}
+                          onClick={() =>
+                            reviewMutation.mutate({
+                              id: report.id,
+                              action: 'DISPUTE',
+                              notes: reviewNote,
+                            })
+                          }
+                          className="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Dispute Claim
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveReviewId(null);
+                            setReviewNote('');
+                          }}
+                          className="px-3 py-2 text-xs font-medium text-slate-500 hover:text-slate-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-500">
+                        {report.status === 'PENDING'
+                          ? 'Awaiting employer verification decision'
+                          : `Status: ${report.status}`}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveReviewId(report.id);
+                          setReviewNote(report.reviewer_notes || '');
+                        }}
+                        className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 hover:bg-slate-50 rounded-lg transition-colors flex items-center gap-1"
+                      >
+                        {report.status === 'PENDING' ? 'Take Review Decision' : 'Change Decision'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Photo Preview Modal */}
+      {selectedPhoto && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">{selectedPhoto.name}</h3>
+                <p className="text-xs text-slate-500">
+                  Uploaded by {selectedPhoto.employeeName} • Claimed +{selectedPhoto.delayMinutes} min
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedPhoto(null)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-950 flex items-center justify-center overflow-auto flex-1">
+              <img
+                src={selectedPhoto.url}
+                alt="Full evidence"
+                className="max-h-[60vh] max-w-full object-contain rounded-lg"
+              />
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
+              <span className="text-slate-600 italic truncate mr-2">
+                Reason: "{selectedPhoto.reason}"
+              </span>
+              <a
+                href={selectedPhoto.url}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 font-semibold text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 flex-shrink-0"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open in New Tab
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function EmployerJourneysAndReportsPage({ mode }: { mode: 'journeys' | 'reports' }) {
   const { showToast } = useToast();
+  const [activeTab, setActiveTab] = useState<'delay-reports' | 'all-journeys'>('delay-reports');
+
   const { data: journeys } = useQuery({
     queryKey: ['employer-journeys'],
     queryFn: () => apiRequest<any[]>('/employer/journeys'),
   });
+
+  const { data: delayReportsData } = useQuery({
+    queryKey: ['employer-delay-reports'],
+    queryFn: () => apiRequest<{ reports: any[] }>('/employer/delay-reports'),
+  });
+
+  const pendingCount = (delayReportsData?.reports || []).filter((r: any) => r.status === 'PENDING').length;
 
   const handleDownloadCsv = async () => {
     try {
@@ -316,11 +813,11 @@ export function EmployerJourneysAndReportsPage({ mode }: { mode: 'journeys' | 'r
         <div>
           <h1 className="text-lg font-bold text-slate-900">
             {mode === 'reports'
-              ? 'Authorized Commute Verification Reports & CSV Export'
-              : 'Consented Employee Commute Sessions'}
+              ? 'Authorized Commute Verification Reports & Evidence Review'
+              : 'Consented Employee Commute Sessions & Delay Claims'}
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Every access and export is logged in the immutable organization audit trail.
+            Every review decision, access, and export is recorded in the immutable organization audit trail.
           </p>
         </div>
         <div className="flex items-center gap-2.5 no-print">
@@ -339,43 +836,86 @@ export function EmployerJourneysAndReportsPage({ mode }: { mode: 'journeys' | 'r
         </div>
       </div>
 
-      <div className="grid gap-3.5">
-        {(journeys || []).map((j: any) => (
-          <div
-            key={j.id}
-            className="p-5 neu-card rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-          >
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-slate-900">{j.employeeName}</span>
-                <span className="text-xs text-slate-500">({j.employeeEmail})</span>
-                <DemoDataBadge isDemo={j.demoData} />
-              </div>
-              <p className="text-xs text-blue-600 font-semibold">
-                {j.origin} → {j.destination}
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Started: {new Date(j.startedAt).toLocaleString()} • Policy: {j.consentPolicyVersion}
-              </p>
-            </div>
+      {/* Tabs */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+        <button
+          onClick={() => setActiveTab('delay-reports')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 ${
+            activeTab === 'delay-reports'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          Delay Evidence Claims (AI Assistant)
+          {pendingCount > 0 && (
+            <span
+              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                activeTab === 'delay-reports'
+                  ? 'bg-amber-400 text-slate-900'
+                  : 'bg-amber-500 text-white'
+              }`}
+            >
+              {pendingCount}
+            </span>
+          )}
+        </button>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
-                <span className="text-[10px] text-slate-500 block">Estimated Delay</span>
-                <span className="font-bold text-amber-700">+{j.estimatedDelayMin} min</span>
+        <button
+          onClick={() => setActiveTab('all-journeys')}
+          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 ${
+            activeTab === 'all-journeys'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Lock className="w-3.5 h-3.5" />
+          Consented Commute Sessions ({journeys?.length || 0})
+        </button>
+      </div>
+
+      {/* Content based on Active Tab */}
+      {activeTab === 'delay-reports' ? (
+        <EmployerDelayReportsSection />
+      ) : (
+        <div className="grid gap-3.5">
+          {(journeys || []).map((j: any) => (
+            <div
+              key={j.id}
+              className="p-5 neu-card rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+            >
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-slate-900">{j.employeeName}</span>
+                  <span className="text-xs text-slate-500">({j.employeeEmail})</span>
+                  <DemoDataBadge isDemo={j.demoData} />
+                </div>
+                <p className="text-xs text-blue-600 font-semibold">
+                  {j.origin} → {j.destination}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  Started: {new Date(j.startedAt).toLocaleString()} • Policy: {j.consentPolicyVersion}
+                </p>
               </div>
-              <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
-                <span className="text-[10px] text-slate-500 block">Verified Delay Proof</span>
-                <span className="font-bold text-emerald-700">+{j.verifiedDelayMin} min</span>
-              </div>
-              <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
-                <span className="text-[10px] text-slate-500 block">Verification Tier</span>
-                <span className="font-bold text-blue-600">Level {j.verificationLevel}</span>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block">Estimated Delay</span>
+                  <span className="font-bold text-amber-700">+{j.estimatedDelayMin} min</span>
+                </div>
+                <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block">Verified Delay Proof</span>
+                  <span className="font-bold text-emerald-700">+{j.verifiedDelayMin} min</span>
+                </div>
+                <div className="px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
+                  <span className="text-[10px] text-slate-500 block">Verification Tier</span>
+                  <span className="font-bold text-blue-600">Level {j.verificationLevel}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

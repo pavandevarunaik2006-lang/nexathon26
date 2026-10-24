@@ -30,6 +30,11 @@ import {
   User as UserIcon,
   HelpCircle,
   Compass,
+  GitCompareArrows,
+  HeartPulse,
+  ShieldAlert,
+  Car,
+  Sparkles,
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -46,14 +51,34 @@ interface NavItem {
 }
 
 function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[] {
-  const commuterItems: NavItem[] = [
-    { label: 'Control Center', to: '/app/dashboard', icon: LayoutDashboard },
+  const mainItems: NavItem[] = [
+    { label: 'Dashboard', to: getDefaultHomeForRole(role), icon: LayoutDashboard },
     { label: 'Live Map', to: '/app/map', icon: MapPin },
+    { label: 'AI Mobility Assistant', to: '/app/assistant', icon: Sparkles },
     { label: 'Route Planner', to: '/app/routes', icon: Navigation },
+    { label: 'Impact Simulator', to: '/app/impact-simulator', icon: GitCompareArrows },
+  ];
+
+  const emergencyIntelligenceItems: NavItem[] = [
+    { label: 'Lifeline Reachability', to: '/app/impact-simulator?tab=reachability', icon: HeartPulse },
+    { label: 'Corridor Fragility', to: '/app/impact-simulator?tab=fragility', icon: ShieldAlert },
+    { label: 'Verification Engine', to: '/app/verification', icon: ShieldCheck },
+    {
+      label: 'Incident Investigation',
+      to: role === 'TRAFFIC_AUTHORITY' || role === 'ADMIN' ? '/authority/incidents' : '/app/map',
+      icon: Search,
+    },
+  ];
+
+  const operationsItems: NavItem[] = [
     { label: 'Report Incident', to: '/app/report-incident', icon: AlertOctagon },
     { label: 'Traffic Alerts', to: '/app/alerts', icon: Bell },
     { label: 'Commute Proof', to: '/app/journeys', icon: Briefcase },
-    { label: 'Verification Engine', to: '/app/verification', icon: ShieldCheck },
+    {
+      label: 'Vehicle Tracking',
+      to: role === 'EMPLOYER' ? '/employer/journeys' : '/app/journeys',
+      icon: Car,
+    },
   ];
 
   const systemItems: NavItem[] = [
@@ -61,66 +86,43 @@ function getRoleNavItems(role: UserRole): { section: string; items: NavItem[] }[
     { label: 'Help & Support', to: '/privacy', icon: HelpCircle },
   ];
 
-  const employerItems: NavItem[] = [
-    { label: 'Dashboard', to: '/employer/dashboard', icon: Building2 },
+  const employerAdminItems: NavItem[] = [
     { label: 'Users & Organizations', to: '/employer/employees', icon: Users },
-    { label: 'Commute Sessions', to: '/employer/journeys', icon: Briefcase },
     { label: 'Tracking Policies', to: '/employer/policies', icon: Lock },
     { label: 'Analytics & Reports', to: '/employer/reports', icon: FileSpreadsheet },
   ];
 
-  const authorityItems: NavItem[] = [
-    { label: 'Dashboard', to: '/authority/dashboard', icon: LayoutDashboard },
-    { label: 'Incident Management', to: '/authority/incidents', icon: AlertOctagon },
+  const authorityAdminItems: NavItem[] = [
     { label: 'Corridor Hotspots', to: '/authority/hotspots', icon: Flame },
     { label: 'Analytics & Reports', to: '/authority/analytics', icon: BarChart3 },
     { label: 'Problem Dossiers', to: '/authority/problem-reports', icon: FileText },
   ];
 
   const adminItems: NavItem[] = [
-    { label: 'Dashboard', to: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Incident Management', to: '/admin/incidents', icon: AlertOctagon },
     { label: 'Users & Roles', to: '/admin/users', icon: Users },
     { label: 'Organizations', to: '/admin/organizations', icon: Building2 },
-    { label: 'Verification Queue', to: '/admin/verification', icon: ShieldCheck },
     { label: 'Flagged Complaints', to: '/admin/complaints', icon: Scale },
-    { label: 'Analytics & Reports', to: '/authority/analytics', icon: BarChart3 },
     { label: 'Audit Trail Logs', to: '/admin/audit-logs', icon: History },
     { label: 'System Config', to: '/admin/settings', icon: Settings },
   ];
 
+  const sections: { section: string; items: NavItem[] }[] = [
+    { section: 'MAIN', items: mainItems },
+    { section: 'EMERGENCY INTELLIGENCE', items: emergencyIntelligenceItems },
+    { section: 'OPERATIONS', items: operationsItems },
+  ];
+
   if (role === 'EMPLOYER') {
-    return [
-      { section: 'Commuter & Employee Ops', items: commuterItems.slice(0, 6) },
-      { section: 'Admin & Authority', items: employerItems },
-      { section: 'System', items: systemItems },
-    ];
-  }
-  if (role === 'TRAFFIC_AUTHORITY') {
-    return [
-      { section: 'Commuter & Employee Ops', items: commuterItems },
-      { section: 'Admin & Authority', items: authorityItems },
-      { section: 'System', items: systemItems },
-    ];
-  }
-  if (role === 'ADMIN') {
-    return [
-      { section: 'Commuter & Employee Ops', items: commuterItems },
-      { section: 'Admin & Authority', items: adminItems },
-      { section: 'System', items: systemItems },
-    ];
+    sections.push({ section: 'ADMINISTRATION', items: employerAdminItems });
+  } else if (role === 'TRAFFIC_AUTHORITY') {
+    sections.push({ section: 'ADMINISTRATION', items: authorityAdminItems });
+  } else if (role === 'ADMIN') {
+    sections.push({ section: 'ADMINISTRATION', items: adminItems });
   }
 
-  return [
-    {
-      section: 'Commuter & Employee Ops',
-      items: commuterItems,
-    },
-    {
-      section: 'System',
-      items: systemItems,
-    },
-  ];
+  sections.push({ section: 'SYSTEM', items: systemItems });
+
+  return sections;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {

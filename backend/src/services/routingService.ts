@@ -3,11 +3,15 @@ import {
   LIFELINE_HOSPITALS,
   normalizePolylineGeometry,
   normalizeCoordinateToLatLng,
+  CORRIDOR_GRAPH_NODES,
+  CORRIDOR_GRAPH_EDGES,
+  solveGraphShortestPath,
   type ExplicitRouteState,
   type IncidentVerificationState,
+  type GraphNode,
 } from '@roadalert/shared';
 import { haversineDistanceKm } from './verificationEngine.js';
-import { fetchOsrmPrimaryRoute } from '../integrations/osrmClient.js';
+import { fetchOsrmRoutes, fetchOsrmPrimaryRoute } from '../integrations/osrmClient.js';
 
 export interface RoutePoint {
   lat: number;
@@ -80,6 +84,115 @@ function minDistanceToPolylineKm(lat: number, lng: number, polyline: [number, nu
     }
   }
   return minKm;
+}
+
+/**
+ * Snap coordinates to the nearest regional network node
+ */
+function findNearestGraphNode(coords: RoutePoint): GraphNode {
+  let nearest: GraphNode = Object.values(CORRIDOR_GRAPH_NODES)[0];
+  let minD = Infinity;
+  for (const node of Object.values(CORRIDOR_GRAPH_NODES)) {
+    const d = haversineDistanceKm(coords.lat, coords.lng, node.lat, node.lng);
+    if (d < minD) {
+      minD = d;
+      nearest = node;
+    }
+  }
+  return nearest;
+}
+
+/**
+ * Build road-following geometry by solving Dijkstra shortest path on the regional corridor graph
+ * and stitching together the verified road geometries of traversed edges.
+ */
+function buildCorridorGraphRoute(
+  originCoords: RoutePoint,
+  destCoords: RoutePoint,
+  blockedEdgeIds: Set<string> = new Set(),
+  viaNodeId?: string
+): {
+  geometry: [number, number][];
+  distanceKm: number;
+  baseDurationMin: number;
+} | null {
+  const startNode = findNearestGraphNode(originCoords);
+  const endNode = findNearestGraphNode(destCoords);
+
+  let pathEdgeIds: string[] = [];
+  let totalTimeMin = 0;
+  let totalDistKm = 0;
+
+  if (viaNodeId && startNode.id !== viaNodeId && endNode.id !== viaNodeId) {
+    const leg1 = solveGraphShortestPath(startNode.id, viaNodeId, blockedEdgeIds);
+    const leg2 = solveGraphShortestPath(viaNodeId, endNode.id, blockedEdgeIds);
+    if (leg1 && leg2) {
+      pathEdgeIds = [...leg1.edgeIds, ...leg2.edgeIds];
+      totalTimeMin = leg1.totalTimeMin + leg2.totalTimeMin;
+      totalDistKm = leg1.totalDistanceKm + leg2.totalDistanceKm;
+    } else {
+      const direct = solveGraphShortestPath(startNode.id, endNode.id, blockedEdgeIds);
+      if (!direct) return null;
+      pathEdgeIds = direct.edgeIds;
+      totalTimeMin = direct.totalTimeMin;
+      totalDistKm = direct.totalDistanceKm;
+    }
+  } else {
+    const direct = solveGraphShortestPath(startNode.id, endNode.id, blockedEdgeIds);
+    if (!direct) return null;
+    pathEdgeIds = direct.edgeIds;
+    totalTimeMin = direct.totalTimeMin;
+    totalDistKm = direct.totalDistanceKm;
+  }
+
+  // Assemble road-following polyline coordinates
+  const pts: [number, number][] = [[originCoords.lat, originCoords.lng]];
+  let lastNodeId = startNode.id;
+
+  for (const edgeId of pathEdgeIds) {
+    const edge = CORRIDOR_GRAPH_EDGES.find((e) => e.id === edgeId);
+    if (!edge || !edge.geometry || edge.geometry.length === 0) continue;
+
+    const geom = [...edge.geometry];
+    if (edge.toNode === lastNodeId && edge.fromNode !== lastNodeId) {
+      geom.reverse();
+      lastNodeId = edge.fromNode;
+    } else {
+      lastNodeId = edge.toNode;
+    }
+
+    for (const pt of geom) {
+      const lastPt = pts[pts.length - 1];
+      if (
+        !lastPt ||
+        Math.abs(lastPt[0] - pt[0]) > 0.0001 ||
+        Math.abs(lastPt[1] - pt[1]) > 0.0001
+      ) {
+        pts.push([pt[0], pt[1]]);
+      }
+    }
+  }
+
+  // Add final destination endpoint
+  const lastPt = pts[pts.length - 1];
+  if (
+    !lastPt ||
+    Math.abs(lastPt[0] - destCoords.lat) > 0.0001 ||
+    Math.abs(lastPt[1] - destCoords.lng) > 0.0001
+  ) {
+    pts.push([destCoords.lat, destCoords.lng]);
+  }
+
+  const approachDist = haversineDistanceKm(originCoords.lat, originCoords.lng, startNode.lat, startNode.lng);
+  const exitDist = haversineDistanceKm(endNode.lat, endNode.lng, destCoords.lat, destCoords.lng);
+  const totalKm = Math.round((totalDistKm + approachDist + exitDist) * 10) / 10;
+  const totalMin = Math.max(5, Math.round(totalTimeMin + (approachDist + exitDist) * 1.5));
+
+  return {
+    geometry: pts,
+    distanceKm: Math.max(1.2, totalKm),
+    baseDurationMin: totalMin,
+  };
 }
 
 /**
@@ -168,20 +281,6 @@ export async function calculateRoutesWithIncidents(
     };
   }
 
-  let primaryGeometry: [number, number][] | null = null;
-  let primaryDistKm = 0;
-  let primaryBaseMin = 0;
-  let providerSource: 'OSRM_LIVE' | 'REGIONAL_CORRIDOR_FALLBACK' = 'REGIONAL_CORRIDOR_FALLBACK';
-
-  // Attempt live OSRM query with 2.5s timeout via integration client
-  const osrmResult = await fetchOsrmPrimaryRoute(originCoords, destCoords);
-  if (osrmResult && osrmResult.geometry.length >= 2) {
-    primaryGeometry = osrmResult.geometry;
-    primaryDistKm = osrmResult.distanceKm;
-    primaryBaseMin = osrmResult.baseDurationMin;
-    providerSource = 'OSRM_LIVE';
-  }
-
   const directDist = haversineDistanceKm(
     originCoords.lat,
     originCoords.lng,
@@ -189,12 +288,32 @@ export async function calculateRoutesWithIncidents(
     destCoords.lng
   );
 
-  // Build Option 1: Primary NH-66 Coastal Highway Route
+  let primaryGeometry: [number, number][] | null = null;
+  let primaryDistKm = 0;
+  let primaryBaseMin = 0;
+  let providerSource: 'OSRM_LIVE' | 'REGIONAL_CORRIDOR_FALLBACK' = 'REGIONAL_CORRIDOR_FALLBACK';
+
+  let osrmAlternatives: { geometry: [number, number][]; distanceKm: number; baseDurationMin: number }[] = [];
+
+  // Attempt live OSRM query with 2.5s timeout via integration client
+  const osrmResult = await fetchOsrmRoutes(originCoords, destCoords);
+  if (osrmResult && osrmResult.primary.geometry.length >= 2) {
+    primaryGeometry = osrmResult.primary.geometry;
+    primaryDistKm = osrmResult.primary.distanceKm;
+    primaryBaseMin = osrmResult.primary.baseDurationMin;
+    osrmAlternatives = osrmResult.alternatives;
+    providerSource = 'OSRM_LIVE';
+  }
+
+  // Fallback to regional highway graph solver
   if (!primaryGeometry) {
-    const isNorthSouthCoastal =
-      Math.abs(originCoords.lng - 74.82) < 0.22 && Math.abs(destCoords.lng - 74.76) < 0.22;
-    if (isNorthSouthCoastal && Math.abs(destCoords.lat - originCoords.lat) > 0.12) {
-      const goingNorth = destCoords.lat > originCoords.lat;
+    const graphPrimary = buildCorridorGraphRoute(originCoords, destCoords, new Set());
+    if (graphPrimary && graphPrimary.geometry.length >= 2) {
+      primaryGeometry = graphPrimary.geometry;
+      primaryDistKm = graphPrimary.distanceKm;
+      primaryBaseMin = graphPrimary.baseDurationMin;
+    } else {
+      // Highway waypoint interpolation if graph cannot connect
       const coastalWaypoints: [number, number][] = [
         [12.8669, 74.8692], // Pumpwell
         [12.8825, 74.8648], // Nanthoor
@@ -212,61 +331,85 @@ export async function calculateRoutesWithIncidents(
         const maxLat = Math.max(originCoords.lat, destCoords.lat) + 0.015;
         return wp[0] >= minLat && wp[0] <= maxLat;
       });
-      const ordered = goingNorth ? filtered : [...filtered].reverse();
+      const ordered = destCoords.lat > originCoords.lat ? filtered : [...filtered].reverse();
       primaryGeometry = interpolatePolyline([
         [originCoords.lat, originCoords.lng],
         ...ordered,
         [destCoords.lat, destCoords.lng],
       ]);
+      primaryDistKm = Math.max(1.2, Math.round(directDist * 1.24 * 10) / 10);
+      primaryBaseMin = Math.max(4, Math.round((primaryDistKm / 44) * 60));
+    }
+  }
+
+  // Build Option 2: Inland / State Highway Alternative (via Bajpe / Kinnigoli / Belman / SH-1)
+  let altGeometry1: [number, number][];
+  let altDistKm1: number;
+  let altBaseMin1: number;
+
+  if (osrmAlternatives.length > 0) {
+    altGeometry1 = osrmAlternatives[0].geometry;
+    altDistKm1 = osrmAlternatives[0].distanceKm;
+    altBaseMin1 = osrmAlternatives[0].baseDurationMin;
+  } else {
+    const graphInland = buildCorridorGraphRoute(
+      originCoords,
+      destCoords,
+      new Set(['edge_kuloor_baikampady', 'edge_kuntikan_kuloor']),
+      'node_bajpe'
+    );
+    if (graphInland && graphInland.geometry.length >= 2) {
+      altGeometry1 = graphInland.geometry;
+      altDistKm1 = graphInland.distanceKm;
+      altBaseMin1 = graphInland.baseDurationMin;
     } else {
+      altDistKm1 = Math.max(1.5, Math.round(primaryDistKm * 1.18 * 10) / 10);
+      altBaseMin1 = Math.max(5, Math.round(primaryBaseMin * 1.2));
+      const latShift = Math.min(0.068, Math.max(0.012, directDist * 0.0014));
       const midLat = (originCoords.lat + destCoords.lat) / 2;
-      const midLng = (originCoords.lng + destCoords.lng) / 2;
-      primaryGeometry = interpolatePolyline([
+      const midLng = (originCoords.lng + destCoords.lng) / 2 + latShift;
+      altGeometry1 = interpolatePolyline([
         [originCoords.lat, originCoords.lng],
+        [originCoords.lat * 0.7 + destCoords.lat * 0.3, originCoords.lng * 0.7 + destCoords.lng * 0.3 + latShift * 0.76],
         [midLat, midLng],
+        [originCoords.lat * 0.3 + destCoords.lat * 0.7, originCoords.lng * 0.3 + destCoords.lng * 0.7 + latShift * 0.76],
         [destCoords.lat, destCoords.lng],
       ]);
     }
-    primaryDistKm = Math.max(1.2, Math.round(directDist * 1.24 * 10) / 10);
-    primaryBaseMin = Math.max(4, Math.round((primaryDistKm / 44) * 60));
   }
 
-  // Scale lateral bypass shift proportional to trip distance so short urban trips have realistic bypasses
-  const lateralShift1 = Math.min(0.068, Math.max(0.012, directDist * 0.0014));
-  const lateralShift2 = Math.min(0.028, Math.max(0.006, directDist * 0.00065));
+  // Build Option 3: Coastal Service / Express Connector Alternative (via Kavoor / Maravoor Bypass)
+  let altGeometry2: [number, number][];
+  let altDistKm2: number;
+  let altBaseMin2: number;
 
-  // Build Option 2: Inland / State Highway Alternative (via Bajpe / Moodbidri / Karkala / Padubidri SH-1 or Airport Rd bypass)
-  const midLat = (originCoords.lat + destCoords.lat) / 2;
-  const midLng = (originCoords.lng + destCoords.lng) / 2 + lateralShift1;
-  const q1Lat = originCoords.lat * 0.7 + destCoords.lat * 0.3;
-  const q1Lng = originCoords.lng * 0.7 + destCoords.lng * 0.3 + lateralShift1 * 0.76;
-  const q3Lat = originCoords.lat * 0.3 + destCoords.lat * 0.7;
-  const q3Lng = originCoords.lng * 0.3 + destCoords.lng * 0.7 + lateralShift1 * 0.76;
-
-  const altGeometry1 = interpolatePolyline([
-    [originCoords.lat, originCoords.lng],
-    [q1Lat, q1Lng],
-    [midLat, midLng],
-    [q3Lat, q3Lng],
-    [destCoords.lat, destCoords.lng],
-  ]);
-  const altDistKm1 = Math.max(1.5, Math.round(primaryDistKm * 1.18 * 10) / 10);
-  const altBaseMin1 = Math.max(5, Math.round(primaryBaseMin * 1.2));
-
-  // Build Option 3: Coastal Service / Express Connector Alternative
-  const w1Lat = originCoords.lat * 0.65 + destCoords.lat * 0.35;
-  const w1Lng = originCoords.lng * 0.65 + destCoords.lng * 0.35 + lateralShift2 * 0.9;
-  const w2Lat = originCoords.lat * 0.35 + destCoords.lat * 0.65;
-  const w2Lng = originCoords.lng * 0.35 + destCoords.lng * 0.65 + lateralShift2;
-
-  const altGeometry2 = interpolatePolyline([
-    [originCoords.lat, originCoords.lng],
-    [w1Lat, w1Lng],
-    [w2Lat, w2Lng],
-    [destCoords.lat, destCoords.lng],
-  ]);
-  const altDistKm2 = Math.max(1.4, Math.round(primaryDistKm * 1.09 * 10) / 10);
-  const altBaseMin2 = Math.max(5, Math.round(primaryBaseMin * 1.11));
+  if (osrmAlternatives.length > 1) {
+    altGeometry2 = osrmAlternatives[1].geometry;
+    altDistKm2 = osrmAlternatives[1].distanceKm;
+    altBaseMin2 = osrmAlternatives[1].baseDurationMin;
+  } else {
+    const graphConnector = buildCorridorGraphRoute(
+      originCoords,
+      destCoords,
+      new Set(),
+      'node_maravoor_bypass'
+    );
+    if (graphConnector && graphConnector.geometry.length >= 2) {
+      altGeometry2 = graphConnector.geometry;
+      altDistKm2 = graphConnector.distanceKm;
+      altBaseMin2 = graphConnector.baseDurationMin;
+    } else {
+      altDistKm2 = Math.max(1.4, Math.round(primaryDistKm * 1.09 * 10) / 10);
+      altBaseMin2 = Math.max(5, Math.round(primaryBaseMin * 1.11));
+      const latShift = Math.min(0.028, Math.max(0.006, directDist * 0.00065));
+      altGeometry2 = interpolatePolyline([
+        [originCoords.lat, originCoords.lng],
+        [originCoords.lat * 0.65 + destCoords.lat * 0.35, originCoords.lng * 0.65 + destCoords.lng * 0.35 + latShift * 0.9],
+        [originCoords.lat * 0.35 + destCoords.lat * 0.65, originCoords.lng * 0.35 + destCoords.lng * 0.65 + latShift],
+        [destCoords.lat, destCoords.lng],
+      ]);
+    }
+  }
 
   const rawCandidates = [
     {
@@ -325,7 +468,7 @@ export async function calculateRoutesWithIncidents(
       if (distKm <= 1.8) {
         // Strict rule: ONLY a CONFIRMED_OBSTRUCTION blocks a road segment.
         // Unverified reports and verified incidents without confirmed obstruction never set hasRoadClosureWarning.
-        const isClosed = verificationState === 'CONFIRMED_OBSTRUCTION';
+        const isClosed = verificationState === 'CONFIRMED_OBSTRUCTION' || Boolean(inc.roadClosed && inc.status === 'VERIFIED');
         if (isClosed) {
           hasRoadClosureWarning = true;
           const segLabel = inc.road_name || inc.roadName || inc.title;
@@ -336,7 +479,6 @@ export async function calculateRoutesWithIncidents(
 
         const confScore = Number(inc.confidence_score ?? inc.confidenceScore ?? 45);
         const rawDelay = Number(inc.estimated_delay_minutes ?? inc.estimatedDelayMinutes ?? 15);
-        // Unverified reports add only a minor caution buffer (25% weight) and never force closure
         const weight =
           verificationState === 'UNVERIFIED_REPORT'
             ? 0.25
@@ -405,7 +547,6 @@ export async function calculateRoutesWithIncidents(
       return a.hasRoadClosureWarning ? 1 : -1;
     }
     if (avoidIncidentZones) {
-      // Only switch away from primary for avoidanceScore if primary has a verified incident or closure
       const aHasVerified = a.affectingIncidents.some(
         (i) => i.verificationState !== 'UNVERIFIED_REPORT'
       );
@@ -539,13 +680,6 @@ export async function calculateRoutesWithIncidents(
       }
     }
     holdingPointSuggestion = closestBay;
-    const _dummyOld = {
-      label: `Designated Safe Holding Point near ${originName}`,
-      lat: originCoords.lat,
-      lng: originCoords.lng,
-      guidance:
-        'Hold position at origin or nearest highway bay. Await Traffic Authority clearance or emergency contraflow escort.',
-    };
   } else if (bestId !== primaryRoute.id) {
     routeState = 'ALTERNATE_ROUTE_FOUND';
     const deltaMin = bestRoute.totalEstimatedMin - primaryRoute.totalEstimatedMin;
@@ -581,7 +715,7 @@ export async function calculateRoutesWithIncidents(
     holdingPointSuggestion,
     allRoutesClosedWarning,
     disclaimer:
-      'Base travel times reflect standard road geometry (OSRM/Corridor model). Incident delay estimates and closure constraints are calculated from verified RoadAlert incident states.',
+      'Base travel times reflect standard road geometry (OSRM/Corridor graph). Incident delay estimates and closure constraints are calculated from verified RoadAlert incident states.',
     routes: finalRoutes,
   };
 }

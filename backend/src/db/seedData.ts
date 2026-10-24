@@ -43,6 +43,7 @@ export async function seedDatabase(options?: { force?: boolean }): Promise<void>
     DELETE FROM incident_reviews;
     DELETE FROM notifications;
     DELETE FROM organization_tracking_policies;
+    DELETE FROM commute_delay_reports;
     DELETE FROM journey_checkpoints;
     DELETE FROM journeys;
     DELETE FROM tracking_consents;

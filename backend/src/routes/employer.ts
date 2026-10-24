@@ -7,6 +7,8 @@ import {
   handleListEmployerPolicies,
   handleUpdateEmployerPolicy,
   handleGetEmployerActiveLocations,
+  handleListEmployerDelayReports,
+  handleReviewEmployerDelayReport,
 } from '../controllers/employerController.js';
 
 export const employerRouter = Router();
@@ -19,3 +21,6 @@ employerRouter.get('/journeys', handleListEmployerJourneys);
 employerRouter.get('/policies', handleListEmployerPolicies);
 employerRouter.patch('/policies/:id', handleUpdateEmployerPolicy);
 employerRouter.get('/active-locations', handleGetEmployerActiveLocations);
+
+employerRouter.get('/delay-reports', handleListEmployerDelayReports);
+employerRouter.post('/delay-reports/:id/review', handleReviewEmployerDelayReport);

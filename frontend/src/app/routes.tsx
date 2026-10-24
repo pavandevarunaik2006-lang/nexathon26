@@ -14,6 +14,8 @@ import {
 import { PassengerDashboardPage } from '../features/dashboard';
 import { InteractiveMapPage } from '../features/maps';
 import { RoutePlannerPage } from '../features/routes';
+import { ImpactSimulatorPage } from '../features/simulation';
+import { AiMobilityAssistantPage } from '../features/assistant';
 import {
   ReportIncidentPage,
   IncidentDetailPage,
@@ -104,6 +106,22 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <RoutePlannerPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/impact-simulator"
+        element={
+          <ProtectedRoute>
+            <ImpactSimulatorPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/app/assistant"
+        element={
+          <ProtectedRoute>
+            <AiMobilityAssistantPage />
           </ProtectedRoute>
         }
       />

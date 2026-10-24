@@ -348,4 +348,149 @@ describe('Emergency Traffic Intelligence: Verification, Obstruction, Routing & M
     expect(padubidriSeg.congestionLevel).toBe('CONFIRMED_CLOSURE');
     expect(padubidriSeg.averageSpeedKmh).toBe(0);
   });
+  it('9. Route accuracy: Returned geometry starts at origin, ends at destination, contains intermediate road-following points, and remains in geographic bounds', async () => {
+    const plan = await calculateRoutesWithIncidents(
+      'Pumpwell Circle, Mangaluru',
+      'Surathkal NITK',
+      originPumpwell,
+      { lat: 13.0108, lng: 74.7943 },
+      false,
+      []
+    );
+
+    expect(plan.routes.length).toBeGreaterThanOrEqual(1);
+    const primary = plan.routes.find((r) => r.id === 'route-nh66-primary')!;
+    expect(primary).toBeDefined();
+    expect(primary.geometry.length).toBeGreaterThan(10); // Dense road-following polyline, not just 2 or 3 endpoints
+
+    // Check start and end match within 0.01 degrees (~1km tolerance)
+    const firstPoint = primary.geometry[0];
+    const lastPoint = primary.geometry[primary.geometry.length - 1];
+    expect(Math.abs(firstPoint[0] - originPumpwell.lat)).toBeLessThan(0.01);
+    expect(Math.abs(firstPoint[1] - originPumpwell.lng)).toBeLessThan(0.01);
+    expect(Math.abs(lastPoint[0] - 13.0108)).toBeLessThan(0.01);
+    expect(Math.abs(lastPoint[1] - 74.7943)).toBeLessThan(0.01);
+
+    // Verify all points remain within regional bounding box (lat: 12.7 to 13.6, lng: 74.6 to 75.1)
+    for (const [lat, lng] of primary.geometry) {
+      expect(lat).toBeGreaterThanOrEqual(12.7);
+      expect(lat).toBeLessThanOrEqual(13.6);
+      expect(lng).toBeGreaterThanOrEqual(74.6);
+      expect(lng).toBeLessThanOrEqual(75.1);
+    }
+  });
+
+  it('10. Snapped endpoints: Origin and destination points snap within valid geographic tolerance (< 0.05 km)', async () => {
+    const plan = await calculateRoutesWithIncidents(
+      'KPT Junction, Mangaluru',
+      'Udupi Karavali Bypass',
+      { lat: 12.8935, lng: 74.8594 },
+      destUdupi,
+      false,
+      []
+    );
+
+    expect(plan.originCoords.lat).toBe(12.8935);
+    expect(plan.originCoords.lng).toBe(74.8594);
+    expect(plan.destCoords.lat).toBe(destUdupi.lat);
+    expect(plan.destCoords.lng).toBe(destUdupi.lng);
+  });
+
+  it('11. Closure-aware detour avoids confirmed blocked segment and selects connected alternative route', async () => {
+    const kuloorBridgeClosure = {
+      id: 'closure-kuloor',
+      title: 'Structural Bridge Severance at Kuloor NH-66',
+      category: 'Road closure',
+      severity: 'CRITICAL',
+      status: 'VERIFIED',
+      latitude: 12.9261,
+      longitude: 74.8267,
+      road_name: 'NH-66 Kuloor Bridge',
+      confidence_score: 98,
+      authority_confirmed: true,
+      road_closed: true,
+      estimated_delay_minutes: 60,
+    };
+
+    const plan = await calculateRoutesWithIncidents(
+      'Pumpwell Circle',
+      'Surathkal NITK',
+      originPumpwell,
+      { lat: 13.0108, lng: 74.7943 },
+      true,
+      [kuloorBridgeClosure]
+    );
+
+    const primary = plan.routes.find((r) => r.id === 'route-nh66-primary')!;
+    expect(primary.hasRoadClosureWarning).toBe(true);
+    expect(primary.recommended).toBe(false);
+
+    // The recommended alternative route must be chosen
+    expect(plan.routeState).toBe('ALTERNATE_ROUTE_FOUND');
+    expect(plan.recommendedRouteId).toBeTruthy();
+    expect(plan.recommendedRouteId).not.toBe('route-nh66-primary');
+
+    const recommended = plan.routes.find((r) => r.id === plan.recommendedRouteId)!;
+    expect(recommended.hasRoadClosureWarning).toBe(false);
+    expect(recommended.recommended).toBe(true);
+  });
+
+  it('12. Explicit NO_VIABLE_ROUTE when all regional corridors are severed without fabricating paths', async () => {
+    const totalBlockade = [
+      {
+        id: 'block-1',
+        title: 'Kuloor Bridge Severed',
+        category: 'Road closure',
+        severity: 'CRITICAL',
+        status: 'VERIFIED',
+        latitude: 12.9261,
+        longitude: 74.8267,
+        road_name: 'NH-66 Kuloor Bridge',
+        confidence_score: 99,
+        authority_confirmed: true,
+        road_closed: true,
+      },
+      {
+        id: 'block-2',
+        title: 'Maravoor Bridge Severed',
+        category: 'Road closure',
+        severity: 'CRITICAL',
+        status: 'VERIFIED',
+        latitude: 12.9185,
+        longitude: 74.8588,
+        road_name: 'Maravoor Bridge Bypass',
+        confidence_score: 99,
+        authority_confirmed: true,
+        road_closed: true,
+      },
+      {
+        id: 'block-3',
+        title: 'Bajpe Inland Crossroad Severed',
+        category: 'Road closure',
+        severity: 'CRITICAL',
+        status: 'VERIFIED',
+        latitude: 12.9615,
+        longitude: 74.8901,
+        road_name: 'Bajpe Terminal Cross',
+        confidence_score: 99,
+        authority_confirmed: true,
+        road_closed: true,
+      },
+    ];
+
+    const plan = await calculateRoutesWithIncidents(
+      'Pumpwell Circle',
+      'Surathkal NITK',
+      originPumpwell,
+      { lat: 13.0108, lng: 74.7943 },
+      true,
+      totalBlockade
+    );
+
+    expect(plan.allRoutesClosedWarning).toBe(true);
+    expect(plan.routeState).toBe('NO_VIABLE_ROUTE_FOUND');
+    expect(plan.recommendedRouteId).toBeNull();
+    expect(plan.holdingPointSuggestion).toBeDefined();
+    expect(plan.holdingPointSuggestion?.label).toBeTruthy();
+  });
 });

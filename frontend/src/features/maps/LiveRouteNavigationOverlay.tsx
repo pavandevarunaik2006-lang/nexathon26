@@ -14,11 +14,13 @@ import {
   RotateCcw,
   Sparkles,
   ChevronRight,
+  ChevronDown,
   Layers,
   CheckCircle2,
   Sliders,
   ExternalLink,
   Radio,
+  Eye,
 } from 'lucide-react';
 import { REGIONAL_DESTINATIONS } from '@roadalert/shared';
 import { LiveCoordinates, GeolocationStatus } from '../../hooks/useLiveGeolocation';
@@ -117,14 +119,20 @@ export function LiveRouteNavigationOverlay({
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<RouteEndpoint[]>([]);
   const [isSearchingServer, setIsSearchingServer] = useState(false);
-  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isLocationMenuOpen, setIsLocationMenuOpen] = useState(false);
+  const [isRouteDetailsExpanded, setIsRouteDetailsExpanded] = useState(false);
 
-  // Close search popover on outside click
+  const searchContainerRef = useRef<HTMLDivElement | null>(null);
+  const locationMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // Close popovers on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setIsSearchOpen(false);
+      }
+      if (locationMenuRef.current && !locationMenuRef.current.contains(e.target as Node)) {
+        setIsLocationMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -176,7 +184,6 @@ export function LiveRouteNavigationOverlay({
               lng: Number(s.lng),
               corridor: s.roadName || s.secondaryLabel || 'Coastal Region',
             }));
-            // Merge with local matches avoiding duplicates by coordinates
             const combined = [...localMatches];
             for (const sp of serverPoints) {
               if (
@@ -216,6 +223,7 @@ export function LiveRouteNavigationOverlay({
     onSelectDestination(null);
     setSearchQuery('');
     setIsSearchOpen(false);
+    setIsRouteDetailsExpanded(false);
   };
 
   const formatEtaTime = (etaIso?: string) => {
@@ -251,160 +259,133 @@ export function LiveRouteNavigationOverlay({
   };
 
   return (
-    <div className="absolute top-3 left-3 right-3 sm:right-auto sm:w-[420px] z-[420] pointer-events-none flex flex-col gap-2 transition-all">
-      {/* Top Glass Floating Container */}
-      <div className="glass-card bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-xl p-3 pointer-events-auto space-y-2.5">
-        {/* GPS Status & Live Telemetry Pill Bar */}
-        <div className="flex items-center justify-between gap-1.5 text-xs pb-1 border-b border-slate-100">
-          <div className="flex items-center gap-1.5 min-w-0">
+    <div className="absolute top-3 left-3 z-[420] pointer-events-none flex flex-col gap-2 max-w-[calc(100vw-24px)] sm:max-w-md transition-all">
+      {/* Compact Top Glass Search & Location Control Bar */}
+      <div className="glass-card bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-lg p-1.5 pointer-events-auto flex items-center gap-1.5">
+        {/* Compact Location Status & Quick Menu Trigger */}
+        <div className="relative" ref={locationMenuRef}>
+          <button
+            type="button"
+            onClick={() => setIsLocationMenuOpen((v) => !v)}
+            className={`p-2 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all ${
+              isSimulated
+                ? 'bg-amber-50 border-amber-300 text-amber-800'
+                : gpsStatus === 'active'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                : gpsStatus === 'denied'
+                ? 'bg-rose-50 border-rose-300 text-rose-800'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+            title="Location settings: Toggle live GPS or simulation mode"
+          >
             <span
-              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+              className={`w-2 h-2 rounded-full shrink-0 ${
                 isSimulated
                   ? 'bg-amber-500 animate-pulse'
                   : gpsStatus === 'active'
                   ? 'bg-emerald-500 animate-pulse'
-                  : gpsStatus === 'requesting'
-                  ? 'bg-blue-500 animate-spin'
                   : gpsStatus === 'denied'
                   ? 'bg-rose-500'
                   : 'bg-slate-400'
               }`}
             />
-            <span className="font-bold text-slate-800 truncate">
-              {isSimulated
-                ? 'Demo location'
-                : gpsStatus === 'active'
-                ? 'Live location on'
-                : gpsStatus === 'requesting'
-                ? 'Connecting to GPS...'
-                : gpsStatus === 'denied'
-                ? 'Permission denied'
-                : 'Location off'}
-            </span>
-            {accuracyMeters != null && (
-              <span className="text-[10px] text-slate-600 bg-slate-100/90 font-medium px-1.5 py-0.5 rounded-md shrink-0">
-                &plusmn;{accuracyMeters}m
-              </span>
-            )}
-            {userCoords?.speed != null && userCoords.speed > 0 && (
-              <span className="text-[10px] text-blue-700 bg-blue-50 font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5 shrink-0">
-                <Gauge className="w-3 h-3" />
-                {userCoords.speed} km/h
-              </span>
-            )}
-          </div>
+            <LocateFixed className="w-3.5 h-3.5" />
+          </button>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {/* User Control: Explicitly Toggle Live Location On/Off */}
-            {onToggleLiveLocation && (
-              <button
-                type="button"
-                onClick={onToggleLiveLocation}
-                className={`px-2 py-1 rounded-xl text-[11px] font-bold flex items-center gap-1 border transition-all ${
-                  gpsStatus === 'active' || isWatching
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 shadow-2xs'
-                    : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700 shadow-xs'
-                }`}
-                title={
-                  gpsStatus === 'active' || isWatching
-                    ? 'Disable live browser location tracking'
-                    : 'Enable live browser location tracking for map positioning'
-                }
-              >
-                <Radio className="w-3 h-3" />
-                <span>{gpsStatus === 'active' || isWatching ? 'Turn Off' : 'Enable Live Location'}</span>
-              </button>
-            )}
+          {/* Location Settings Popover Dropdown */}
+          {isLocationMenuOpen && (
+            <div className="absolute top-full left-0 mt-2 w-72 p-3 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/90 z-50 space-y-2.5 text-xs animate-in fade-in zoom-in-95 duration-100">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                <span className="font-bold text-slate-900">Location Status</span>
+                <span className="text-[10px] text-slate-500">{lastUpdatedText}</span>
+              </div>
 
-            {/* Re-center on my position button */}
-            <button
-              type="button"
-              onClick={onTriggerRecenter}
-              disabled={!userCoords}
-              className="p-1.5 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50/80 active:scale-95 transition-all disabled:opacity-40"
-              title="Recenter map on your location"
-              aria-label="Recenter map"
-            >
-              <LocateFixed className="w-3.5 h-3.5" />
-            </button>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    isSimulated
+                      ? 'bg-amber-500'
+                      : gpsStatus === 'active'
+                      ? 'bg-emerald-500'
+                      : 'bg-slate-400'
+                  }`}
+                />
+                <span className="font-semibold text-slate-800">
+                  {isSimulated
+                    ? 'Demo simulation mode'
+                    : gpsStatus === 'active'
+                    ? 'Live browser location active'
+                    : gpsStatus === 'denied'
+                    ? 'Permission blocked in browser'
+                    : 'Location tracking off'}
+                </span>
+              </div>
 
-            {/* Toggle Demo Simulation Mode */}
-            <button
-              type="button"
-              onClick={onToggleSimulation}
-              className={`px-2 py-1 rounded-xl text-[11px] font-semibold flex items-center gap-1 border transition-all ${
-                isSimulated
-                  ? 'bg-amber-100 border-amber-300 text-amber-800 shadow-xs'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-              }`}
-              title="Toggle simulated vehicle movement for testing without active GPS"
-            >
-              <RotateCcw className="w-3 h-3" />
-              <span>{isSimulated ? 'Exit Demo' : 'Demo Mode'}</span>
-            </button>
-          </div>
-        </div>
+              {accuracyMeters != null && (
+                <div className="text-[11px] text-slate-600 bg-slate-50 px-2 py-1 rounded-lg">
+                  GPS Accuracy: &plusmn;{accuracyMeters}m
+                  {userCoords?.speed != null && userCoords.speed > 0 && (
+                    <span> • Speed: {userCoords.speed} km/h</span>
+                  )}
+                </div>
+              )}
 
-        {/* Privacy Notice: Explaining that browser GPS is client-side only */}
-        <div className="text-[10px] text-slate-500 bg-slate-50/90 px-2.5 py-1 rounded-xl border border-slate-200/60 flex items-center justify-between">
-          <span>Live location is used to position the marker on the map.</span>
-          {gpsStatus === 'active' && !activeJourney && (
-            <span className="text-[9.5px] font-semibold text-emerald-700 bg-emerald-100/70 px-1.5 py-0.2 rounded shrink-0 ml-1">
-              Client-side only
-            </span>
+              <div className="space-y-1.5 pt-1">
+                {onToggleLiveLocation && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onToggleLiveLocation();
+                      setIsLocationMenuOpen(false);
+                    }}
+                    className={`w-full py-1.5 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                      gpsStatus === 'active' || isWatching
+                        ? 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                        : 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>{gpsStatus === 'active' || isWatching ? 'Turn Off Live Location' : 'Turn On Live Location'}</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onTriggerRecenter();
+                    setIsLocationMenuOpen(false);
+                  }}
+                  disabled={!userCoords}
+                  className="w-full py-1.5 px-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40"
+                >
+                  <LocateFixed className="w-3.5 h-3.5" />
+                  <span>Recenter on My Position</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleSimulation();
+                    setIsLocationMenuOpen(false);
+                  }}
+                  className="w-full py-1.5 px-2.5 rounded-xl text-xs font-semibold bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 text-slate-700 hover:text-amber-800 flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>{isSimulated ? 'Exit Demo Simulation' : 'Switch to Demo Mode'}</span>
+                </button>
+              </div>
+
+              <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+                Privacy guarantee: Location is evaluated client-side only unless an official commute session is active.
+              </div>
+            </div>
           )}
         </div>
 
-        {/* Permission Denied Alert Banner */}
-        {gpsStatus === 'denied' && (
-          <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <p className="font-semibold text-rose-800">
-                Browser Geolocation Permission Blocked
-              </p>
-              <p className="text-[11px] text-rose-700 leading-relaxed">
-                {gpsErrorMessage || 'Click the location lock icon in your browser URL bar to allow GPS.'}
-              </p>
-              <button
-                type="button"
-                onClick={onToggleSimulation}
-                className="mt-1 px-2.5 py-1 rounded-lg bg-rose-600 text-white font-bold text-[11px] shadow-xs hover:bg-rose-700 transition-colors"
-              >
-                Switch to Simulated Location
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Commute Tracking Pill if an active journey is currently ongoing */}
-        {activeJourney && (
-          <div className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping shrink-0" />
-              <span className="font-bold text-blue-900 truncate">
-                Commute Verified: {activeJourney.origin} &rarr; {activeJourney.destination}
-              </span>
-            </div>
-            <span className="text-[10px] font-semibold text-blue-700 bg-white/80 px-1.5 py-0.5 rounded shadow-2xs shrink-0">
-              {activeJourney.checkpointsCount ?? 1} GPS Checkpoints
-            </span>
-          </div>
-        )}
-
-        {/* Destination Search Bar */}
-        <div ref={searchContainerRef} className="relative">
+        {/* Compact Destination Search Bar */}
+        <div ref={searchContainerRef} className="relative flex-1 min-w-[200px] sm:min-w-[280px]">
           <div className="relative flex items-center">
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none flex items-center">
-              {destination ? (
-                <span className="w-5 h-5 rounded-full bg-rose-600 text-white font-black text-[10px] flex items-center justify-center shadow-xs">
-                  B
-                </span>
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
-            </div>
-
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
@@ -413,15 +394,14 @@ export function LiveRouteNavigationOverlay({
                 if (!isSearchOpen) setIsSearchOpen(true);
               }}
               onFocus={() => setIsSearchOpen(true)}
-              placeholder="Where are you heading? (e.g. Surathkal, Manipal)"
-              className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50/90 hover:bg-slate-50 focus:bg-white border border-slate-200/80 focus:border-blue-500 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all shadow-xs"
+              placeholder="Search destination, hospital, or road..."
+              className="w-full pl-8 pr-7 py-1.5 rounded-xl bg-slate-50/90 hover:bg-slate-50 focus:bg-white border border-slate-200/80 focus:border-blue-500 text-xs font-semibold text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
             />
-
             {searchQuery && (
               <button
                 type="button"
                 onClick={handleClearDestination}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition-colors"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-200 transition-colors"
                 title="Clear destination"
               >
                 <X className="w-3.5 h-3.5" />
@@ -429,12 +409,12 @@ export function LiveRouteNavigationOverlay({
             )}
           </div>
 
-          {/* Autocomplete Dropdown */}
+          {/* Autocomplete Dropdown Popover */}
           {isSearchOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl bg-white border border-slate-200/90 shadow-2xl z-50 divide-y divide-slate-100 text-xs">
-              <div className="p-1.5 bg-slate-50 text-[10px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
-                <span>Coastal Highway Destinations</span>
-                {isSearchingServer && <span className="animate-pulse">Searching...</span>}
+            <div className="absolute top-full left-0 right-0 mt-1.5 max-h-60 overflow-y-auto rounded-xl bg-white/95 backdrop-blur-xl border border-slate-200/90 shadow-2xl z-50 divide-y divide-slate-100 text-xs animate-in fade-in zoom-in-95 duration-100">
+              <div className="p-1.5 bg-slate-50/90 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                <span>Verified Destinations</span>
+                {isSearchingServer && <span className="animate-pulse text-blue-600 font-normal">Searching...</span>}
               </div>
 
               {suggestions.length === 0 ? (
@@ -447,14 +427,14 @@ export function LiveRouteNavigationOverlay({
                     key={`${item.name}-${item.lat}`}
                     type="button"
                     onClick={() => handlePickDestination(item)}
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50/80 flex items-center justify-between group transition-colors"
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50/90 flex items-center justify-between group transition-colors"
                   >
                     <div className="min-w-0 pr-2">
                       <div className="font-bold text-slate-800 group-hover:text-blue-700 truncate">
                         {item.name}
                       </div>
-                      <div className="text-[10px] text-slate-600 truncate">
-                        {item.corridor || 'NH-66 Corridor'} &bull; {item.lat.toFixed(3)}, {item.lng.toFixed(3)}
+                      <div className="text-[10px] text-slate-500 truncate">
+                        {item.corridor || 'Regional Hub'} &bull; {item.lat.toFixed(3)}, {item.lng.toFixed(3)}
                       </div>
                     </div>
                     <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-blue-500 shrink-0" />
@@ -465,222 +445,165 @@ export function LiveRouteNavigationOverlay({
           )}
         </div>
 
-        {/* Quick Destination Chips */}
-        {!destination && (
-          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mr-0.5">
-              Popular:
-            </span>
-            {REGIONAL_DESTINATIONS.slice(0, 4).map((dest) => (
-              <button
-                key={dest.name}
-                type="button"
-                onClick={() =>
-                  handlePickDestination({
-                    name: dest.name,
-                    lat: dest.lat,
-                    lng: dest.lng,
-                    corridor: dest.corridor,
-                  })
-                }
-                className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-50 border border-slate-200/70 hover:border-blue-300 text-[11px] font-semibold text-slate-700 hover:text-blue-700 transition-colors shadow-2xs"
-              >
-                {dest.name}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Route Planning Spinner */}
+        {/* Inline Route Planning Indicator */}
         {isPlanningRoute && (
-          <div className="py-2.5 px-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
-            <span className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
-            <span className="font-medium">
-              Calculating optimal live route avoiding incident zones...
-            </span>
-          </div>
+          <span className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0 mr-1" />
         )}
+      </div>
 
-        {/* Route Planning Error Banner */}
-        {routePlanError && (
-          <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2">
+      {/* Active Route Intelligence Summary Card (Compact & Expandable) */}
+      {activeRoute && !isPlanningRoute && (
+        <div className="glass-card bg-white/95 backdrop-blur-md rounded-2xl border border-white/80 shadow-xl p-2.5 pointer-events-auto space-y-2 animate-in fade-in duration-150">
+          {/* Main Route Bar */}
+          <div className="flex items-center justify-between gap-1.5 text-xs">
             <div className="flex items-center gap-1.5 min-w-0">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-              <span className="truncate">{routePlanError}</span>
+              <span className="px-1.5 py-0.5 rounded-md bg-blue-600 text-white font-extrabold text-[10px] shrink-0">
+                ROUTE
+              </span>
+              <span className="font-bold text-slate-900 truncate" title={activeRoute.name}>
+                {activeRoute.name}
+              </span>
+              <span className="font-extrabold text-blue-700 tabular-nums shrink-0">
+                {activeRoute.totalEstimatedMin} min
+              </span>
+              <span className="text-slate-300 shrink-0">•</span>
+              <span className="text-slate-600 tabular-nums shrink-0">
+                {activeRoute.distanceKm.toFixed(1)} km
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={handleClearDestination}
-              className="text-[11px] font-bold text-amber-700 underline shrink-0 hover:text-amber-900"
-            >
-              Reset
-            </button>
-          </div>
-        )}
 
-        {/* Active Route Intelligence Summary Card */}
-        {activeRoute && !isPlanningRoute && (
-          <div className="space-y-2 pt-1 border-t border-slate-100">
-            {/* Header: Route Name & 1-Click Clear */}
-            <div className="flex items-center justify-between gap-1.5">
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="px-1.5 py-0.5 rounded-md bg-blue-600 text-white font-extrabold text-[10px]">
-                    ROUTE
-                  </span>
-                  <span className="font-extrabold text-slate-900 text-sm truncate">
-                    {activeRoute.name}
-                  </span>
-                </div>
-                <div className="text-[10px] text-slate-500 truncate">
-                  {activeRoute.corridorDescription}
-                </div>
-              </div>
-
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsRouteDetailsExpanded(!isRouteDetailsExpanded)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
+                title={isRouteDetailsExpanded ? 'Collapse route details' : 'Expand route details'}
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isRouteDetailsExpanded ? 'rotate-180' : ''}`} />
+              </button>
               <button
                 type="button"
                 onClick={handleClearDestination}
-                className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-[11px] font-bold transition-colors shrink-0"
-                title="Cancel navigation and return to live tracking"
+                className="p-1 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                title="Clear route"
               >
-                Clear Route
+                <X className="w-4 h-4" />
               </button>
             </div>
+          </div>
 
-            {/* 4-Metric Grid (Distance, Duration, ETA, Safety) */}
-            <div className="grid grid-cols-4 gap-1.5">
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-center">
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-600">
-                  Distance
-                </span>
-                <span className="text-xs font-black text-slate-900 tabular-nums">
-                  {activeRoute.distanceKm.toFixed(1)} km
-                </span>
-              </div>
-
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-center">
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-600">
-                  Travel Time
-                </span>
-                <span className="text-xs font-black text-slate-900 tabular-nums">
-                  {activeRoute.totalEstimatedMin} min
-                </span>
-              </div>
-
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-center">
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-600">
-                  ETA
-                </span>
-                <span className="text-xs font-black text-blue-700 tabular-nums">
-                  {formatEtaTime(activeRoute.etaIso) || `${activeRoute.totalEstimatedMin}m`}
-                </span>
-              </div>
-
-              <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 text-center">
-                <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-600">
-                  Safety
-                </span>
-                <span className="text-xs font-black text-emerald-700 tabular-nums">
-                  {activeRoute.avoidanceScore}/100
-                </span>
-              </div>
-            </div>
-
-            {/* Safety & Incident Status Pill */}
-            {(() => {
-              const badge = getSafetyBadge(activeRoute.avoidanceScore);
-              const hasIncidents = activeRoute.affectingIncidents.length > 0;
-              return (
-                <div
-                  className={`p-2 rounded-xl border flex items-center justify-between gap-1.5 text-xs ${badge.color}`}
-                >
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${badge.dot}`} />
-                    <span className="font-bold truncate">{badge.label}</span>
-                    {activeRoute.incidentDelayMin > 0 && (
-                      <span className="font-bold text-rose-600 shrink-0">
-                        (+{activeRoute.incidentDelayMin} min delay)
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-semibold shrink-0">
-                    {hasIncidents
-                      ? `${activeRoute.affectingIncidents.length} incident(s) on corridor`
-                      : 'Zero obstructions'}
-                  </span>
+          {/* Expanded Route Details Panel */}
+          {isRouteDetailsExpanded && (
+            <div className="pt-2 border-t border-slate-100 space-y-2 text-xs">
+              {/* 4-Metric Grid */}
+              <div className="grid grid-cols-4 gap-1 text-center">
+                <div className="p-1.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <span className="block text-[9px] font-bold text-slate-500 uppercase">Distance</span>
+                  <span className="text-xs font-bold text-slate-900">{activeRoute.distanceKm.toFixed(1)} km</span>
                 </div>
-              );
-            })()}
-
-            {/* Affecting Incidents List (if any) */}
-            {activeRoute.affectingIncidents.length > 0 && (
-              <div className="space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                  Affecting Road Disruption Ahead:
+                <div className="p-1.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <span className="block text-[9px] font-bold text-slate-500 uppercase">Travel Time</span>
+                  <span className="text-xs font-bold text-slate-900">{activeRoute.totalEstimatedMin} min</span>
                 </div>
-                {activeRoute.affectingIncidents.slice(0, 2).map((inc) => (
-                  <button
-                    key={inc.id}
-                    type="button"
-                    onClick={() => onSelectIncident?.(inc)}
-                    className="w-full p-2 rounded-xl bg-amber-50/90 hover:bg-amber-100/90 border border-amber-200/90 text-left flex items-center justify-between text-xs transition-colors group"
-                  >
-                    <div className="min-w-0 pr-2">
-                      <div className="font-bold text-amber-950 truncate group-hover:text-amber-900">
-                        {inc.title}
-                      </div>
-                      <div className="text-[10px] text-amber-700">
-                        {inc.roadName} &bull; +{inc.estimatedDelayMinutes}m delay
-                        {inc.roadClosed && (
-                          <span className="ml-1 px-1 py-0.2 rounded bg-rose-600 text-white font-black text-[9px]">
-                            ROAD CLOSED
-                          </span>
-                        )}
-                      </div>
+                <div className="p-1.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <span className="block text-[9px] font-bold text-slate-500 uppercase">ETA</span>
+                  <span className="text-xs font-bold text-blue-700">{formatEtaTime(activeRoute.etaIso) || `${activeRoute.totalEstimatedMin}m`}</span>
+                </div>
+                <div className="p-1.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <span className="block text-[9px] font-bold text-slate-500 uppercase">Safety</span>
+                  <span className="text-xs font-bold text-emerald-700">{activeRoute.avoidanceScore}/100</span>
+                </div>
+              </div>
+
+              {/* Safety Badge */}
+              {(() => {
+                const badge = getSafetyBadge(activeRoute.avoidanceScore);
+                return (
+                  <div className={`p-1.5 rounded-xl border flex items-center justify-between text-[11px] ${badge.color}`}>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                      <span className="font-bold">{badge.label}</span>
                     </div>
-                    <ExternalLink className="w-3 h-3 text-amber-600 shrink-0" />
-                  </button>
-                ))}
-              </div>
-            )}
+                    <span className="text-[10px] font-medium">
+                      {activeRoute.affectingIncidents.length > 0
+                        ? `${activeRoute.affectingIncidents.length} incident(s) near route`
+                        : 'Verified unobstructed corridor'}
+                    </span>
+                  </div>
+                );
+              })()}
 
-            {/* Alternate Routes Switcher (if backend provided multiple route options) */}
-            {allRoutes.length > 1 && (
-              <div className="pt-1">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                  Alternative Corridor Options:
+              {/* Affecting Road Disruption (if any) */}
+              {activeRoute.affectingIncidents.length > 0 && (
+                <div className="space-y-1">
+                  {activeRoute.affectingIncidents.slice(0, 2).map((inc) => (
+                    <button
+                      key={inc.id}
+                      type="button"
+                      onClick={() => onSelectIncident?.(inc)}
+                      className="w-full p-1.5 rounded-xl bg-amber-50/90 hover:bg-amber-100 border border-amber-200 text-left flex items-center justify-between text-xs transition-colors"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="font-bold text-amber-950 truncate text-[11px]">{inc.title}</div>
+                        <div className="text-[10px] text-amber-700">+{inc.estimatedDelayMinutes}m delay</div>
+                      </div>
+                      <ExternalLink className="w-3 h-3 text-amber-600 shrink-0" />
+                    </button>
+                  ))}
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {allRoutes.map((rt) => {
-                    const isSelected = rt.id === activeRoute.id;
-                    return (
-                      <button
-                        key={rt.id}
-                        type="button"
-                        onClick={() => onSelectRouteOption(rt)}
-                        className={`p-2 rounded-xl border text-left text-xs transition-all ${
-                          isSelected
-                            ? 'bg-blue-600 text-white border-blue-500 shadow-md font-bold'
-                            : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 font-medium'
-                        }`}
-                      >
-                        <div className="truncate text-[11px]">{rt.name}</div>
-                        <div
-                          className={`text-[10px] ${
-                            isSelected ? 'text-blue-100' : 'text-slate-500'
+              )}
+
+              {/* Alternative Route Candidates */}
+              {allRoutes.length > 1 && (
+                <div className="pt-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Alternative Corridors:
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {allRoutes.map((rt) => {
+                      const isSelected = rt.id === activeRoute.id;
+                      return (
+                        <button
+                          key={rt.id}
+                          type="button"
+                          onClick={() => onSelectRouteOption(rt)}
+                          className={`p-1.5 rounded-xl border text-left text-xs transition-all ${
+                            isSelected
+                              ? 'bg-blue-600 text-white border-blue-500 font-bold shadow-xs'
+                              : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
                           }`}
                         >
-                          {rt.totalEstimatedMin} min &bull; {rt.distanceKm.toFixed(1)} km
-                        </div>
-                      </button>
-                    );
-                  })}
+                          <div className="truncate text-[11px]">{rt.name}</div>
+                          <div className={`text-[10px] ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
+                            {rt.totalEstimatedMin} min • {rt.distanceKm.toFixed(1)} km
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Route Error Notification */}
+      {routePlanError && (
+        <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2 pointer-events-auto shadow-md">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="truncate">{routePlanError}</span>
           </div>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={handleClearDestination}
+            className="text-[10px] font-bold text-amber-700 underline shrink-0 hover:text-amber-900"
+          >
+            Reset
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -39,6 +39,8 @@ import {
   MapPin,
   ExternalLink,
   Sparkles,
+  Sliders,
+  ChevronDown,
 } from 'lucide-react';
 import {
   REGIONAL_DESTINATIONS,
@@ -547,6 +549,17 @@ export function CorridorIntelligenceMap({
   const { showToast } = useToast();
   const prefersReducedMotion = Boolean(useReducedMotion());
 
+  
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (mapToolsMenuRef.current && !mapToolsMenuRef.current.contains(e.target as Node)) {
+        setIsMapToolsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
+
   const [mapStyle, setMapStyle] = useState<'satellite' | 'hybrid' | 'map' | 'terrain'>('satellite');
   const [googleMapsConfig, setGoogleMapsConfig] = useState<GoogleMapsConfig>(getGoogleMapsConfig());
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false);
@@ -566,6 +579,8 @@ export function CorridorIntelligenceMap({
     }>
   >([]);
   const [isPlaceSearchOpen, setIsPlaceSearchOpen] = useState(false);
+  const [isMapToolsMenuOpen, setIsMapToolsMenuOpen] = useState(false);
+  const mapToolsMenuRef = useRef<HTMLDivElement | null>(null);
   const [activeSearchPin, setActiveSearchPin] = useState<{
     label: string;
     lat: number;
@@ -1248,349 +1263,310 @@ export function CorridorIntelligenceMap({
         darkTacticalTiles ? 'map-tiles-dark' : 'map-tiles-light'
       }`}
     >
-      {/* Top Floating Geospatial Controls */}
+      {/* Top Floating Geospatial Bar: Compact & Map-First */}
       <div className="absolute top-3 left-3 right-3 z-[400] flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-        {/* Left Telemetry & Simulation Mode Status Pill */}
+        {/* Left Telemetry & Status Pill */}
         <div
           data-testid="map-simulation-status-pill"
-          className="pointer-events-auto flex flex-wrap items-center gap-2 px-3.5 py-1.5 rounded-2xl glass-pill border-white/70 text-xs font-semibold text-slate-800 shadow-sm"
+          className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-2xl glass-pill border-white/80 text-xs font-semibold text-slate-800 shadow-md backdrop-blur-md bg-white/85"
         >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
           </span>
-          <span className="font-bold text-slate-900">NH-66 Corridor</span>
+          <span className="font-bold text-slate-900">NH-66</span>
           <span className="text-slate-300">|</span>
           <span className="text-blue-600 font-bold">{mergedIncidents.length} Incidents</span>
-          <span className="text-slate-300">|</span>
-          <span
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-sky-500/15 border border-sky-500/25 text-sky-800 text-[10px] font-bold uppercase tracking-wider"
-            title="Deterministic road-following vehicle simulation (never claimed as live GPS)"
-          >
-            Simulation Mode • {showVehicles ? totalVehiclesCount : 0} Vehicles
-          </span>
-          {reroutedVehiclesCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-purple-500/15 border border-purple-500/25 text-purple-800 text-[10px] font-bold">
-              <GitBranch className="w-3 h-3" /> {reroutedVehiclesCount} Rerouted
-            </span>
+          {showVehicles && (
+            <>
+              <span className="text-slate-300">|</span>
+              <span className="text-[10px] text-sky-800 font-bold bg-sky-50 px-1.5 py-0.5 rounded-md border border-sky-200">
+                {totalVehiclesCount} Vehicles
+              </span>
+            </>
           )}
-          {heldVehiclesCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-xl bg-red-500/15 border border-red-500/25 text-red-800 text-[10px] font-bold">
-              <Lock className="w-3 h-3" /> {heldVehiclesCount} Held at Closure
+          {reroutedVehiclesCount > 0 && (
+            <span className="text-[10px] text-purple-800 font-bold bg-purple-50 px-1.5 py-0.5 rounded-md border border-purple-200">
+              {reroutedVehiclesCount} Rerouted
             </span>
           )}
         </div>
 
-        {/* Right Compact Map & Incident Controls */}
-        <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
-          {/* Google Maps Platform Status / Setup Modal Trigger */}
+        {/* Right Consolidated Controls: Google Status + Map Tools Menu */}
+        <div className="pointer-events-auto flex items-center gap-1.5" ref={mapToolsMenuRef}>
+          {/* Google Maps SDK / Satellite Mode Status */}
           <button
             type="button"
             data-testid="google-maps-status-pill"
             onClick={() => setIsGoogleSetupOpen(true)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-[0.97] pointer-events-auto ${
+            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all active:scale-[0.97] ${
               googleMapsLoaded && useGoogleEngine
                 ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-500 shadow-emerald-500/20'
                 : googleMapsConfig.isConfigured
-                ? 'glass-pill text-blue-700 border-blue-300'
+                ? 'glass-pill text-blue-700 border-blue-300 bg-white/80'
                 : 'glass-pill text-amber-800 border-amber-300 bg-amber-50/80 hover:bg-amber-100'
             }`}
-            title="Google Maps Platform Satellite Mode status and configuration guide"
+            title="Google Maps Platform Satellite Mode status and configuration"
           >
             <Globe className="w-3.5 h-3.5" />
-            <span>
+            <span className="hidden sm:inline">
               {googleMapsLoaded && useGoogleEngine
-                ? 'Google Satellite (Active)'
+                ? 'Satellite (Active)'
                 : googleMapsConfig.isConfigured
-                ? 'Google Maps SDK (Ready)'
-                : 'Google Maps Key (Pending)'}
+                ? 'Maps SDK Ready'
+                : 'Maps Key Pending'}
             </span>
           </button>
 
-          {/* Real-World Place, Hospital & Junction Search Bar */}
-          <div className="relative pointer-events-auto">
-            <div className="flex items-center gap-1 px-3 py-1.5 rounded-2xl glass-pill border-white/80 shadow-sm bg-white/80 backdrop-blur-md">
-              <Search className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-              <input
-                type="text"
-                value={placeSearchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                onFocus={() => {
-                  if (placeSearchQuery) setIsPlaceSearchOpen(true);
-                }}
-                placeholder="Search hospital, road, junction..."
-                className="bg-transparent text-xs text-slate-900 placeholder:text-slate-500 focus:outline-none w-44 sm:w-56"
-              />
-              {placeSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlaceSearchQuery('');
-                    setPlaceSearchResults([]);
-                    setIsPlaceSearchOpen(false);
-                    setActiveSearchPin(null);
-                  }}
-                  className="p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
+          {/* Unified Map Tools Dropdown Menu */}
+          <div className="relative">
+            <button
+              type="button"
+              data-testid="map-tools-dropdown-btn"
+              onClick={() => setIsMapToolsMenuOpen((v) => !v)}
+              className={`px-3 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 shadow-md transition-all active:scale-[0.97] ${
+                isMapToolsMenuOpen || isPlacementMode || showScenarioBar
+                  ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
+                  : 'glass-pill text-slate-800 border-white/80 bg-white/85 hover:bg-white'
+              }`}
+              title="Toggle emergency map layers, vehicles, lifelines, and simulation tools"
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>Map Tools</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${isMapToolsMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
 
-            {/* Suggestions Dropdown */}
-            {isPlaceSearchOpen && placeSearchResults.length > 0 && (
-              <div className="absolute top-full right-0 mt-1.5 w-80 max-h-72 overflow-y-auto bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/80 p-1.5 z-50 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Search Results ({placeSearchResults.length})
-                </div>
-                {placeSearchResults.map((res) => (
+            {/* Map Tools Popover Dropdown */}
+            {isMapToolsMenuOpen && (
+              <div className="absolute top-full right-0 mt-2 w-72 max-h-[75vh] overflow-y-auto bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/90 p-2 z-50 text-xs space-y-2 animate-in fade-in zoom-in-95 duration-100 divide-y divide-slate-100">
+                <div className="space-y-1">
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Incident & Reporting Tools
+                  </div>
                   <button
-                    key={res.id}
                     type="button"
-                    onClick={() => handleSelectSearchResult(res)}
-                    className="w-full text-left p-2 rounded-xl text-xs hover:bg-blue-50/90 transition-colors flex items-start gap-2 border border-transparent hover:border-blue-200"
+                    data-testid="toggle-map-report-btn"
+                    onClick={() => {
+                      if (isPlacementMode) {
+                        handleCancelPlacement();
+                      } else {
+                        setIsPlacementMode(true);
+                        setDraftIncidentCoords(null);
+                      }
+                      setIsMapToolsMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between transition-colors ${
+                      isPlacementMode
+                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                        : 'hover:bg-slate-100 text-slate-700'
+                    }`}
                   >
-                    <span className="text-sm mt-0.5">
-                      {res.category === 'HOSPITAL'
-                        ? '🏥'
-                        : res.category === 'CORRIDOR'
-                        ? '🛣️'
-                        : res.category === 'COORDINATE'
-                        ? '🌐'
-                        : '📍'}
+                    <span className="flex items-center gap-2">
+                      <MapPinPlus className="w-4 h-4 text-rose-600" />
+                      Pin Incident on Map
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-slate-900 truncate">{res.label}</div>
-                      {res.sublabel && (
-                        <div className="text-[10px] text-slate-500 truncate">{res.sublabel}</div>
-                      )}
-                    </div>
+                    <span className="text-[10px] font-bold">{isPlacementMode ? 'Active' : 'Off'}</span>
                   </button>
-                ))}
+
+                  <button
+                    type="button"
+                    data-testid="toggle-incidents-btn"
+                    onClick={() => setShowIncidents((v) => !v)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      {showIncidents ? <Eye className="w-4 h-4 text-blue-600" /> : <EyeOff className="w-4 h-4 text-slate-400" />}
+                      Show Incident Markers
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{showIncidents ? 'Shown' : 'Hidden'}</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1 pt-1.5">
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Traffic & Fleet Overlays
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="toggle-vehicles-btn"
+                    onClick={() => setShowVehicles((v) => !v)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Navigation className="w-4 h-4 text-sky-600" />
+                      Simulated Vehicles ({totalVehiclesCount})
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{showVehicles ? 'Active' : 'Off'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="toggle-congestion-btn"
+                    onClick={() => setShowCongestionLayer((v) => !v)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-emerald-600" />
+                      Traffic Flow & Closures
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{showCongestionLayer ? 'Active' : 'Off'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCorridorLine((v) => !v)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Route className="w-4 h-4 text-blue-600" />
+                      NH-66 Highway Route Highlight
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{showCorridorLine ? 'Active' : 'Off'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setEnableClustering((v) => !v)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-purple-600" />
+                      Spatial Marker Clustering
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{enableClustering ? 'On' : 'Off'}</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1 pt-1.5">
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Emergency Intelligence
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="toggle-lifelines-btn"
+                    onClick={() => setShowLifelines((v) => !v)}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <HeartPulse className="w-4 h-4 text-rose-600" />
+                      Lifeline Trauma Hospitals
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{showLifelines ? 'Shown' : 'Hidden'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="open-impact-simulator-btn"
+                    onClick={() => {
+                      setIsImpactSimulatorOpen(true);
+                      setIsMapToolsMenuOpen(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FlaskConical className="w-4 h-4 text-amber-600" />
+                      Impact Simulator Modal
+                    </span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="toggle-fragility-btn"
+                    onClick={() => {
+                      setShowFragilityHeatmap(true);
+                      setIsFragilityModalOpen(true);
+                      setIsMapToolsMenuOpen(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-600" />
+                      Corridor Fragility Index
+                    </span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="open-critical-queue-btn"
+                    onClick={() => {
+                      setIsCriticalQueueOpen(true);
+                      setIsMapToolsMenuOpen(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                      Critical Verification Queue
+                    </span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid="toggle-scenarios-btn"
+                    onClick={() => {
+                      setShowScenarioBar((v) => !v);
+                      setIsMapToolsMenuOpen(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-xl font-semibold flex items-center justify-between hover:bg-slate-100 text-slate-700 transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FlaskConical className="w-4 h-4 text-indigo-600" />
+                      Repeatable Rerouting Scenarios
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-500">{showScenarioBar ? 'Active' : 'Off'}</span>
+                  </button>
+                </div>
+
+                <div className="pt-1.5">
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Jump to Landmark
+                  </div>
+                  <select
+                    onChange={(e) => {
+                      const found = REGIONAL_DESTINATIONS.find((d) => d.name === e.target.value);
+                      if (found) {
+                        const coords: [number, number] = [found.lat, found.lng];
+                        setInternalFocus(coords);
+                        onFocusCoordsChange?.(coords);
+                      }
+                      setIsMapToolsMenuOpen(false);
+                    }}
+                    defaultValue=""
+                    aria-label="Jump to regional checkpoint"
+                    className="w-full px-2 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+                  >
+                    <option value="" disabled>Select regional landmark...</option>
+                    {REGIONAL_DESTINATIONS.map((d) => (
+                      <option key={d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
           </div>
-          {/* Report Incident Directly on Map Toggle */}
-          <button
-            type="button"
-            data-testid="toggle-map-report-btn"
-            onClick={() => {
-              if (isPlacementMode) {
-                handleCancelPlacement();
-              } else {
-                setIsPlacementMode(true);
-                setDraftIncidentCoords(null);
-              }
-            }}
-            className={`px-3.5 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 shadow-md transition-all active:scale-[0.97] focus-visible:outline-none ${
-              isPlacementMode
-                ? 'bg-gradient-to-r from-red-600 to-red-700 border-red-500 text-white'
-                : 'bg-gradient-to-r from-red-600 to-rose-600 border-rose-500 text-white hover:from-red-500 hover:to-rose-500 shadow-rose-500/30'
-            }`}
-            title="Pin and report a new road incident directly on the map"
-          >
-            <MapPinPlus className="w-3.5 h-3.5" />
-            <span>{isPlacementMode ? 'Cancel Pin' : 'Pin Incident'}</span>
-          </button>
-
-          {/* Show / Hide Simulated Vehicles Toggle */}
-          <button
-            type="button"
-            data-testid="toggle-vehicles-btn"
-            onClick={() => setShowVehicles((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              showVehicles
-                ? 'bg-sky-600 text-white border-sky-500 shadow-sky-500/30'
-                : 'text-slate-700 hover:bg-white/70'
-            }`}
-            title="Show or hide simulated corridor vehicles"
-          >
-            <Navigation className="w-3.5 h-3.5" />
-            <span>Vehicles ({totalVehiclesCount})</span>
-          </button>
-
-          {/* Toggle Traffic Congestion Layer */}
-          <button
-            type="button"
-            data-testid="toggle-congestion-btn"
-            onClick={() => setShowCongestionLayer((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              showCongestionLayer
-                ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/30'
-                : 'text-slate-700 hover:bg-white/70'
-            }`}
-            title="Toggle segment-level traffic density & confirmed road closure layer"
-          >
-            <Activity className="w-3.5 h-3.5" />
-            <span>Traffic Flow</span>
-          </button>
-
-          {/* Toggle Lifeline Hospitals */}
-          <button
-            type="button"
-            data-testid="toggle-lifelines-btn"
-            onClick={() => setShowLifelines((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              showLifelines
-                ? 'bg-rose-600 text-white border-rose-500 shadow-rose-500/30'
-                : 'text-slate-700 hover:bg-white/70'
-            }`}
-            title="Toggle 6 Regional Lifeline Trauma Hospitals and reachability assessment"
-          >
-            <HeartPulse className="w-3.5 h-3.5" />
-            <span>Lifelines</span>
-          </button>
-
-          {/* Open RoadAlert Impact Simulator Modal */}
-          <button
-            type="button"
-            data-testid="open-impact-simulator-btn"
-            onClick={() => setIsImpactSimulatorOpen(true)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1.5 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              activeSimulation
-                ? 'bg-gradient-to-r from-amber-600 to-rose-600 text-white border-amber-500 shadow-amber-500/40 animate-pulse'
-                : 'text-slate-800 hover:bg-white/80'
-            }`}
-            title="RoadAlert Impact Simulator: What-if road disruption modeling & emergency decisions"
-          >
-            <FlaskConical className={`w-3.5 h-3.5 ${activeSimulation ? 'text-white' : 'text-amber-600'}`} />
-            <span>Impact Simulator</span>
-            {activeSimulation && (
-              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-            )}
-          </button>
-
-          {/* Toggle Corridor Fragility Heatmap */}
-          <button
-            type="button"
-            data-testid="toggle-fragility-btn"
-            onClick={() => {
-              setShowFragilityHeatmap((v) => !v);
-              setIsFragilityModalOpen(true);
-            }}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              showFragilityHeatmap
-                ? 'bg-amber-600 text-white border-amber-500 shadow-amber-500/30'
-                : 'text-slate-700 hover:bg-white/70'
-            }`}
-            title="Analyze corridor fragility & systemic chokepoint vulnerabilities"
-          >
-            <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Fragility Index</span>
-          </button>
-
-          {/* Open Decision-Critical Verification Queue */}
-          <button
-            type="button"
-            data-testid="open-critical-queue-btn"
-            onClick={() => setIsCriticalQueueOpen(true)}
-            className="px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm text-slate-800 hover:bg-white/80 transition-all active:scale-[0.97] focus-visible:outline-none"
-            title="Open Decision-Critical Verification Queue"
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-            <span>Critical Queue</span>
-          </button>
-
-          {/* Toggle Demo & Verification Scenarios Bar */}
-          <button
-            type="button"
-            data-testid="toggle-scenarios-btn"
-            onClick={() => setShowScenarioBar((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              showScenarioBar
-                ? 'bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/30'
-                : 'text-slate-700 hover:bg-white/70'
-            }`}
-            title="Open repeatable incident & rerouting test scenarios"
-          >
-            <FlaskConical className="w-3.5 h-3.5" />
-            <span>Scenarios</span>
-          </button>
-
-          {/* Show / Hide Incident Markers Toggle */}
-          <button
-            type="button"
-            data-testid="toggle-incidents-btn"
-            onClick={() => setShowIncidents((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              showIncidents
-                ? 'bg-white/80 border-blue-400 text-blue-700'
-                : 'text-slate-500 hover:bg-white/70'
-            }`}
-            title="Show or hide incident markers on the map"
-          >
-            {showIncidents ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            <span>Incidents</span>
-          </button>
-
-          <select
-            onChange={(e) => {
-              const found = REGIONAL_DESTINATIONS.find((d) => d.name === e.target.value);
-              if (found) {
-                const coords: [number, number] = [found.lat, found.lng];
-                setInternalFocus(coords);
-                onFocusCoordsChange?.(coords);
-              }
-            }}
-            defaultValue=""
-            aria-label="Jump to corridor checkpoint"
-            className="px-2.5 py-1.5 rounded-2xl glass-pill border-white/70 text-xs font-semibold text-slate-700 shadow-sm focus:outline-none transition-all cursor-pointer"
-          >
-            <option value="" disabled>
-              Jump to Location...
-            </option>
-            {REGIONAL_DESTINATIONS.map((d) => (
-              <option key={d.name} value={d.name}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-
-          <button
-            type="button"
-            onClick={() => {
-              setShowCorridorLine((v) => {
-                const next = !v;
-                if (next && !prefersReducedMotion) {
-                  setCorridorDrawComplete(false);
-                }
-                return next;
-              });
-            }}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              showCorridorLine
-                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
-                : 'text-slate-700 hover:bg-white/70'
-            }`}
-            title="Toggle NH-66 Corridor Route Highlight"
-          >
-            <Route className="w-3.5 h-3.5" /> Corridor
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setEnableClustering((v) => !v)}
-            className={`px-2.5 py-1.5 rounded-2xl border text-xs font-semibold flex items-center gap-1 glass-pill border-white/70 shadow-sm transition-all active:scale-[0.97] focus-visible:outline-none ${
-              enableClustering
-                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-500/30'
-                : 'text-slate-700 hover:bg-white/70'
-            }`}
-            title="Toggle Spatial Marker Clustering"
-          >
-            <Layers className="w-3.5 h-3.5" /> Cluster
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setDarkTacticalTiles((v) => !v)}
-            className="px-2.5 py-1.5 rounded-2xl glass-pill border-white/70 text-xs font-semibold text-slate-700 hover:bg-white/70 active:scale-[0.97] focus-visible:outline-none shadow-sm flex items-center gap-1 transition-all"
-            title="Switch Daylight / Dark Map Style"
-          >
-            <Compass className="w-3.5 h-3.5 text-blue-600" />
-            {darkTacticalTiles ? 'Dark Map' : 'Standard'}
-          </button>
         </div>
       </div>
+
+      {/* Placement Mode Banner */}
+      {isPlacementMode && (
+        <div className="absolute top-14 left-3 right-3 z-[415] p-2.5 rounded-2xl bg-slate-900/95 text-white border border-rose-500/80 shadow-2xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+            <span className="font-bold">Incident Placement Active:</span>
+            <span className="text-slate-300">Click anywhere on the satellite map to position the new incident pin.</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCancelPlacement}
+            className="px-3 py-1 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {/* Collapsible Repeatable Scenario Demonstration Bar */}
       {showScenarioBar && !isPlacementMode && (
@@ -1862,6 +1838,8 @@ export function CorridorIntelligenceMap({
           showCongestionLayer={showCongestionLayer}
           primaryRoute={primaryRoute}
           alternativeRoutes={alternativeRoutes}
+          activeRouteGeometry={activeRouteGeometry}
+          alternateRouteGeometry={alternateRouteGeometry}
           mapType={mapStyle === 'map' ? 'roadmap' : mapStyle === 'terrain' ? 'roadmap' : mapStyle}
           onMapTypeChange={(t) => setMapStyle(t === 'roadmap' ? 'map' : t)}
         />
