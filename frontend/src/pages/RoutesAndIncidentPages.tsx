@@ -359,7 +359,11 @@ export function RoutePlannerPage() {
 
   const validateAndSubmitRoutePlan = (
     overrideOrigin?: LocationEndpointValue,
-    overrideDest?: LocationEndpointValue
+    overrideDest?: LocationEndpointValue,
+    callbacks?: {
+      onSuccess?: (data: any) => void;
+      onError?: (err: any) => void;
+    }
   ) => {
     const o = overrideOrigin || originState;
     const d = overrideDest || destState;
@@ -393,7 +397,10 @@ export function RoutePlannerPage() {
       }
     }
 
-    if (hasErr) return;
+    if (hasErr) {
+      callbacks?.onError?.(new Error('Validation failed'));
+      return;
+    }
 
     if (
       oText.toLowerCase() === dText.toLowerCase() ||
@@ -404,19 +411,31 @@ export function RoutePlannerPage() {
         Math.abs(o.lat - d.lat) < 0.0004 &&
         Math.abs(o.lng - d.lng) < 0.0004)
     ) {
-      setDestError('Origin and destination must be two distinct locations.');
+      const distinctErr = 'Origin and destination must be two distinct locations.';
+      setDestError(distinctErr);
+      callbacks?.onError?.(new Error(distinctErr));
       return;
     }
 
-    planMutation.mutate({
-      origin: oText,
-      destination: dText,
-      originLat: o.lat,
-      originLng: o.lng,
-      destLat: d.lat,
-      destLng: d.lng,
-      avoidIncidentZones,
-    });
+    planMutation.mutate(
+      {
+        origin: oText,
+        destination: dText,
+        originLat: o.lat,
+        originLng: o.lng,
+        destLat: d.lat,
+        destLng: d.lng,
+        avoidIncidentZones,
+      },
+      {
+        onSuccess: (data) => {
+          callbacks?.onSuccess?.(data);
+        },
+        onError: (err) => {
+          callbacks?.onError?.(err);
+        },
+      }
+    );
   };
 
   const handlePlanSubmit = (e: React.FormEvent) => {
@@ -591,6 +610,10 @@ export function RoutePlannerPage() {
 
   const {
     isNavigating,
+    originMode,
+    isHoldingAtPlannedOrigin,
+    originDistanceKm,
+    navigationStatusNotice,
     followVehicle,
     setFollowVehicle,
     toggleFollowVehicle,
@@ -617,7 +640,8 @@ export function RoutePlannerPage() {
   } = useNavigationTracking({
     selectedRoute,
     originCoords: activeOriginCoords,
-    onUpdateOriginToGps: (newOrigin) => {
+    onUpdateOriginToGps: (newOrigin, onComplete) => {
+      const prevOrigin = { ...originState };
       const updatedValue: LocationEndpointValue = {
         text: newOrigin.label,
         lat: newOrigin.lat,
@@ -625,8 +649,22 @@ export function RoutePlannerPage() {
         roadName: 'Current GPS Location',
         source: 'MANUAL',
       };
-      setOriginState(updatedValue);
-      validateAndSubmitRoutePlan(updatedValue, destState);
+      // Recalculate route using existing routing service; rollback on failure without corrupting route
+      validateAndSubmitRoutePlan(updatedValue, destState, {
+        onSuccess: () => {
+          setOriginState(updatedValue);
+          onComplete?.(true);
+        },
+        onError: () => {
+          setOriginState(prevOrigin);
+          onComplete?.(false);
+          showToast({
+            type: 'error',
+            title: 'Recalculation Failed',
+            message: 'Unable to recalculate route from current GPS location. Preserving selected route.',
+          });
+        },
+      });
     },
     onRecalculatePlan: () => {
       validateAndSubmitRoutePlan();
@@ -994,6 +1032,10 @@ export function RoutePlannerPage() {
           onToggleSimulation={toggleSimulationMode}
           onSimulateStep={simulateNextStep}
           diagnostics={navDiagnostics}
+          originMode={originMode}
+          isHoldingAtPlannedOrigin={isHoldingAtPlannedOrigin}
+          originDistanceKm={originDistanceKm}
+          navigationStatusNotice={navigationStatusNotice}
         />
       )}
 
@@ -1367,15 +1409,17 @@ export function RoutePlannerPage() {
             {/* Oriented Vehicle Marker: Placed at Selected Origin Upon Route Calculation & Tracks GPS Live During Navigation */}
             {(isNavigating || plannedOriginCoords) && (
               <CarNavigationMarker
-                coords={isNavigating ? navCoords : plannedOriginCoords}
-                progress={isNavigating ? navProgress : null}
-                resolvedSpeedKmh={isNavigating ? resolvedSpeedKmh : 0}
-                resolvedHeading={isNavigating ? resolvedHeading : (initialRoadBearing ?? null)}
-                followVehicle={isNavigating ? followVehicle : false}
+                coords={isHoldingAtPlannedOrigin ? plannedOriginCoords : (isNavigating ? navCoords : plannedOriginCoords)}
+                progress={isHoldingAtPlannedOrigin ? null : (isNavigating ? navProgress : null)}
+                resolvedSpeedKmh={isHoldingAtPlannedOrigin ? 0 : (isNavigating ? resolvedSpeedKmh : 0)}
+                resolvedHeading={isHoldingAtPlannedOrigin ? (initialRoadBearing ?? null) : (isNavigating ? resolvedHeading : (initialRoadBearing ?? null))}
+                followVehicle={isHoldingAtPlannedOrigin ? false : (isNavigating ? followVehicle : false)}
                 recenterTrigger={recenterTrigger}
                 isSimulated={isNavSimulated}
                 onUserPanned={() => setFollowVehicle(false)}
-                isPlannedOrigin={!isNavigating}
+                isPlannedOrigin={!isNavigating || isHoldingAtPlannedOrigin}
+                originMode={originMode}
+                originDistanceKm={originDistanceKm}
               />
             )}
 

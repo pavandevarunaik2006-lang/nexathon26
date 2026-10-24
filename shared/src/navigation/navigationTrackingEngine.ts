@@ -649,3 +649,158 @@ export function resolveVehicleHeading({
 
   return null;
 }
+
+export type NavigationOriginMode = 'PLANNED_ORIGIN' | 'CURRENT_GPS' | null;
+
+export interface NavigationPositioningState {
+  originMode: NavigationOriginMode;
+  /** Whether the vehicle marker is held at the planned route origin */
+  isHoldingAtPlannedOrigin: boolean;
+  /** Coordinates where the vehicle marker should actually be displayed */
+  displayedMarkerPosition: [number, number];
+  /** Distance in km between current GPS and planned origin */
+  originDistanceKm: number;
+  /** Whether live GPS tracking has taken over because user is near route */
+  isLiveTrackingActive: boolean;
+  /** Explanatory status notice */
+  statusNotice: string;
+}
+
+/**
+ * Resolves the vehicle marker position, holding state, and status notice
+ * based on explicit navigation origin mode and distance between GPS and route origin.
+ */
+export function resolveNavigationPositioning({
+  originMode,
+  routeOrigin,
+  gpsPosition,
+  routeGeometry,
+  isNavigating,
+  proximityThresholdMeters = 400,
+}: {
+  originMode: NavigationOriginMode;
+  routeOrigin: [number, number];
+  gpsPosition: [number, number] | null;
+  routeGeometry?: [number, number][];
+  isNavigating: boolean;
+  proximityThresholdMeters?: number;
+}): NavigationPositioningState {
+  const normOrigin = normalizeCoordinateToLatLng(routeOrigin);
+
+  // If navigation is inactive, the vehicle marker always rests at the route origin
+  if (!isNavigating) {
+    const originDistanceKm = gpsPosition && isValidCoordinate(gpsPosition[0], gpsPosition[1])
+      ? Math.round(haversineDistanceKm(gpsPosition[0], gpsPosition[1], normOrigin[0], normOrigin[1]) * 10) / 10
+      : 0;
+
+    return {
+      originMode: originMode ?? null,
+      isHoldingAtPlannedOrigin: true,
+      displayedMarkerPosition: normOrigin,
+      originDistanceKm,
+      isLiveTrackingActive: false,
+      statusNotice: 'Ready to navigate from selected origin',
+    };
+  }
+
+  // Active Navigation Mode: PLANNED_ORIGIN
+  if (originMode === 'PLANNED_ORIGIN') {
+    if (!gpsPosition || !isValidCoordinate(gpsPosition[0], gpsPosition[1])) {
+      return {
+        originMode: 'PLANNED_ORIGIN',
+        isHoldingAtPlannedOrigin: true,
+        displayedMarkerPosition: normOrigin,
+        originDistanceKm: 0,
+        isLiveTrackingActive: false,
+        statusNotice: 'Using selected route origin — waiting for GPS signal.',
+      };
+    }
+
+    const normGps = normalizeCoordinateToLatLng(gpsPosition);
+    const distFromOriginKm = haversineDistanceKm(
+      normGps[0],
+      normGps[1],
+      normOrigin[0],
+      normOrigin[1]
+    );
+    const distFromOriginM = distFromOriginKm * 1000;
+    const originDistanceKm = Math.round(distFromOriginKm * 10) / 10;
+
+    // Check distance to route corridor if geometry is available
+    let minDistanceToRouteM = distFromOriginM;
+    if (routeGeometry && routeGeometry.length >= 2) {
+      const progress = calculateRouteProgress(normGps[0], normGps[1], routeGeometry, {
+        snapThresholdMeters: 55,
+        offRouteThresholdMeters: 100,
+      });
+      minDistanceToRouteM = progress.distanceToRouteMeters;
+    }
+
+    // Proximity rule: if GPS arrives near the route (within 100m of route or <= proximity threshold from origin),
+    // live GPS tracking takes over. Otherwise, the marker remains strictly held at the planned origin.
+    const isNearRoute = minDistanceToRouteM <= 100 || distFromOriginM <= proximityThresholdMeters;
+
+    if (!isNearRoute) {
+      return {
+        originMode: 'PLANNED_ORIGIN',
+        isHoldingAtPlannedOrigin: true,
+        displayedMarkerPosition: normOrigin,
+        originDistanceKm,
+        isLiveTrackingActive: false,
+        statusNotice: 'Using selected route origin — GPS is elsewhere.',
+      };
+    }
+
+    // Vehicle physically reached the corridor
+    return {
+      originMode: 'PLANNED_ORIGIN',
+      isHoldingAtPlannedOrigin: false,
+      displayedMarkerPosition: normGps,
+      originDistanceKm,
+      isLiveTrackingActive: true,
+      statusNotice: 'Live GPS tracking active (vehicle near route corridor).',
+    };
+  }
+
+  // Active Navigation Mode: CURRENT_GPS
+  if (originMode === 'CURRENT_GPS') {
+    const normGps = gpsPosition && isValidCoordinate(gpsPosition[0], gpsPosition[1])
+      ? normalizeCoordinateToLatLng(gpsPosition)
+      : null;
+
+    const distFromOriginKm = normGps
+      ? haversineDistanceKm(normGps[0], normGps[1], normOrigin[0], normOrigin[1])
+      : 0;
+
+    return {
+      originMode: 'CURRENT_GPS',
+      isHoldingAtPlannedOrigin: false,
+      displayedMarkerPosition: normGps ?? normOrigin,
+      originDistanceKm: Math.round(distFromOriginKm * 10) / 10,
+      isLiveTrackingActive: true,
+      statusNotice: 'Live navigation active from current location.',
+    };
+  }
+
+  // Default / Unspecified Mode (e.g., started without mismatch prompt)
+  const normGps = gpsPosition && isValidCoordinate(gpsPosition[0], gpsPosition[1])
+    ? normalizeCoordinateToLatLng(gpsPosition)
+    : null;
+
+  const distFromOriginKm = normGps
+    ? haversineDistanceKm(normGps[0], normGps[1], normOrigin[0], normOrigin[1])
+    : 0;
+  const distFromOriginM = distFromOriginKm * 1000;
+  const isNearOrigin = distFromOriginM <= proximityThresholdMeters;
+
+  return {
+    originMode: null,
+    isHoldingAtPlannedOrigin: !isNearOrigin,
+    displayedMarkerPosition: isNearOrigin && normGps ? normGps : normOrigin,
+    originDistanceKm: Math.round(distFromOriginKm * 10) / 10,
+    isLiveTrackingActive: isNearOrigin,
+    statusNotice: isNearOrigin
+      ? 'Live navigation active.'
+      : 'Using selected route origin — GPS is elsewhere.',
+  };
+}

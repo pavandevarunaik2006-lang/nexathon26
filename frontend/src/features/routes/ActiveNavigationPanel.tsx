@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { RouteProgressResult, DynamicEtaResult } from '../../services/navigationTrackingService';
 import { LiveCoordinates, GeolocationStatus } from '../../hooks/useLiveGeolocation';
-import { NavigationDiagnostics } from '../../hooks/useNavigationTracking';
+import { NavigationDiagnostics, NavigationOriginMode } from '../../hooks/useNavigationTracking';
 
 export interface ActiveNavigationPanelProps {
   routeName: string;
@@ -41,6 +41,10 @@ export interface ActiveNavigationPanelProps {
   onToggleSimulation?: () => void;
   onSimulateStep?: () => void;
   diagnostics?: NavigationDiagnostics | null;
+  originMode?: NavigationOriginMode;
+  isHoldingAtPlannedOrigin?: boolean;
+  originDistanceKm?: number;
+  navigationStatusNotice?: string;
 }
 
 export function ActiveNavigationPanel({
@@ -64,6 +68,10 @@ export function ActiveNavigationPanel({
   onToggleSimulation,
   onSimulateStep,
   diagnostics,
+  originMode,
+  isHoldingAtPlannedOrigin = false,
+  originDistanceKm = 0,
+  navigationStatusNotice,
 }: ActiveNavigationPanelProps) {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
@@ -72,7 +80,13 @@ export function ActiveNavigationPanel({
   let gpsStatusColor = 'bg-slate-100 text-slate-700 border-slate-300';
   let gpsDotColor = 'bg-amber-400';
 
-  if (gpsStatus === 'denied' || (gpsError && gpsError.toLowerCase().includes('denied'))) {
+  if (isHoldingAtPlannedOrigin) {
+    gpsStatusText = originDistanceKm > 0
+      ? `GPS Elsewhere (~${originDistanceKm} km)`
+      : 'Using Planned Origin';
+    gpsStatusColor = 'bg-amber-100/90 text-amber-900 border-amber-300';
+    gpsDotColor = 'bg-amber-500';
+  } else if (gpsStatus === 'denied' || (gpsError && gpsError.toLowerCase().includes('denied'))) {
     gpsStatusText = 'Permission Denied';
     gpsStatusColor = 'bg-red-50 text-red-700 border-red-200';
     gpsDotColor = 'bg-red-500';
@@ -203,10 +217,10 @@ export function ActiveNavigationPanel({
           <div className="flex items-center justify-between text-xs text-slate-300 mb-1.5 font-medium">
             <span className="flex items-center gap-1.5 text-slate-300">
               <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-              Progress: <strong className="text-white">{progressPercent}%</strong>
+              Progress: <strong className="text-white">{isHoldingAtPlannedOrigin ? '0% (At Origin)' : `${progressPercent}%`}</strong>
             </span>
             <span className="text-slate-400">
-              Travelled: <strong className="text-slate-200">{distanceTravelledKm.toFixed(1)} km</strong>
+              Travelled: <strong className="text-slate-200">{isHoldingAtPlannedOrigin ? '0.0 km' : `${distanceTravelledKm.toFixed(1)} km`}</strong>
               {' • '}
               Remaining: <strong className="text-blue-300">{remainingDist.toFixed(1)} km</strong>
             </span>
@@ -216,11 +230,38 @@ export function ActiveNavigationPanel({
               className={`h-full rounded-full transition-all duration-500 ease-out ${
                 isOffRoute ? 'bg-orange-500' : 'bg-gradient-to-r from-blue-500 to-emerald-400'
               }`}
-              style={{ width: `${Math.max(2, Math.min(100, progressPercent))}%` }}
+              style={{ width: `${isHoldingAtPlannedOrigin ? 2 : Math.max(2, Math.min(100, progressPercent))}%` }}
             />
           </div>
         </div>
       </div>
+
+      {/* Planned Origin Retained Banner */}
+      {isHoldingAtPlannedOrigin && (
+        <div
+          data-testid="origin-held-notice-banner"
+          className="bg-gradient-to-r from-amber-50 via-amber-100/60 to-orange-50 border-b border-amber-200 px-4 py-3 flex items-start gap-3 animate-fadeIn"
+        >
+          <div className="w-8 h-8 rounded-lg bg-amber-200/80 border border-amber-300 flex items-center justify-center shrink-0 text-amber-800 mt-0.5">
+            <MapPin className="w-4 h-4 text-amber-700" />
+          </div>
+          <div className="text-xs text-amber-950 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-bold text-amber-900">
+                Using selected route origin — GPS is elsewhere.
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-200 text-amber-900 border border-amber-300">
+                PLANNED ORIGIN MODE
+              </span>
+            </div>
+            <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
+              The vehicle marker is held at the selected route origin
+              {originDistanceKm > 0 ? ` (${originDistanceKm} km from actual device GPS)` : ''}.
+              GPS readings will not overwrite the starting location. Live tracking and route matching will engage automatically once your physical GPS arrives near the route corridor.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Primary Metrics HUD */}
       <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-100 bg-slate-50/60 p-3 sm:p-4">
@@ -232,7 +273,11 @@ export function ActiveNavigationPanel({
           <div>
             <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Current Speed</div>
             <div className="text-lg sm:text-2xl font-black text-slate-900 tracking-tight">
-              {resolvedSpeedKmh != null ? (
+              {isHoldingAtPlannedOrigin ? (
+                <>
+                  0 <span className="text-xs font-semibold text-slate-500">km/h</span>
+                </>
+              ) : resolvedSpeedKmh != null ? (
                 <>
                   {resolvedSpeedKmh}{' '}
                   <span className="text-xs font-semibold text-slate-500">km/h</span>
@@ -241,12 +286,16 @@ export function ActiveNavigationPanel({
                 <span className="text-xs font-semibold text-slate-400">Speed unavailable</span>
               )}
             </div>
-            {resolvedHeading != null && (
+            {isHoldingAtPlannedOrigin ? (
+              <div className="text-[11px] text-amber-700 font-medium mt-0.5">
+                Parked at planned origin
+              </div>
+            ) : resolvedHeading != null ? (
               <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                 <Compass className="w-3 h-3 text-slate-400" />
                 <span>Heading: {resolvedHeading}&deg;</span>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -278,7 +327,7 @@ export function ActiveNavigationPanel({
               <span className="text-xs font-semibold text-slate-500">km</span>
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              Along route geometry
+              {isHoldingAtPlannedOrigin ? 'Full corridor distance' : 'Along route geometry'}
             </div>
           </div>
         </div>
@@ -291,12 +340,16 @@ export function ActiveNavigationPanel({
           <div>
             <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Calculation Model</div>
             <div className="text-xs font-bold text-slate-800">
-              {dynamicEta?.calculationMethod === 'GPS_DYNAMIC'
+              {isHoldingAtPlannedOrigin
+                ? 'Corridor route-model baseline'
+                : dynamicEta?.calculationMethod === 'GPS_DYNAMIC'
                 ? 'GPS-based dynamic estimate'
                 : 'Corridor route-model baseline'}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              {dynamicEta && dynamicEta.remainingIncidentDelayMinutes > 0 ? (
+              {isHoldingAtPlannedOrigin ? (
+                <span className="text-slate-600">Planned origin departure estimate</span>
+              ) : dynamicEta && dynamicEta.remainingIncidentDelayMinutes > 0 ? (
                 <span className="font-semibold text-amber-700">
                   +{dynamicEta.remainingIncidentDelayMinutes} min incident delay
                 </span>
@@ -311,7 +364,7 @@ export function ActiveNavigationPanel({
       {/* Warnings & Alerts Strip */}
       {(isOffRoute || activeClosureCount > 0 || gpsError) && (
         <div className="p-3 sm:px-5 border-t border-slate-100 bg-amber-50/50 space-y-2">
-          {isOffRoute && (
+          {isOffRoute && !isHoldingAtPlannedOrigin && (
             <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-orange-50 border border-orange-200 text-orange-900 text-xs">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0" />
@@ -362,6 +415,7 @@ export function ActiveNavigationPanel({
             <span className="flex items-center gap-1.5 font-bold">
               <Terminal className="w-3.5 h-3.5 text-blue-400" />
               Live Coordinate Diagnostics ({diagnostics.coordinateOrder})
+              {isHoldingAtPlannedOrigin && <span className="text-amber-400">[PLANNED_ORIGIN]</span>}
             </span>
             <span className="flex items-center gap-1 text-[10px]">
               {showDiagnostics ? 'Hide Diagnostics' : 'Show Diagnostics'}
@@ -370,7 +424,7 @@ export function ActiveNavigationPanel({
           </button>
 
           {showDiagnostics && (
-            <div className="p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5 font-mono text-[11px] border-t border-slate-800">
+            <div className="p-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5 font-mono text-[11px] border-t border-slate-800">
               <div className="p-2 rounded bg-slate-800/80 border border-slate-700/60">
                 <span className="text-slate-400 block text-[10px]">Route Origin &amp; Dest</span>
                 <span className="text-emerald-400">
@@ -396,8 +450,22 @@ export function ActiveNavigationPanel({
                 <span className="text-blue-400">
                   {diagnostics.vehicleMarkerCoordinates ? `${diagnostics.vehicleMarkerCoordinates[0].toFixed(5)}, ${diagnostics.vehicleMarkerCoordinates[1].toFixed(5)}` : 'None'}
                 </span>
-                <span className={`block text-[10px] font-bold mt-0.5 ${diagnostics.isSnapped ? 'text-emerald-400' : 'text-orange-400'}`}>
-                  {diagnostics.isSnapped ? `Snapped (${diagnostics.distanceToRouteMeters}m to road)` : `Off-Route (${diagnostics.distanceToRouteMeters}m offset)`}
+                <span className={`block text-[10px] font-bold mt-0.5 ${isHoldingAtPlannedOrigin ? 'text-amber-400' : diagnostics.isSnapped ? 'text-emerald-400' : 'text-orange-400'}`}>
+                  {isHoldingAtPlannedOrigin
+                    ? `Held at Origin (${originDistanceKm}km to GPS)`
+                    : diagnostics.isSnapped
+                    ? `Snapped (${diagnostics.distanceToRouteMeters}m to road)`
+                    : `Off-Route (${diagnostics.distanceToRouteMeters}m offset)`}
+                </span>
+              </div>
+
+              <div className="p-2 rounded bg-slate-800/80 border border-slate-700/60">
+                <span className="text-slate-400 block text-[10px]">Origin Mode</span>
+                <span className="text-purple-400 font-bold">
+                  {originMode || 'DEFAULT'}
+                </span>
+                <span className="text-slate-400 block text-[10px] mt-0.5">
+                  Holding: {isHoldingAtPlannedOrigin ? 'YES (Parked)' : 'NO (Live)'}
                 </span>
               </div>
             </div>

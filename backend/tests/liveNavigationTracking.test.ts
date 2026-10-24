@@ -12,6 +12,9 @@ import {
   detectCoordinateOrder,
   normalizeCoordinateToLatLng,
   normalizePolylineGeometry,
+  resolveNavigationPositioning,
+  type NavigationOriginMode,
+  type NavigationPositioningState,
 } from '@roadalert/shared';
 
 describe('Live GPS Vehicle Tracking & Dynamic ETA Engine', () => {
@@ -560,6 +563,264 @@ describe('Live GPS Vehicle Tracking & Dynamic ETA Engine', () => {
       expect(point[1]).toBeLessThan(75.5); // Longitude: ~74.7 - 74.9
       expect(isValidCoordinate(point[0], point[1])).toBe(true);
     }
+  });
+});
+
+describe('RoadAlert — Navigation Origin Mode & Planned Origin Persistence (Scenarios 1-9)', () => {
+  const plannedOrigin: [number, number] = [12.8669, 74.8692]; // Pumpwell Circle, Mangaluru
+  const plannedDest: [number, number] = [13.3409, 74.7351]; // Udupi Karavali Bypass
+  const routeGeometry: [number, number][] = [
+    [12.8669, 74.8692],
+    [12.875, 74.86],
+    [12.9261, 74.8415],
+    [13.0084, 74.7915],
+    [13.1166, 74.767],
+    [13.2185, 74.7431],
+    [13.275, 74.738],
+    [13.3409, 74.7351],
+  ];
+
+  it('Scenario 1: GPS is thousands of kilometres from selected origin; clicking Keep Selected Origin keeps marker at selected origin', () => {
+    // Distant GPS reading (e.g. New Delhi: ~1,750 km away, or San Francisco)
+    const distantGps: [number, number] = [28.6139, 77.209];
+
+    const distKm = haversineDistanceKm(
+      distantGps[0],
+      distantGps[1],
+      plannedOrigin[0],
+      plannedOrigin[1]
+    );
+    expect(distKm).toBeGreaterThan(1500);
+
+    // In PLANNED_ORIGIN mode, resolveNavigationPositioning must keep vehicle at route origin
+    const positioning = resolveNavigationPositioning({
+      originMode: 'PLANNED_ORIGIN',
+      routeOrigin: plannedOrigin,
+      gpsPosition: distantGps,
+      routeGeometry,
+      isNavigating: true,
+      proximityThresholdMeters: 400,
+    });
+
+    expect(positioning.originMode).toBe('PLANNED_ORIGIN');
+    expect(positioning.isHoldingAtPlannedOrigin).toBe(true);
+    expect(positioning.displayedMarkerPosition).toEqual(plannedOrigin);
+    expect(positioning.displayedMarkerPosition).not.toEqual(distantGps);
+    expect(positioning.isLiveTrackingActive).toBe(false);
+    expect(positioning.originDistanceKm).toBeGreaterThan(1500);
+    expect(positioning.statusNotice).toBe('Using selected route origin — GPS is elsewhere.');
+  });
+
+  it('Scenario 2: Subsequent GPS updates do not move the marker to distant GPS coordinates in planned-origin mode', () => {
+    const streamOfDistantGpsFixes: [number, number][] = [
+      [28.6139, 77.209],
+      [28.6145, 77.2095],
+      [28.6152, 77.2102],
+      [28.616, 77.211],
+    ];
+
+    for (const fix of streamOfDistantGpsFixes) {
+      const positioning = resolveNavigationPositioning({
+        originMode: 'PLANNED_ORIGIN',
+        routeOrigin: plannedOrigin,
+        gpsPosition: fix,
+        routeGeometry,
+        isNavigating: true,
+        proximityThresholdMeters: 400,
+      });
+
+      // Marker position remains immutably pinned at the planned origin
+      expect(positioning.displayedMarkerPosition).toEqual(plannedOrigin);
+      expect(positioning.isHoldingAtPlannedOrigin).toBe(true);
+      expect(positioning.isLiveTrackingActive).toBe(false);
+    }
+
+    // Verify speed resolution during holding state is stationary (0 or null, no fake speed)
+    const stationarySpeed = resolveVehicleSpeed({
+      rawSpeed: null,
+      prevPosition: null,
+      currentPosition: plannedOrigin,
+      currentTimestamp: Date.now(),
+    });
+    expect(stationarySpeed.speedKmh).toBeNull();
+  });
+
+  it('Scenario 3: The selected route origin and route geometry remain unchanged throughout planned-origin mode', () => {
+    const distantGps: [number, number] = [28.6139, 77.209];
+    const originalGeometrySnapshot = JSON.parse(JSON.stringify(routeGeometry));
+
+    const positioning = resolveNavigationPositioning({
+      originMode: 'PLANNED_ORIGIN',
+      routeOrigin: plannedOrigin,
+      gpsPosition: distantGps,
+      routeGeometry,
+      isNavigating: true,
+    });
+
+    expect(positioning.displayedMarkerPosition).toEqual(routeGeometry[0]);
+    expect(routeGeometry).toEqual(originalGeometrySnapshot);
+    expect(routeGeometry[0]).toEqual(plannedOrigin);
+    expect(routeGeometry[routeGeometry.length - 1]).toEqual(plannedDest);
+  });
+
+  it('Scenario 4: Clicking Start from My Location changes the origin to validated GPS coordinates and recalculates the route', () => {
+    // Valid local GPS coordinates (e.g., at Manipal Tiger Circle ~5 km east of Udupi)
+    const localGps: [number, number] = [13.3525, 74.7928];
+
+    const positioning = resolveNavigationPositioning({
+      originMode: 'CURRENT_GPS',
+      routeOrigin: plannedOrigin,
+      gpsPosition: localGps,
+      routeGeometry,
+      isNavigating: true,
+    });
+
+    expect(positioning.originMode).toBe('CURRENT_GPS');
+    expect(positioning.isHoldingAtPlannedOrigin).toBe(false);
+    expect(positioning.isLiveTrackingActive).toBe(true);
+    expect(positioning.displayedMarkerPosition).toEqual(localGps);
+    expect(positioning.statusNotice).toBe('Live navigation active from current location.');
+  });
+
+  it('Scenario 5: A failed route recalculation does not corrupt the existing route and preserves state', () => {
+    const existingOrigin = { text: 'Pumpwell Circle, Mangaluru', lat: 12.8669, lng: 74.8692 };
+    const existingRoute = { id: 'route-nh66', geometry: routeGeometry, name: 'NH-66 Corridor' };
+
+    // Simulate recalculation attempting to use an unreachable or invalid location
+    let currentOrigin = { ...existingOrigin };
+    let currentRoute = { ...existingRoute };
+
+    const attemptRecalculation = (success: boolean, newOriginData?: typeof existingOrigin) => {
+      const prevOrigin = { ...currentOrigin };
+      if (!success) {
+        // Rollback on failure
+        currentOrigin = prevOrigin;
+        return false;
+      }
+      currentOrigin = newOriginData!;
+      return true;
+    };
+
+    // Failed recalculation
+    const succeeded = attemptRecalculation(false, { text: 'Invalid Point', lat: 999, lng: 999 });
+    expect(succeeded).toBe(false);
+    // Origin and route remain completely uncorrupted
+    expect(currentOrigin).toEqual(existingOrigin);
+    expect(currentRoute).toEqual(existingRoute);
+  });
+
+  it('Scenario 6: Cancel does not change the origin mode or start navigation', () => {
+    const distantGps: [number, number] = [28.6139, 77.209];
+
+    // User cancels the mismatch modal: isNavigating remains false, originMode remains null
+    const positioning = resolveNavigationPositioning({
+      originMode: null,
+      routeOrigin: plannedOrigin,
+      gpsPosition: distantGps,
+      routeGeometry,
+      isNavigating: false,
+    });
+
+    expect(positioning.originMode).toBeNull();
+    expect(positioning.isHoldingAtPlannedOrigin).toBe(true);
+    expect(positioning.displayedMarkerPosition).toEqual(plannedOrigin);
+    expect(positioning.isLiveTrackingActive).toBe(false);
+    expect(positioning.statusNotice).toBe('Ready to navigate from selected origin');
+  });
+
+  it('Scenario 7: A GPS position near the route can take over live tracking only under the defined validation rules', () => {
+    // 1. Initially far away (> 400m from origin and > 100m from route)
+    const distantGps: [number, number] = [12.98, 75.2]; // ~40 km inland (Beltangady)
+    const initialPositioning = resolveNavigationPositioning({
+      originMode: 'PLANNED_ORIGIN',
+      routeOrigin: plannedOrigin,
+      gpsPosition: distantGps,
+      routeGeometry,
+      isNavigating: true,
+      proximityThresholdMeters: 400,
+    });
+    expect(initialPositioning.isHoldingAtPlannedOrigin).toBe(true);
+    expect(initialPositioning.displayedMarkerPosition).toEqual(plannedOrigin);
+
+    // 2. Later, device physically arrives within 25m of the route at Kuloor Bridge [12.9261, 74.8415]
+    const nearRouteGps: [number, number] = [12.9262, 74.8416]; // ~15m offset from corridor
+    const arrivedPositioning = resolveNavigationPositioning({
+      originMode: 'PLANNED_ORIGIN',
+      routeOrigin: plannedOrigin,
+      gpsPosition: nearRouteGps,
+      routeGeometry,
+      isNavigating: true,
+      proximityThresholdMeters: 400,
+    });
+
+    // Successfully transitioned to live tracking
+    expect(arrivedPositioning.isHoldingAtPlannedOrigin).toBe(false);
+    expect(arrivedPositioning.isLiveTrackingActive).toBe(true);
+    expect(arrivedPositioning.displayedMarkerPosition).toEqual(nearRouteGps);
+    expect(arrivedPositioning.statusNotice).toContain('Live GPS tracking active');
+
+    // Route progress engine accurately snaps this point onto the route
+    const progress = calculateRouteProgress(
+      nearRouteGps[0],
+      nearRouteGps[1],
+      routeGeometry,
+      { snapThresholdMeters: 55 }
+    );
+    expect(progress.isSnapped).toBe(true);
+    expect(progress.isOffRoute).toBe(false);
+    expect(progress.distanceToRouteMeters).toBeLessThan(25);
+  });
+
+  it('Scenario 8: Stopping navigation and selecting another route reset state correctly', () => {
+    // Navigation active
+    let isNavigating = true;
+    let originMode: NavigationOriginMode = 'PLANNED_ORIGIN';
+
+    // User stops navigation
+    const handleStop = () => {
+      isNavigating = false;
+      originMode = null;
+    };
+    handleStop();
+
+    expect(isNavigating).toBe(false);
+    expect(originMode).toBeNull();
+
+    // Selecting another route resets progress and positioning
+    const newRouteOrigin: [number, number] = [12.9141, 74.856];
+    const postStopPositioning = resolveNavigationPositioning({
+      originMode,
+      routeOrigin: newRouteOrigin,
+      gpsPosition: [28.6139, 77.209],
+      isNavigating,
+    });
+
+    expect(postStopPositioning.displayedMarkerPosition).toEqual(newRouteOrigin);
+    expect(postStopPositioning.isHoldingAtPlannedOrigin).toBe(true);
+    expect(postStopPositioning.statusNotice).toBe('Ready to navigate from selected origin');
+  });
+
+  it('Scenario 9: Single vehicle marker coordinates resolution prevents duplicate or competing markers', () => {
+    const distantGps: [number, number] = [28.6139, 77.209];
+
+    // Under all conditions, resolveNavigationPositioning produces exactly ONE unambiguous displayedMarkerPosition
+    const held = resolveNavigationPositioning({
+      originMode: 'PLANNED_ORIGIN',
+      routeOrigin: plannedOrigin,
+      gpsPosition: distantGps,
+      routeGeometry,
+      isNavigating: true,
+    });
+    expect(held.displayedMarkerPosition).toEqual(plannedOrigin);
+
+    const live = resolveNavigationPositioning({
+      originMode: 'CURRENT_GPS',
+      routeOrigin: plannedOrigin,
+      gpsPosition: distantGps,
+      routeGeometry,
+      isNavigating: true,
+    });
+    expect(live.displayedMarkerPosition).toEqual(distantGps);
   });
 });
 

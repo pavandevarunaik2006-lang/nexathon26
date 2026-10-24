@@ -12,7 +12,12 @@ import {
   normalizePolylineGeometry,
   RouteProgressResult,
   DynamicEtaResult,
+  NavigationOriginMode,
+  NavigationPositioningState,
+  resolveNavigationPositioning,
 } from '../services/navigationTrackingService';
+
+export type { NavigationOriginMode, NavigationPositioningState };
 
 export interface UseNavigationTrackingProps {
   selectedRoute: {
@@ -34,7 +39,10 @@ export interface UseNavigationTrackingProps {
     }>;
   } | null;
   originCoords: { lat: number; lng: number } | null;
-  onUpdateOriginToGps?: (coords: { lat: number; lng: number; label: string }) => void;
+  onUpdateOriginToGps?: (
+    coords: { lat: number; lng: number; label: string },
+    onComplete?: (success: boolean) => void
+  ) => void;
   onRecalculatePlan?: () => void;
 }
 
@@ -55,6 +63,9 @@ export interface NavigationDiagnostics {
   distanceToRouteMeters: number | null;
   isSnapped: boolean;
   isOffRoute: boolean;
+  originMode?: NavigationOriginMode;
+  isHoldingAtPlannedOrigin?: boolean;
+  originDistanceKm?: number;
 }
 
 export function useNavigationTracking({
@@ -65,6 +76,10 @@ export function useNavigationTracking({
 }: UseNavigationTrackingProps) {
   // Navigation active state (strictly user-initiated)
   const [isNavigating, setIsNavigating] = useState(false);
+  const [originMode, setOriginMode] = useState<NavigationOriginMode>(null);
+  const [isHoldingAtPlannedOrigin, setIsHoldingAtPlannedOrigin] = useState(false);
+  const [originDistanceKm, setOriginDistanceKm] = useState(0);
+  const [navigationStatusNotice, setNavigationStatusNotice] = useState<string>('');
   const [followVehicle, setFollowVehicle] = useState(true);
   const [originMismatch, setOriginMismatch] = useState<OriginMismatchInfo | null>(null);
 
@@ -77,6 +92,8 @@ export function useNavigationTracking({
   const [diagnostics, setDiagnostics] = useState<NavigationDiagnostics | null>(null);
 
   // Internal tracking refs for delta calculation & smoothing
+  const originModeRef = useRef<NavigationOriginMode>(null);
+  const isHoldingAtPlannedOriginRef = useRef<boolean>(false);
   const prevPositionRef = useRef<[number, number] | null>(null);
   const prevTimestampRef = useRef<number | null>(null);
   const rollingSpeedsRef = useRef<number[]>([]);
@@ -84,6 +101,11 @@ export function useNavigationTracking({
   const routeIdRef = useRef<string | null>(selectedRoute?.id ?? null);
   const pendingOriginCheckRef = useRef<boolean>(false);
   const simulationStepIndexRef = useRef<number>(0);
+
+  const updateOriginMode = useCallback((mode: NavigationOriginMode) => {
+    originModeRef.current = mode;
+    setOriginMode(mode);
+  }, []);
 
   // Dedicated geolocation watcher (autoStart: false - strictly privacy-preserving)
   const {
@@ -111,12 +133,17 @@ export function useNavigationTracking({
       previousProgressKmRef.current = 0;
       rollingSpeedsRef.current = [];
       simulationStepIndexRef.current = 0;
+      updateOriginMode(null);
+      setIsHoldingAtPlannedOrigin(false);
+      isHoldingAtPlannedOriginRef.current = false;
+      setOriginDistanceKm(0);
+      setNavigationStatusNotice('');
       setProgress(null);
       setDynamicEta(null);
       setDistanceTravelledKm(0);
       setDiagnostics(null);
     }
-  }, [selectedRoute?.id]);
+  }, [selectedRoute?.id, updateOriginMode]);
 
   // Clean teardown on unmount: ensure watcher is stopped
   useEffect(() => {
@@ -167,6 +194,8 @@ export function useNavigationTracking({
           originCoords: [routeOrigin[0], routeOrigin[1]],
         });
         return;
+      } else {
+        updateOriginMode('CURRENT_GPS');
       }
     }
 
@@ -176,6 +205,77 @@ export function useNavigationTracking({
     }
 
     const currentPos: [number, number] = [coords.latitude, coords.longitude];
+    const activeOriginMode = originModeRef.current;
+
+    // Resolve whether we hold at the planned route origin or track live GPS
+    const positioning = resolveNavigationPositioning({
+      originMode: activeOriginMode,
+      routeOrigin,
+      gpsPosition: currentPos,
+      routeGeometry: normalizedGeometry,
+      isNavigating: true,
+      proximityThresholdMeters: 400,
+    });
+
+    setOriginDistanceKm(positioning.originDistanceKm);
+    setNavigationStatusNotice(positioning.statusNotice);
+
+    // If in PLANNED_ORIGIN mode and device is far from route: hold stationary at origin!
+    if (positioning.isHoldingAtPlannedOrigin) {
+      setIsHoldingAtPlannedOrigin(true);
+      isHoldingAtPlannedOriginRef.current = true;
+      setResolvedSpeedKmh(null);
+
+      // Stationary route progress held at route origin (0 km progress, full distance remaining)
+      const originProgress: RouteProgressResult = {
+        snappedPosition: routeOrigin,
+        actualPosition: routeOrigin,
+        isSnapped: true,
+        distanceToRouteMeters: 0,
+        progressDistanceKm: 0,
+        remainingDistanceKm: selectedRoute.distanceKm,
+        progressPercent: 0,
+        segmentIndex: 0,
+        isOffRoute: false,
+        travelledPolyline: [routeOrigin],
+        remainingPolyline: normalizedGeometry,
+      };
+      setProgress(originProgress);
+
+      // Stationary dynamic ETA based on route baseline model and incidents (no fake speed)
+      const etaResult = calculateDynamicEta({
+        remainingDistanceKm: selectedRoute.distanceKm,
+        currentSpeedKmh: null,
+        rollingSpeeds: [],
+        routeBaseDurationMin: selectedRoute.baseDurationMin,
+        routeTotalDistanceKm: selectedRoute.distanceKm,
+        affectingIncidents: selectedRoute.affectingIncidents || [],
+        progressDistanceKm: 0,
+      });
+      setDynamicEta(etaResult);
+
+      const currentDiagnostics: NavigationDiagnostics = {
+        selectedRouteOrigin: routeOrigin,
+        selectedRouteDestination: routeDest,
+        latestGps: currentPos,
+        gpsTimestamp: coords.timestamp,
+        gpsAccuracy: coords.accuracy,
+        vehicleMarkerCoordinates: routeOrigin,
+        coordinateOrder: detectCoordinateOrder(selectedRoute.geometry[0]),
+        distanceToRouteMeters: 0,
+        isSnapped: true,
+        isOffRoute: false,
+        originMode: activeOriginMode,
+        isHoldingAtPlannedOrigin: true,
+        originDistanceKm: positioning.originDistanceKm,
+      };
+      setDiagnostics(currentDiagnostics);
+      return;
+    }
+
+    // Live GPS tracking takes over (CURRENT_GPS mode, or user has reached the route corridor)
+    setIsHoldingAtPlannedOrigin(false);
+    isHoldingAtPlannedOriginRef.current = false;
 
     // 1. Resolve vehicle speed (filtering spikes > 160 km/h and estimating from delta if hardware speed is null)
     const speedInfo = resolveVehicleSpeed({
@@ -265,11 +365,13 @@ export function useNavigationTracking({
       distanceToRouteMeters: progressResult.distanceToRouteMeters,
       isSnapped: progressResult.isSnapped,
       isOffRoute: progressResult.isOffRoute,
+      originMode: activeOriginMode,
+      isHoldingAtPlannedOrigin: false,
+      originDistanceKm: positioning.originDistanceKm,
     };
     setDiagnostics(currentDiagnostics);
 
     if (import.meta.env.DEV) {
-      // Structured diagnostics logging in development mode without exposing sensitive data in production
       console.debug('[RoadAlert Nav Diagnostics]', {
         route: selectedRoute.name,
         origin: routeOrigin,
@@ -281,9 +383,10 @@ export function useNavigationTracking({
         distanceToRouteMeters: progressResult.distanceToRouteMeters,
         isSnapped: progressResult.isSnapped,
         isOffRoute: progressResult.isOffRoute,
+        originMode: activeOriginMode,
       });
     }
-  }, [coords, isNavigating, selectedRoute, originMismatch]);
+  }, [coords, isNavigating, selectedRoute, originMismatch, updateOriginMode]);
 
   /**
    * User clicks "Start Navigation".
@@ -324,34 +427,104 @@ export function useNavigationTracking({
     }
 
     // Immediately begin navigation and activate GPS tracking
+    updateOriginMode('CURRENT_GPS');
+    setIsHoldingAtPlannedOrigin(false);
+    isHoldingAtPlannedOriginRef.current = false;
     setIsNavigating(true);
     setFollowVehicle(true);
     startWatching();
     triggerRecenter();
-  }, [coords, originCoords, selectedRoute?.geometry, startWatching, triggerRecenter]);
+  }, [coords, originCoords, selectedRoute?.geometry, startWatching, triggerRecenter, updateOriginMode]);
 
   /**
    * User confirms origin selection in case of mismatch.
    */
   const handleConfirmOrigin = useCallback(
-    (useCurrentGps: boolean) => {
+    (choice: boolean | NavigationOriginMode) => {
       const savedMismatch = originMismatch;
       setOriginMismatch(null);
 
-      if (useCurrentGps && savedMismatch && onUpdateOriginToGps) {
-        onUpdateOriginToGps({
-          lat: savedMismatch.currentGps[0],
-          lng: savedMismatch.currentGps[1],
-          label: `Current GPS (${savedMismatch.currentGps[0].toFixed(4)}, ${savedMismatch.currentGps[1].toFixed(4)})`,
-        });
-      }
+      const useCurrentGps = choice === true || choice === 'CURRENT_GPS';
 
-      setIsNavigating(true);
-      setFollowVehicle(true);
-      startWatching();
-      triggerRecenter();
+      if (useCurrentGps) {
+        updateOriginMode('CURRENT_GPS');
+        setIsHoldingAtPlannedOrigin(false);
+        isHoldingAtPlannedOriginRef.current = false;
+
+        if (savedMismatch && onUpdateOriginToGps) {
+          onUpdateOriginToGps(
+            {
+              lat: savedMismatch.currentGps[0],
+              lng: savedMismatch.currentGps[1],
+              label: `Current GPS (${savedMismatch.currentGps[0].toFixed(4)}, ${savedMismatch.currentGps[1].toFixed(4)})`,
+            },
+            (success) => {
+              if (success) {
+                setIsNavigating(true);
+                setFollowVehicle(true);
+                startWatching();
+                triggerRecenter();
+              } else {
+                updateOriginMode(null);
+              }
+            }
+          );
+        } else {
+          setIsNavigating(true);
+          setFollowVehicle(true);
+          startWatching();
+          triggerRecenter();
+        }
+      } else {
+        // User chose "Keep Selected Origin"
+        updateOriginMode('PLANNED_ORIGIN');
+        setIsHoldingAtPlannedOrigin(true);
+        isHoldingAtPlannedOriginRef.current = true;
+        if (savedMismatch) {
+          setOriginDistanceKm(savedMismatch.distanceKm);
+        }
+        setNavigationStatusNotice('Using selected route origin — GPS is elsewhere.');
+
+        // Initialize stationary route progress at the route origin
+        if (selectedRoute?.geometry && selectedRoute.geometry.length > 0) {
+          const normGeom = normalizePolylineGeometry(selectedRoute.geometry);
+          if (normGeom.length > 0) {
+            const startPt = normGeom[0];
+            const originProgress: RouteProgressResult = {
+              snappedPosition: startPt,
+              actualPosition: startPt,
+              isSnapped: true,
+              distanceToRouteMeters: 0,
+              progressDistanceKm: 0,
+              remainingDistanceKm: selectedRoute.distanceKm,
+              progressPercent: 0,
+              segmentIndex: 0,
+              isOffRoute: false,
+              travelledPolyline: [startPt],
+              remainingPolyline: normGeom,
+            };
+            setProgress(originProgress);
+
+            const initialEta = calculateDynamicEta({
+              remainingDistanceKm: selectedRoute.distanceKm,
+              currentSpeedKmh: null,
+              rollingSpeeds: [],
+              routeBaseDurationMin: selectedRoute.baseDurationMin,
+              routeTotalDistanceKm: selectedRoute.distanceKm,
+              affectingIncidents: selectedRoute.affectingIncidents || [],
+              progressDistanceKm: 0,
+            });
+            setDynamicEta(initialEta);
+          }
+        }
+
+        setIsNavigating(true);
+        setFollowVehicle(false); // Do not auto-pan to distant GPS
+        startWatching(); // Keep watcher active so proximity handoff works if device moves close
+        // Do NOT triggerRecenter()!
+      }
     },
-    [originMismatch, onUpdateOriginToGps, startWatching, triggerRecenter]
+    [originMismatch, onUpdateOriginToGps, selectedRoute, startWatching, updateOriginMode]
   );
 
   /**
@@ -360,9 +533,12 @@ export function useNavigationTracking({
   const handleDismissMismatch = useCallback(() => {
     setOriginMismatch(null);
     setIsNavigating(false);
+    updateOriginMode(null);
+    setIsHoldingAtPlannedOrigin(false);
+    isHoldingAtPlannedOriginRef.current = false;
     pendingOriginCheckRef.current = false;
     stopWatching();
-  }, [stopWatching]);
+  }, [stopWatching, updateOriginMode]);
 
   /**
    * User clicks "Stop Navigation".
@@ -370,6 +546,9 @@ export function useNavigationTracking({
    */
   const handleStopNavigation = useCallback(() => {
     setIsNavigating(false);
+    updateOriginMode(null);
+    setIsHoldingAtPlannedOrigin(false);
+    isHoldingAtPlannedOriginRef.current = false;
     pendingOriginCheckRef.current = false;
     setOriginMismatch(null);
     stopWatching();
@@ -378,12 +557,15 @@ export function useNavigationTracking({
     setResolvedSpeedKmh(null);
     setResolvedHeading(null);
     setDiagnostics(null);
+    setDistanceTravelledKm(0);
+    setOriginDistanceKm(0);
+    setNavigationStatusNotice('');
     prevPositionRef.current = null;
     prevTimestampRef.current = null;
     rollingSpeedsRef.current = [];
     previousProgressKmRef.current = 0;
     simulationStepIndexRef.current = 0;
-  }, [stopWatching]);
+  }, [stopWatching, updateOriginMode]);
 
   /**
    * Synchronized Simulation Controls:
@@ -430,6 +612,10 @@ export function useNavigationTracking({
 
   return {
     isNavigating,
+    originMode,
+    isHoldingAtPlannedOrigin,
+    originDistanceKm,
+    navigationStatusNotice,
     followVehicle,
     setFollowVehicle,
     toggleFollowVehicle: () => setFollowVehicle((prev) => !prev),

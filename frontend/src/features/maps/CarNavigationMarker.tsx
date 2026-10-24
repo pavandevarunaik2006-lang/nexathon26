@@ -6,6 +6,7 @@ import {
   RouteProgressResult,
   isValidCoordinate,
   normalizeCoordinateToLatLng,
+  NavigationOriginMode,
 } from '../../services/navigationTrackingService';
 
 export interface CarNavigationMarkerProps {
@@ -18,6 +19,8 @@ export interface CarNavigationMarkerProps {
   isSimulated?: boolean;
   onUserPanned?: () => void;
   isPlannedOrigin?: boolean;
+  originMode?: NavigationOriginMode;
+  originDistanceKm?: number;
 }
 
 /**
@@ -139,25 +142,26 @@ function NavigationRecenterController({
   }, [map, onUserPanned]);
 
   useEffect(() => {
-    // If vehicle is in planned origin mode before navigation begins, do not auto-fly or auto-pan
-    // Allow RouteMapBoundsController to fit the route bounds across the screen
-    if (isPlannedOrigin) return;
     if (!Number.isFinite(position[0]) || !Number.isFinite(position[1])) return;
-
-    // First time vehicle position is set during navigation -> fly to it
-    if (!hasInitializedRef.current) {
-      hasInitializedRef.current = true;
-      map.flyTo(position, Math.max(map.getZoom(), 16), {
-        duration: 1.0,
-      });
-      return;
-    }
 
     // Explicit user click on "Recenter on Vehicle"
     if (recenterTrigger !== lastTriggerRef.current) {
       lastTriggerRef.current = recenterTrigger;
       map.flyTo(position, Math.max(map.getZoom(), 16), {
         duration: 0.6,
+      });
+      return;
+    }
+
+    // If vehicle is in planned origin mode before navigation begins or holding at origin:
+    // Do not auto-fly or auto-pan. Allow RouteMapBoundsController to fit the route bounds across the screen.
+    if (isPlannedOrigin) return;
+
+    // First time vehicle position is set during navigation -> fly to it
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      map.flyTo(position, Math.max(map.getZoom(), 16), {
+        duration: 1.0,
       });
       return;
     }
@@ -181,6 +185,8 @@ export function CarNavigationMarker({
   isSimulated = false,
   onUserPanned,
   isPlannedOrigin = false,
+  originMode,
+  originDistanceKm,
 }: CarNavigationMarkerProps) {
   if (
     !coords ||
@@ -285,7 +291,9 @@ export function CarNavigationMarker({
               <span className={`w-2 h-2 rounded-full ${isPlannedOrigin ? 'bg-blue-600' : isOffRoute ? 'bg-orange-500' : 'bg-emerald-500'}`} />
               <span>
                 {isPlannedOrigin
-                  ? 'Vehicle at Origin (Planned)'
+                  ? originMode === 'PLANNED_ORIGIN'
+                    ? 'Using Selected Origin'
+                    : 'Vehicle at Origin (Planned)'
                   : isOffRoute
                   ? 'Off Planned Route'
                   : isSimulated
@@ -295,7 +303,13 @@ export function CarNavigationMarker({
             </div>
             <div className="text-[11px] text-slate-600 font-normal mt-0.5">
               {isPlannedOrigin ? (
-                <span className="text-slate-600">Ready to navigate from selected origin</span>
+                <span className="text-slate-600">
+                  {originMode === 'PLANNED_ORIGIN'
+                    ? originDistanceKm && originDistanceKm > 0
+                      ? `Using Selected Origin — GPS is ~${originDistanceKm} km away`
+                      : 'Using selected route origin — GPS is elsewhere'
+                    : 'Ready to navigate from selected origin'}
+                </span>
               ) : (
                 <>
                   Speed: <span className="font-semibold text-slate-800">{resolvedSpeedKmh != null ? `${resolvedSpeedKmh} km/h` : '0 km/h'}</span>
@@ -309,17 +323,19 @@ export function CarNavigationMarker({
         <Popup>
           <div className="p-1 space-y-2 text-xs text-slate-800 min-w-52">
             <div className="font-bold text-sm text-blue-700 flex items-center justify-between">
-              <span>{isPlannedOrigin ? 'Selected Route Origin' : isOffRoute ? 'Off Route Warning' : 'Vehicle Telemetry'}</span>
+              <span>{isPlannedOrigin ? (originMode === 'PLANNED_ORIGIN' ? 'Selected Route Origin' : 'Selected Origin') : isOffRoute ? 'Off Route Warning' : 'Vehicle Telemetry'}</span>
               <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
                 isPlannedOrigin
-                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  ? originMode === 'PLANNED_ORIGIN'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                    : 'bg-blue-50 text-blue-700 border-blue-200'
                   : isOffRoute
                   ? 'bg-orange-50 text-orange-700 border-orange-200'
                   : isSimulated
                   ? 'bg-amber-50 text-amber-700 border-amber-200'
                   : 'bg-emerald-50 text-emerald-700 border-emerald-200'
               }`}>
-                {isPlannedOrigin ? 'READY AT ORIGIN' : isOffRoute ? 'OFF ROUTE' : isSimulated ? 'SIMULATED' : 'SNAPPED'}
+                {isPlannedOrigin ? (originMode === 'PLANNED_ORIGIN' ? 'PLANNED ORIGIN' : 'READY AT ORIGIN') : isOffRoute ? 'OFF ROUTE' : isSimulated ? 'SIMULATED' : 'SNAPPED'}
               </span>
             </div>
 
@@ -329,7 +345,11 @@ export function CarNavigationMarker({
                   {isPlannedOrigin ? 'Starting Status' : 'Current Speed'}
                 </span>
                 <span className="font-bold text-slate-800 text-xs">
-                  {isPlannedOrigin ? 'Parked at Origin' : resolvedSpeedKmh != null ? `${resolvedSpeedKmh} km/h` : 'Unavailable'}
+                  {isPlannedOrigin
+                    ? originMode === 'PLANNED_ORIGIN'
+                      ? 'Held at Origin (GPS Elsewhere)'
+                      : 'Parked at Origin'
+                    : resolvedSpeedKmh != null ? `${resolvedSpeedKmh} km/h` : 'Unavailable'}
                 </span>
               </div>
               <div>
@@ -349,7 +369,11 @@ export function CarNavigationMarker({
               <div>
                 <span className="text-slate-400 block text-[10px]">Mode</span>
                 <span className="font-bold text-slate-800 text-xs">
-                  {isPlannedOrigin ? 'Planned Origin' : isSimulated ? 'Simulation' : 'Live GPS'}
+                  {isPlannedOrigin
+                    ? originMode === 'PLANNED_ORIGIN'
+                      ? 'Planned Origin (Retained)'
+                      : 'Planned Origin'
+                    : isSimulated ? 'Simulation' : 'Live GPS'}
                 </span>
               </div>
             </div>

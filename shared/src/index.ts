@@ -5,3 +5,7 @@ export * from './simulation/vehicleSimulationEngine.js';
 export * from './lifeline/emergencyNetworkGraph.js';
 export * from './lifeline/impactSimulatorTypes.js';
 export * from './navigation/navigationTrackingEngine.js';
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
