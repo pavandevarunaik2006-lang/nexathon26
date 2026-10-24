@@ -1,11 +1,8 @@
 import {
   classifyIncidentVerificationState,
-<<<<<<< Updated upstream
   LIFELINE_HOSPITALS,
-=======
   normalizePolylineGeometry,
   normalizeCoordinateToLatLng,
->>>>>>> Stashed changes
   type ExplicitRouteState,
   type IncidentVerificationState,
 } from '@roadalert/shared';

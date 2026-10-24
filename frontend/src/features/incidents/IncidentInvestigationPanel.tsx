@@ -53,10 +53,7 @@ export function IncidentInvestigationPanel({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const prefersReducedMotion = useReducedMotion();
-<<<<<<< Updated upstream
   const [activeTab, setActiveTab] = useState<'overview' | 'trust' | 'evidence' | 'nearby'>('overview');
-=======
-  const [activeTab, setActiveTab] = useState<'overview' | 'evidence' | 'nearby'>('overview');
   const [copiedId, setCopiedId] = useState(false);
   const [selectedImageModal, setSelectedImageModal] = useState<string | null>(null);
 
@@ -71,7 +68,6 @@ export function IncidentInvestigationPanel({
       message: `Copied ID ${id} to clipboard`,
     });
   };
->>>>>>> Stashed changes
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['incident-detail', incidentId],

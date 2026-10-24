@@ -61,7 +61,6 @@ import {
   DraftIncidentMapMarker,
   MapIncidentReportOverlay,
 } from '../incidents/MapIncidentReportOverlay';
-<<<<<<< Updated upstream
 import { HospitalLifelineDrawer } from '../lifeline/HospitalLifelineDrawer';
 import { CorridorFragilityModal } from '../fragility/CorridorFragilityModal';
 import { RoadAlertImpactSimulatorModal } from '../simulation/RoadAlertImpactSimulatorModal';
@@ -76,7 +75,6 @@ import {
   loadGoogleMapsApi,
   type GoogleMapsConfig,
 } from '../../services/googleMapsLoader';
-=======
 import { LiveUserMarker } from './LiveUserMarker';
 import type { LiveCoordinates } from '../../hooks/useLiveGeolocation';
 
@@ -157,7 +155,6 @@ function RouteBoundsFitter({
 
   return null;
 }
->>>>>>> Stashed changes
 
 // Coastal NH-66 Backbone Polyline (Thokkottu -> Pumpwell -> Nanthoor -> KPT -> Kuloor -> Baikampady -> Surathkal -> Mulki -> Padubidri -> Kaup -> Udupi -> Manipal)
 const NH66_CORRIDOR_POLYLINE: [number, number][] = [
@@ -507,10 +504,8 @@ export interface CorridorIntelligenceMapProps {
     decision: string;
     timestamp: number;
   } | null;
-<<<<<<< Updated upstream
   primaryRoute?: { points: [number, number][]; summary?: string; roadClosureAvoided?: boolean } | null;
   alternativeRoutes?: { points: [number, number][]; summary?: string }[] | null;
-=======
   userCoords?: LiveCoordinates | null;
   recenterTrigger?: number;
   followUser?: boolean;
@@ -520,7 +515,6 @@ export interface CorridorIntelligenceMapProps {
   activeRouteGeometry?: [number, number][] | null;
   alternateRouteGeometry?: [number, number][] | null;
   routeColor?: string;
->>>>>>> Stashed changes
 }
 
 const ALL_VEHICLE_CATEGORIES: VehicleCategoryGroup[] = [
@@ -538,10 +532,8 @@ export function CorridorIntelligenceMap({
   onFocusCoordsChange,
   heightClass = 'h-[520px]',
   externalIncidentEvent = null,
-<<<<<<< Updated upstream
   primaryRoute = null,
   alternativeRoutes = null,
-=======
   userCoords = null,
   recenterTrigger = 0,
   followUser = false,
@@ -551,7 +543,6 @@ export function CorridorIntelligenceMap({
   activeRouteGeometry = null,
   alternateRouteGeometry = null,
   routeColor = '#2563eb',
->>>>>>> Stashed changes
 }: CorridorIntelligenceMapProps) {
   const { showToast } = useToast();
   const prefersReducedMotion = Boolean(useReducedMotion());
